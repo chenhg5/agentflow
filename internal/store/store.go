@@ -14,7 +14,7 @@ import (
 
 func EnsureDir(directory string) error { return os.MkdirAll(directory, 0o755) }
 
-func CreateRun(root string, workflow model.Workflow, inputs map[string]string) (*model.Run, error) {
+func CreateRun(root string, workflow model.Workflow, inputs map[string]string, idempotencyKey string) (*model.Run, error) {
 	if err := EnsureDir(filepath.Join(root, "runs")); err != nil {
 		return nil, err
 	}
@@ -30,7 +30,7 @@ func CreateRun(root string, workflow model.Workflow, inputs map[string]string) (
 	}
 	now := time.Now().UTC().Format(time.RFC3339)
 	run := &model.Run{RunID: runID, RunDir: runDir, Workflow: workflow, State: model.RunState{
-		RunID: runID, WorkflowName: workflow.Name, Status: "pending", Inputs: inputs, Nodes: nodes, CreatedAt: now, UpdatedAt: now,
+		RunID: runID, WorkflowName: workflow.Name, Status: "pending", Inputs: inputs, IdempotencyKey: idempotencyKey, Nodes: nodes, CreatedAt: now, UpdatedAt: now,
 	}}
 	if err := writeJSON(filepath.Join(runDir, "workflow.json"), workflow); err != nil {
 		return nil, err
@@ -42,6 +42,32 @@ func CreateRun(root string, workflow model.Workflow, inputs map[string]string) (
 		return nil, err
 	}
 	return run, nil
+}
+
+func FindRunByIdempotency(root, workflowName, idempotencyKey string) (*model.Run, error) {
+	if idempotencyKey == "" {
+		return nil, nil
+	}
+	entries, err := os.ReadDir(filepath.Join(root, "runs"))
+	if os.IsNotExist(err) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		run, err := LoadRun(root, entry.Name())
+		if err != nil {
+			return nil, fmt.Errorf("cannot inspect run %s while checking idempotency: %w", entry.Name(), err)
+		}
+		if run.State.WorkflowName == workflowName && run.State.IdempotencyKey == idempotencyKey {
+			return run, nil
+		}
+	}
+	return nil, nil
 }
 
 func LoadRun(root, runID string) (*model.Run, error) {

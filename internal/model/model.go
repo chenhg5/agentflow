@@ -49,13 +49,14 @@ type NodeState struct {
 }
 
 type RunState struct {
-	RunID        string                `json:"runId"`
-	WorkflowName string                `json:"workflowName"`
-	Status       string                `json:"status"`
-	Inputs       map[string]string     `json:"inputs"`
-	Nodes        map[string]*NodeState `json:"nodes"`
-	CreatedAt    string                `json:"createdAt"`
-	UpdatedAt    string                `json:"updatedAt"`
+	RunID          string                `json:"runId"`
+	WorkflowName   string                `json:"workflowName"`
+	Status         string                `json:"status"`
+	Inputs         map[string]string     `json:"inputs"`
+	IdempotencyKey string                `json:"idempotency_key,omitempty"`
+	Nodes          map[string]*NodeState `json:"nodes"`
+	CreatedAt      string                `json:"createdAt"`
+	UpdatedAt      string                `json:"updatedAt"`
 }
 
 type Run struct {

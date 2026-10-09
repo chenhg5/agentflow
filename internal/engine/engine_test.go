@@ -11,7 +11,7 @@ import (
 
 func TestAgentRequiresStructuredResult(t *testing.T) {
 	workflow := model.Workflow{Version: "1", Name: "result", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Prompt: "work"}}}
-	run, err := store.CreateRun(t.TempDir(), workflow, nil)
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -26,7 +26,7 @@ func TestAgentRequiresStructuredResult(t *testing.T) {
 
 func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
 	workflow := model.Workflow{Version: "1", Name: "result", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Prompt: "work"}}}
-	run, err := store.CreateRun(t.TempDir(), workflow, nil)
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -7,16 +7,27 @@ It uses a small JSON workflow definition, persists every run under `.agentflow/`
 ## Quick start
 
 ```bash
-go run ./cmd/agentflow validate examples/smoke.json
-go run ./cmd/agentflow run examples/smoke.json --input name=Codex
+go run ./cmd/agentflow workflow validate examples/smoke.json --format json
+go run ./cmd/agentflow run start examples/smoke.json --input name=Codex --format json
 ```
 
 The command pauses at the `approve` node. Copy the run id and continue it:
 
 ```bash
-go run ./cmd/agentflow approve <run-id> approve
-go run ./cmd/agentflow show <run-id>
+go run ./cmd/agentflow run approve <run-id> approval --message "approved" --format json
+go run ./cmd/agentflow run get <run-id> --format json
 ```
+
+## Agent-friendly CLI contract
+
+- Commands use a noun-verb tree such as `workflow validate` and `run get`.
+- Piped output defaults to JSON; use `--format table` for humans and `--format ndjson` for event streams.
+- stdout contains data. Diagnostics and errors go to stderr.
+- Errors include a stable machine-readable code, a recovery suggestion, and `retryable`.
+- Exit codes: `0` success, `1` execution failure, `2` invalid arguments, `3` not found, `4` permission denied, `5` conflict, `10` dry-run passed.
+- `agentflow schema --all` exposes the command tree; `agentflow schema run start` returns one command contract; `agentflow schema workflow` returns the workflow JSON Schema.
+- `--dry-run` is available for run start, approval, rejection, resume, cancellation, and provider initialization.
+- `run start --idempotency-key <token>` safely replays an identical request without creating a duplicate run; a different request with the same key exits with code `5`.
 
 ## Agent drivers
 

@@ -1,6 +1,6 @@
 .agentflow/
 node_modules/
-agentflow
+/agentflow
 .DS_Store
 .env
 .env.*
