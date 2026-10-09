@@ -1,0 +1,10 @@
+{
+  "drivers": {
+    "claude-code": {
+      "command": ["claude", "--print", "{{ prompt }}"]
+    },
+    "codex": {
+      "command": ["codex", "exec", "{{ prompt }}"]
+    }
+  }
+}

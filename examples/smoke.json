@@ -1,0 +1,26 @@
+{
+  "version": "1",
+  "name": "smoke",
+  "inputs": {
+    "name": { "type": "string", "required": true }
+  },
+  "nodes": [
+    {
+      "id": "greet",
+      "type": "shell",
+      "command": ["sh", "-c", "printf 'hello %s\\n' \"$1\"; printf '{\"message\":\"hello %s\"}\\n' \"$1\" > \"$AGENTFLOW_RESULT_FILE\"", "sh", "{{ inputs.name }}"]
+    },
+    {
+      "id": "approve",
+      "type": "human",
+      "needs": ["greet"],
+      "prompt": "Approve the greeting?"
+    },
+    {
+      "id": "finish",
+      "type": "shell",
+      "needs": ["approve"],
+      "command": ["sh", "-c", "printf 'workflow complete\\n'; printf '{\"done\":true}\\n' > \"$AGENTFLOW_RESULT_FILE\"", "sh"]
+    }
+  ]
+}

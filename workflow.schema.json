@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schema/workflow-v1.json",
+  "title": "AgentFlow Workflow",
+  "type": "object",
+  "required": ["version", "name", "nodes"],
+  "properties": {
+    "version": { "const": "1" },
+    "name": { "type": "string", "minLength": 1 },
+    "inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/input" } },
+    "nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/node" } }
+  },
+  "$defs": {
+    "input": {
+      "type": "object",
+      "properties": { "type": { "enum": ["string", "number", "boolean", "path"] }, "required": { "type": "boolean" } },
+      "additionalProperties": false
+    },
+    "node": {
+      "type": "object",
+      "required": ["id", "type"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["shell", "agent", "human"] },
+        "driver": { "type": "string" },
+        "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+        "prompt": { "type": "string" },
+        "promptMode": { "enum": ["arg", "stdin"] },
+        "workspace": { "type": "string" },
+        "timeoutMs": { "type": "integer", "minimum": 1 },
+        "result": {
+          "type": "object",
+          "properties": {
+            "path": { "type": "string", "minLength": 1 },
+            "required": { "type": "boolean" }
+          },
+          "additionalProperties": false
+        },
+        "needs": { "type": "array", "items": { "type": "string" } },
+        "when": { "type": "string" },
+        "retry": { "type": "object", "properties": { "maxAttempts": { "type": "integer", "minimum": 1 } }, "additionalProperties": false }
+      },
+      "additionalProperties": false
+    }
+  }
+}

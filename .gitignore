@@ -1,0 +1,10 @@
+.agentflow/
+node_modules/
+agentflow
+.DS_Store
+.env
+.env.*
+*.local
+*.secret
+*.pem
+*.key
