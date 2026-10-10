@@ -20,3 +20,11 @@ func TestValidateWorkflowAndCycle(t *testing.T) {
 		t.Fatal("expected cycle validation error")
 	}
 }
+
+func TestSessionIsOnlyValidOnAgentNodes(t *testing.T) {
+	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "shell", Type: "shell", Session: "session-123", Command: []string{"true"}}}}
+	errors := Validate(workflow)
+	if len(errors) != 1 || errors[0] != "session is only supported on agent node shell" {
+		t.Fatalf("unexpected validation errors: %v", errors)
+	}
+}

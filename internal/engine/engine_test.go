@@ -45,3 +45,42 @@ func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
 		t.Fatal("stdout should be recorded as a log artifact")
 	}
 }
+
+func TestAgentResumesSessionInWorkspace(t *testing.T) {
+	workspace := t.TempDir()
+	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Workspace: workspace, Session: "session-123", Prompt: "continue"}}}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := driver.Provider{Command: []string{"sh", "-c", "exit 9"}, ResumeCommand: []string{"sh", "-c", `printf '{"session_id":"%s","workspace":"%s"}' "$AGENTFLOW_SESSION_ID" "$AGENTFLOW_WORKSPACE" > "$AGENTFLOW_RESULT_FILE"`}}
+	if err := Execute(run, map[string]driver.Provider{"fake": provider}); err != nil {
+		t.Fatal(err)
+	}
+	if run.State.Status != "succeeded" {
+		t.Fatalf("status = %s, error = %q", run.State.Status, run.State.Nodes["agent"].Error)
+	}
+	state := run.State.Nodes["agent"]
+	if state.SessionID != "session-123" || state.Workspace != workspace {
+		t.Fatalf("binding = session %q workspace %q", state.SessionID, state.Workspace)
+	}
+	result, ok := state.Result.(map[string]any)
+	if !ok || result["session_id"] != "session-123" {
+		t.Fatalf("unexpected result: %#v", state.Result)
+	}
+}
+
+func TestAgentSessionRequiresResumeCommand(t *testing.T) {
+	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Session: "session-123", Prompt: "continue"}}}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Execute(run, map[string]driver.Provider{"fake": {Command: []string{"true"}}}); err != nil {
+		t.Fatal(err)
+	}
+	state := run.State.Nodes["agent"]
+	if run.State.Status != "failed" || !strings.Contains(state.Error, "resumeCommand") {
+		t.Fatalf("expected resume command failure, got status=%s error=%q", run.State.Status, state.Error)
+	}
+}

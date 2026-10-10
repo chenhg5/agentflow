@@ -27,6 +27,7 @@
         "prompt": { "type": "string" },
         "promptMode": { "enum": ["arg", "stdin"] },
         "workspace": { "type": "string" },
+        "session": { "type": "string", "minLength": 1, "description": "Existing agent session ID or a template resolving to one" },
         "timeoutMs": { "type": "integer", "minimum": 1 },
         "result": {
           "type": "object",

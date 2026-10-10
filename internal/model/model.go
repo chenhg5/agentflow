@@ -29,6 +29,7 @@ type Node struct {
 	Prompt     string      `json:"prompt,omitempty"`
 	PromptMode string      `json:"promptMode,omitempty"`
 	Workspace  string      `json:"workspace,omitempty"`
+	Session    string      `json:"session,omitempty"`
 	Needs      []string    `json:"needs,omitempty"`
 	When       string      `json:"when,omitempty"`
 	TimeoutMs  int         `json:"timeoutMs,omitempty"`
@@ -39,6 +40,8 @@ type Node struct {
 type NodeState struct {
 	Status     string            `json:"status"`
 	Prompt     string            `json:"prompt,omitempty"`
+	Workspace  string            `json:"workspace,omitempty"`
+	SessionID  string            `json:"sessionId,omitempty"`
 	Reason     string            `json:"reason,omitempty"`
 	Error      string            `json:"error,omitempty"`
 	StartedAt  string            `json:"startedAt,omitempty"`

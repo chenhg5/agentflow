@@ -119,7 +119,11 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	if err != nil {
 		return *state, err
 	}
-	prompt := template.Render(node.Prompt, context(run.State))
+	state.Workspace = workspace
+	runContext := context(run.State)
+	sessionID := template.Render(node.Session, runContext)
+	state.SessionID = sessionID
+	prompt := template.Render(node.Prompt, runContext)
 	if node.Type == "agent" {
 		prompt += "\n\nExecution contract: when the task is complete, write one JSON object to the file in AGENTFLOW_RESULT_FILE before exiting successfully. stdout and stderr are logs only."
 	}
@@ -136,18 +140,26 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		"AGENTFLOW_NODE_ID":     node.ID,
 		"AGENTFLOW_NODE_TOKEN":  state.LeaseToken,
 		"AGENTFLOW_WORKSPACE":   workspace,
+		"AGENTFLOW_SESSION_ID":  sessionID,
 		"AGENTFLOW_PROMPT":      prompt,
 		"AGENTFLOW_RESULT_FILE": resultFile,
 	}
 	command := node.Command
 	if node.Type == "agent" {
 		provider, ok := providers[node.Driver]
-		if !ok || len(provider.Command) == 0 {
-			return model.NodeState{Status: "failed", Error: fmt.Sprintf("driver %s is not configured; add .agentflow/providers.json", node.Driver)}, nil
+		if !ok || (len(provider.Command) == 0 && len(provider.ResumeCommand) == 0) {
+			return model.NodeState{Status: "failed", Workspace: workspace, SessionID: sessionID, Error: fmt.Sprintf("driver %s is not configured; add .agentflow/providers.json", node.Driver)}, nil
 		}
-		command = driver.ExpandCommand(provider.Command, prompt, workspace, resultFile, run.RunID, node.ID)
+		commandTemplate := provider.Command
+		if sessionID != "" {
+			if len(provider.ResumeCommand) == 0 {
+				return model.NodeState{Status: "failed", Workspace: workspace, SessionID: sessionID, Error: fmt.Sprintf("driver %s does not define resumeCommand for session %s; configure a command that resumes an existing session", node.Driver, sessionID)}, nil
+			}
+			commandTemplate = provider.ResumeCommand
+		}
+		command = driver.ExpandCommand(commandTemplate, prompt, workspace, sessionID, resultFile, run.RunID, node.ID)
 	} else {
-		command = template.RenderArray(command, context(run.State))
+		command = template.RenderArray(command, runContext)
 	}
 	maxAttempts := node.Retry.MaxAttempts
 	if maxAttempts < 1 {
@@ -207,6 +219,14 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		}
 	}
 	state.Result = structured
+	if resultObject, ok := structured.(map[string]any); ok {
+		if returnedSession, ok := resultObject["session_id"].(string); ok && returnedSession != "" {
+			state.SessionID = returnedSession
+		}
+		if returnedSession, ok := resultObject["sessionId"].(string); ok && returnedSession != "" {
+			state.SessionID = returnedSession
+		}
+	}
 	state.Artifacts = map[string]string{
 		"result":    "artifacts/" + filepath.ToSlash(resultRelativePath),
 		"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact),

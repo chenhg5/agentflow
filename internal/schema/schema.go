@@ -36,6 +36,9 @@ func Validate(workflow model.Workflow) []string {
 		if node.Type == "agent" && node.Driver == "" {
 			errors = append(errors, fmt.Sprintf("agent node %s needs a driver", node.ID))
 		}
+		if node.Session != "" && node.Type != "agent" {
+			errors = append(errors, fmt.Sprintf("session is only supported on agent node %s", node.ID))
+		}
 		if (node.Type == "agent" || node.Type == "human") && node.Prompt == "" {
 			errors = append(errors, fmt.Sprintf("%s node %s needs a prompt", node.Type, node.ID))
 		}

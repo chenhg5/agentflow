@@ -31,7 +31,22 @@ go run ./cmd/agentflow run get <run-id> --format json
 
 ## Agent drivers
 
-Drivers are configured outside workflow definitions in `.agentflow/providers.json` or `~/.agentflow/providers.json`. Start from `providers.example.json` and adjust the command syntax for the installed Claude Code or Codex CLI. `{{ prompt }}` is expanded as one argument, `{{ result_file }}` expands to the structured result path, and `promptMode: "stdin"` sends the prompt through stdin.
+Drivers are configured outside workflow definitions in `.agentflow/providers.json` or `~/.agentflow/providers.json`. Start from `providers.example.json` and adjust the command syntax for the installed Claude Code or Codex CLI. `command` starts a new session; `resumeCommand` is selected when an agent node sets `session`.
+
+Agent nodes can bind both a workspace and an existing session:
+
+```json
+{
+  "id": "implement",
+  "type": "agent",
+  "driver": "claude-code",
+  "workspace": "/Users/me/code/my-repo",
+  "session": "{{ inputs.session_id }}",
+  "prompt": "Implement the requested change and write the structured result."
+}
+```
+
+`session` can be a literal ID or a template such as `{{ inputs.session_id }}` / `{{ nodes.previous.result.session_id }}`. The Runner executes with `cmd.Dir=workspace`, sets `AGENTFLOW_WORKSPACE` and `AGENTFLOW_SESSION_ID`, and persists the effective workspace/session under the node state. Command templates support `{{ prompt }}`, `{{ workspace }}`, `{{ session_id }}`, `{{ result_file }}`, `{{ run_id }}`, and `{{ node_id }}`. `promptMode: "stdin"` sends the prompt through stdin.
 
 ## Structured node results
 
@@ -63,4 +78,4 @@ go build -o agentflow ./cmd/agentflow
 - retries, timeouts, and persisted run state
 - structured JSON node results with separate stdout/stderr log artifacts
 - human approve/reject/resume
-- Claude Code and Codex command driver configuration
+- Claude Code and Codex command driver configuration, including workspace and existing-session resume

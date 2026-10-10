@@ -13,7 +13,11 @@ import (
 )
 
 type Provider struct {
+	// Command starts a new agent session.
 	Command []string `json:"command"`
+	// ResumeCommand sends a prompt to an existing session. It is required when
+	// a workflow node sets session.
+	ResumeCommand []string `json:"resumeCommand,omitempty"`
 }
 
 type CommandOptions struct {
@@ -97,10 +101,18 @@ func RunCommand(command []string, options CommandOptions) CommandResult {
 	return result
 }
 
-func ExpandCommand(command []string, prompt, workspace, resultFile, runID, nodeID string) []string {
+func ExpandCommand(command []string, prompt, workspace, sessionID, resultFile, runID, nodeID string) []string {
 	result := make([]string, len(command))
+	replacer := strings.NewReplacer(
+		"{{ prompt }}", prompt, "{{prompt}}", prompt,
+		"{{ workspace }}", workspace, "{{workspace}}", workspace,
+		"{{ session_id }}", sessionID, "{{session_id}}", sessionID,
+		"{{ result_file }}", resultFile, "{{result_file}}", resultFile,
+		"{{ run_id }}", runID, "{{run_id}}", runID,
+		"{{ node_id }}", nodeID, "{{node_id}}", nodeID,
+	)
 	for index, part := range command {
-		result[index] = strings.NewReplacer("{{ prompt }}", prompt, "{{workspace}}", workspace, "{{ result_file }}", resultFile, "{{ run_id }}", runID, "{{ node_id }}", nodeID).Replace(part)
+		result[index] = replacer.Replace(part)
 	}
 	return result
 }

@@ -17,6 +17,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
+	"github.com/chenhg5/agentflow/internal/template"
 )
 
 const (
@@ -158,13 +159,27 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 		}
 	}
 	if parsed.DryRun {
+		runContext := map[string]any{"inputs": parsed.Inputs}
 		nodes := make([]map[string]any, 0, len(workflow.Nodes))
 		for _, node := range workflow.Nodes {
 			needs := node.Needs
 			if needs == nil {
 				needs = []string{}
 			}
-			nodes = append(nodes, map[string]any{"id": node.ID, "type": node.Type, "needs": needs})
+			plan := map[string]any{"id": node.ID, "type": node.Type, "needs": needs}
+			if node.Workspace != "" {
+				workspace := template.Render(node.Workspace, runContext)
+				if workspace != "" {
+					if absolute, err := filepath.Abs(workspace); err == nil {
+						workspace = absolute
+					}
+					plan["workspace"] = workspace
+				}
+			}
+			if node.Session != "" {
+				plan["session"] = template.Render(node.Session, runContext)
+			}
+			nodes = append(nodes, plan)
 		}
 		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.start", "workflow": workflow.Name, "inputs": parsed.Inputs, "nodes": nodes}, parsed.Output()); err != nil {
 			return err
@@ -438,8 +453,14 @@ func configCommand(args []string, cwd string) error {
 	}
 	const example = `{
   "drivers": {
-    "claude-code": { "command": ["claude", "--print", "{{ prompt }}"] },
-    "codex": { "command": ["codex", "exec", "{{ prompt }}"] }
+    "claude-code": {
+      "command": ["claude", "--print", "{{ prompt }}"],
+      "resumeCommand": ["claude", "--resume", "{{ session_id }}", "--print", "{{ prompt }}"]
+    },
+    "codex": {
+      "command": ["codex", "exec", "{{ prompt }}"],
+      "resumeCommand": ["codex", "exec", "resume", "{{ session_id }}", "{{ prompt }}"]
+    }
   }
 }
 `
