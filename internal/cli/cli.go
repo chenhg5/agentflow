@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/template"
+	"github.com/chenhg5/agentflow/internal/version"
 	"github.com/chenhg5/agentflow/internal/web"
 )
 
@@ -73,9 +74,31 @@ func Run(args []string) error {
 		return doctorCommand(args[1:], cwd)
 	case "web":
 		return webCommand(args[1:], root, cwd)
+	case "version":
+		return versionCommand(args[1:])
 	default:
 		return usageError(fmt.Sprintf("unknown command: %s", args[0]), "Run `agentflow --help` to see the command tree.", "command")
 	}
+}
+
+func versionCommand(args []string) error {
+	parsed, err := parseArgs(args)
+	if err != nil {
+		return withFormat(err, parsed.Format)
+	}
+	if parsed.Help {
+		printVersionHelp()
+		return nil
+	}
+	if len(parsed.Positionals) != 0 {
+		return usageError("version accepts no positional arguments", "Run `agentflow version --format json`.", "version_arguments")
+	}
+	info := version.Current()
+	if parsed.Output().resolved() == "table" {
+		fmt.Printf("agentflow %s (commit %s, built %s)\n", info.Version, info.Commit, info.Built)
+		return nil
+	}
+	return writeData(info, parsed.Output())
 }
 
 func webCommand(args []string, root, cwd string) error {
@@ -916,6 +939,7 @@ func commandSchema() map[string]any {
 		{"name": "config init", "description": "Create local provider configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
 		{"name": "doctor", "description": "Check local setup and configured drivers.", "flags": []map[string]any{formatFlag}},
 		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
+		{"name": "version", "description": "Print version, commit, build time, Go version, and platform.", "flags": []map[string]any{formatFlag}},
 	}
 	return map[string]any{"schema_version": "1", "name": "agentflow", "description": "Run durable local workflows for Claude Code, Codex, and other agents.", "commands": commands}
 }
@@ -949,6 +973,8 @@ func printHelp(args []string) {
 		printDoctorHelp()
 	case "web":
 		printWebHelp()
+	case "version":
+		printVersionHelp()
 	default:
 		printRootHelp()
 	}
@@ -974,6 +1000,7 @@ Commands:
   config init        Create provider configuration
   doctor             Check local setup
   web                Open workflow/run visualization in a browser
+  version             Print version and build information
 
 Examples:
   agentflow workflow validate workflow.json --format json
@@ -1058,6 +1085,13 @@ Examples:
   agentflow web workflow.json
   agentflow web --run run_20261010002357_d9293c42a2cbf87b
   agentflow web workflow.json --port 8080`)
+}
+
+func printVersionHelp() {
+	fmt.Println(`Usage:
+  agentflow version [--format json|table]
+
+Prints the version, commit, build time, Go version, and platform.`)
 }
 
 func NewCommandError(kind, message, suggestion string, code int) *CommandError {
