@@ -6,6 +6,8 @@ It uses a small JSON workflow definition, persists every run under `.agentflow/`
 
 The current release is `v0.0.1` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
 
+For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
+
 ## Quick start
 
 ```bash
