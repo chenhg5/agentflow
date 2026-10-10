@@ -219,7 +219,23 @@ agentflow run stats release-review --format json
 
 聚合结果包括成功/失败/等待审批/取消数量，run 和节点耗时的平均值、P50、P95、最大值，以及输入、输出和日志字节总量。用它回答“哪个节点最慢”“审批等待占多少时间”“输出是否异常膨胀”“失败是否集中在某个节点”。
 
-## 8. 效率优化闭环
+## 8. Web 可视化
+
+需要和用户一起检查流程结构时，打开 workflow 图：
+
+```bash
+agentflow web workflow.json
+```
+
+需要检查一次实际执行时，打开 run 图：
+
+```bash
+agentflow web --run <run-id>
+```
+
+Web 页面会显示节点依赖、节点类型、状态、耗时、attempts 和输出大小；run 页面会每两秒刷新一次状态。CLI 会打印本地 URL。可以用 `--port 0` 选择可用端口，用 `--host 0.0.0.0` 暴露到局域网时必须确认网络访问范围。
+
+## 9. 效率优化闭环
 
 1. 先看 `run stats <workflow-name>`，定位 P95 高或失败率高的节点。
 2. 再看对应 run 的 `run metrics`，区分 agent 执行时间、人工等待时间和重试时间。
@@ -229,7 +245,7 @@ agentflow run stats release-review --format json
 6. 重新 `workflow validate`、`run start --dry-run`，再用新的幂等 key 执行。
 7. 保留前后两次 `run stats`，比较 P95、失败数、attempts 和字节量是否改善。
 
-## 9. 与用户协作的交付格式
+## 10. 与用户协作的交付格式
 
 在提交 workflow 前，向用户说明：
 

@@ -19,6 +19,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/template"
+	"github.com/chenhg5/agentflow/internal/web"
 )
 
 const (
@@ -70,9 +71,60 @@ func Run(args []string) error {
 		return configCommand(args[1:], cwd)
 	case "doctor":
 		return doctorCommand(args[1:], cwd)
+	case "web":
+		return webCommand(args[1:], root, cwd)
 	default:
 		return usageError(fmt.Sprintf("unknown command: %s", args[0]), "Run `agentflow --help` to see the command tree.", "command")
 	}
+}
+
+func webCommand(args []string, root, cwd string) error {
+	if len(args) > 0 && isHelp(args[0]) {
+		printWebHelp()
+		return nil
+	}
+	parsed, err := parseArgs(args)
+	if err != nil {
+		return withFormat(err, parsed.Format)
+	}
+	if parsed.Help {
+		printWebHelp()
+		return nil
+	}
+	if len(parsed.Positionals) > 1 {
+		return usageError("web accepts at most one workflow file", "Run `agentflow web [workflow.json] [--run <run-id>]`.", "workflow_file")
+	}
+	if len(parsed.Positionals) == 1 && parsed.RunID != "" {
+		return usageError("web accepts either a workflow file or a run id", "Use `agentflow web workflow.json` or `agentflow web --run <run-id>`.", "web_target")
+	}
+	workflowPath := ""
+	if len(parsed.Positionals) == 1 {
+		workflowPath, err = filepath.Abs(parsed.Positionals[0])
+		if err != nil {
+			return internalError(err)
+		}
+		workflow, workflowErr := readWorkflow(workflowPath, parsed.Format)
+		if workflowErr != nil {
+			return workflowErr
+		}
+		if validationErr := assertValid(workflow, parsed.Format); validationErr != nil {
+			return validationErr
+		}
+	}
+	if parsed.RunID != "" {
+		if _, err := store.LoadRun(root, parsed.RunID); err != nil {
+			return notFoundError("run", parsed.RunID, parsed.Format)
+		}
+	}
+	host := parsed.Host
+	if host == "" {
+		host = "127.0.0.1"
+	}
+	port := parsed.Port
+	if !parsed.PortSet {
+		port = -1
+	}
+	return web.NewServer(web.Options{Root: root, WorkflowPath: workflowPath, RunID: parsed.RunID, Host: host, Port: port}).Serve()
 }
 
 func workflowCommand(args []string) error {
@@ -674,6 +726,17 @@ func parseArgs(args []string) (parsedArgs, error) {
 			parsed.Inputs[name] = input
 		case "--message":
 			parsed.Message = value
+		case "--run":
+			parsed.RunID = value
+		case "--host":
+			parsed.Host = value
+		case "--port":
+			port, portErr := strconv.Atoi(value)
+			if portErr != nil || port < 0 || port > 65535 {
+				return parsed, usageError("--port must be an integer between 0 and 65535", "Use `--port 7070` or `--port 0` for an available port.", "invalid_port")
+			}
+			parsed.Port = port
+			parsed.PortSet = true
 		case "--idempotency-key":
 			if !validIdempotencyKey(value) {
 				return parsed, usageError("--idempotency-key must be a non-empty token without whitespace", "Use a stable UUID or request token.", "invalid_idempotency_key")
@@ -709,6 +772,10 @@ type parsedArgs struct {
 	Format         string
 	Message        string
 	IdempotencyKey string
+	RunID          string
+	Host           string
+	Port           int
+	PortSet        bool
 	PageSize       int
 	DryRun         bool
 	NoInteractive  bool
@@ -848,6 +915,7 @@ func commandSchema() map[string]any {
 		{"name": "schema", "description": "Inspect command metadata or the workflow schema.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
 		{"name": "config init", "description": "Create local provider configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
 		{"name": "doctor", "description": "Check local setup and configured drivers.", "flags": []map[string]any{formatFlag}},
+		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 	}
 	return map[string]any{"schema_version": "1", "name": "agentflow", "description": "Run durable local workflows for Claude Code, Codex, and other agents.", "commands": commands}
 }
@@ -879,6 +947,8 @@ func printHelp(args []string) {
 		printConfigHelp()
 	case "doctor":
 		printDoctorHelp()
+	case "web":
+		printWebHelp()
 	default:
 		printRootHelp()
 	}
@@ -903,6 +973,7 @@ Commands:
   schema             Inspect commands or the workflow schema
   config init        Create provider configuration
   doctor             Check local setup
+  web                Open workflow/run visualization in a browser
 
 Examples:
   agentflow workflow validate workflow.json --format json
@@ -973,6 +1044,20 @@ func printDoctorHelp() {
   agentflow doctor [--format json|table]
 
 Checks provider configuration and the local run store.`)
+}
+
+func printWebHelp() {
+	fmt.Println(`Usage:
+  agentflow web [workflow.json] [--host 127.0.0.1] [--port 7070]
+  agentflow web --run <run-id> [--host 127.0.0.1] [--port 7070]
+
+Starts a local web UI with a React Flow graph. A workflow file opens a definition preview;
+--run opens a persisted run with live node status and metrics. The page refreshes run data automatically.
+
+Examples:
+  agentflow web workflow.json
+  agentflow web --run run_20261010002357_d9293c42a2cbf87b
+  agentflow web workflow.json --port 8080`)
 }
 
 func NewCommandError(kind, message, suggestion string, code int) *CommandError {

@@ -85,6 +85,22 @@ agentflow run stats release-review --format json
 
 The aggregate includes run counts, average/P50/P95/max durations, human waiting time, retry totals, and input/output/log byte totals. Run data is persisted under `.agentflow/runs/<run-id>/` so it can be inspected or exported by another tool.
 
+## Workflow visualization
+
+Open a workflow definition in a local React Flow based UI:
+
+```bash
+agentflow web workflow.json
+```
+
+Open the graph for an existing run, including live node status and metrics:
+
+```bash
+agentflow web --run <run-id>
+```
+
+The server prints a local URL and refreshes run data every two seconds. Use `--port 0` to let the operating system choose an available port, or `--host 0.0.0.0` when the UI needs to be reached from another machine on a trusted network.
+
 The Runner owns all state transitions. Agent processes receive `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, `AGENTFLOW_NODE_TOKEN`, and `AGENTFLOW_RESULT_FILE`; they write the result file and exit, while the Runner validates the file and advances dependent nodes. An Agent never writes `state.json` or starts the next node directly.
 
 The first release keeps drivers command based. This makes the workflow engine independent from a vendor SDK while preserving a path to richer session adapters later.

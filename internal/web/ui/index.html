@@ -1,0 +1,249 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>AgentFlow</title>
+    <link rel="preconnect" href="https://esm.sh" />
+    <link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css" />
+    <style>
+      :root {
+        color-scheme: dark;
+        --bg: #0d1117;
+        --panel: #161b22;
+        --panel-2: #1e2630;
+        --border: #303945;
+        --text: #e6edf3;
+        --muted: #8b949e;
+        --accent: #79c0ff;
+      }
+      * { box-sizing: border-box; }
+      html, body, #root { width: 100%; height: 100%; margin: 0; }
+      body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      button, input { font: inherit; }
+      .shell { display: grid; grid-template-columns: 290px 1fr; height: 100%; overflow: hidden; }
+      .sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
+      .brand { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
+      .brand h1 { margin: 0; font-size: 18px; letter-spacing: .02em; }
+      .brand p { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
+      .side-section { padding: 16px 12px 8px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+      .run-list { overflow: auto; padding: 0 8px 16px; }
+      .run-item { display: block; color: var(--text); text-decoration: none; padding: 10px; margin: 3px 0; border: 1px solid transparent; border-radius: 8px; }
+      .run-item:hover { background: var(--panel-2); border-color: var(--border); }
+      .run-item.active { background: #1f3346; border-color: #2f6f9f; }
+      .run-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .run-meta { color: var(--muted); font-size: 11px; margin-top: 5px; display: flex; justify-content: space-between; gap: 8px; }
+      .main { min-width: 0; display: grid; grid-template-rows: auto 1fr; }
+      .toolbar { height: 62px; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--border); background: rgba(13, 17, 23, .92); }
+      .title { min-width: 0; flex: 1; }
+      .title h2 { margin: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .title p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
+      .toolbar button { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); padding: 7px 10px; cursor: pointer; }
+      .toolbar button:hover { border-color: var(--accent); }
+      .content { min-height: 0; display: grid; grid-template-rows: 1fr auto; }
+      .flow { min-height: 0; background: #0b1016; }
+      .react-flow__node { border: 1px solid #44515f; border-radius: 10px; background: #18212b; color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,.25); padding: 0; width: 210px; overflow: hidden; }
+      .react-flow__node.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 18px rgba(0,0,0,.3); }
+      .node-card { padding: 12px 14px; }
+      .node-head { display: flex; align-items: center; gap: 8px; }
+      .node-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: #8b949e; }
+      .node-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .node-type { color: var(--muted); font-size: 11px; margin-top: 5px; }
+      .node-stats { display: flex; gap: 8px; color: var(--muted); font-size: 10px; margin-top: 10px; }
+      .status-succeeded { background: #238636; }
+      .status-running { background: #1f6feb; }
+      .status-waiting_human { background: #d29922; }
+      .status-failed { background: #f85149; }
+      .status-skipped { background: #8b949e; }
+      .status-pending { background: #484f58; }
+      .summary { border-top: 1px solid var(--border); background: var(--panel); padding: 12px 18px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
+      .metric { min-width: 90px; }
+      .metric-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
+      .metric-value { font-size: 14px; margin-top: 3px; }
+      .empty, .loading, .error { padding: 32px; color: var(--muted); }
+      .error { color: #ff7b72; }
+      .legend { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }
+      .legend span { color: var(--muted); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
+      .legend i { width: 8px; height: 8px; display: inline-block; border-radius: 50%; }
+      @media (max-width: 760px) {
+        .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
+        .sidebar { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--border); }
+        .run-list { display: flex; overflow-x: auto; }
+        .run-item { min-width: 190px; }
+        .legend { margin-left: 0; }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"><div class="loading">Loading AgentFlow visualization…</div></div>
+    <script type="module">
+      import React, { useEffect, useMemo, useState } from "https://esm.sh/react@18.3.1";
+      import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
+      import ReactFlow, { Background, Controls, MiniMap, MarkerType, Position } from "https://esm.sh/reactflow@11.11.4?deps=react@18.3.1,react-dom@18.3.1";
+
+      const h = React.createElement;
+      const statusClass = (status) => "status-" + (status || "pending");
+      const formatMs = (value) => {
+        if (!value) return "0 ms";
+        if (value < 1000) return value + " ms";
+        return (value / 1000).toFixed(value < 10000 ? 1 : 0) + " s";
+      };
+      const formatBytes = (value) => {
+        if (!value) return "0 B";
+        if (value < 1024) return value + " B";
+        if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
+        return (value / 1024 / 1024).toFixed(1) + " MB";
+      };
+      const formatTime = (value) => value ? new Date(value).toLocaleString() : "";
+
+      function nodeLayout(workflow, state) {
+        const definitions = workflow?.nodes || [];
+        const levels = new Map();
+        const byID = new Map(definitions.map((node) => [node.id, node]));
+        const levelOf = (id, trail = new Set()) => {
+          if (levels.has(id)) return levels.get(id);
+          if (trail.has(id)) return 0;
+          const node = byID.get(id);
+          if (!node || !node.needs || node.needs.length === 0) {
+            levels.set(id, 0);
+            return 0;
+          }
+          const nextTrail = new Set(trail);
+          nextTrail.add(id);
+          const level = Math.max(...node.needs.map((dep) => levelOf(dep, nextTrail))) + 1;
+          levels.set(id, level);
+          return level;
+        };
+        definitions.forEach((node) => levelOf(node.id));
+        const rows = new Map();
+        return {
+          nodes: definitions.map((definition) => {
+            const nodeState = state?.nodes?.[definition.id] || {};
+            const level = levels.get(definition.id) || 0;
+            const row = rows.get(level) || 0;
+            rows.set(level, row + 1);
+            const status = nodeState.status || "pending";
+            return {
+              id: definition.id,
+              type: "default",
+              position: { x: level * 280 + 50, y: row * 150 + 50 },
+              sourcePosition: Position.Right,
+              targetPosition: Position.Left,
+              data: { label: h(NodeCard, { definition, state: nodeState, status }), state: nodeState },
+            };
+          }),
+          edges: definitions.flatMap((definition) => (definition.needs || []).map((dependency) => ({
+            id: dependency + "->" + definition.id,
+            source: dependency,
+            target: definition.id,
+            animated: (state?.nodes?.[definition.id]?.status === "running"),
+            markerEnd: { type: MarkerType.ArrowClosed },
+            style: { stroke: "#52606d", strokeWidth: 1.5 },
+          }))),
+        };
+      }
+
+      function NodeCard({ definition, state, status }) {
+        return h("div", { className: "node-card" },
+          h("div", { className: "node-head" },
+            h("i", { className: "node-dot " + statusClass(status) }),
+            h("span", { className: "node-name", title: definition.id }, definition.id),
+          ),
+          h("div", { className: "node-type" }, definition.type + " · " + status),
+          state && (state.durationMs || state.attempts || state.outputBytes) ? h("div", { className: "node-stats" },
+            h("span", null, formatMs(state.durationMs)),
+            h("span", null, (state.attempts || 0) + " attempts"),
+            h("span", null, formatBytes(state.outputBytes || 0)),
+          ) : null,
+        );
+      }
+
+      function Flow({ workflow, state }) {
+        const graph = useMemo(() => nodeLayout(workflow, state), [workflow, state]);
+        return h("div", { className: "flow" },
+          h(ReactFlow, { nodes: graph.nodes, edges: graph.edges, fitView: true, minZoom: 0.2, maxZoom: 1.8, attributionPosition: "bottom-left" },
+            h(Background, { color: "#26313d", gap: 24, size: 1 }),
+            h(Controls, null),
+            h(MiniMap, { nodeColor: (node) => {
+              const value = node?.data?.state?.status || "pending";
+              return value === "succeeded" ? "#238636" : value === "failed" ? "#f85149" : value === "running" ? "#1f6feb" : "#8b949e";
+            }}),
+          ),
+        );
+      }
+
+      function Metric({ label, value }) {
+        return h("div", { className: "metric" }, h("div", { className: "metric-label" }, label), h("div", { className: "metric-value" }, value));
+      }
+
+      function Summary({ view }) {
+        if (view.mode !== "run") return h("div", { className: "summary" }, h("span", { className: "empty" }, "Workflow definition preview · no run attached"));
+        const run = view.run;
+        const snapshot = run.metrics || {};
+        return h("div", { className: "summary" },
+          h(Metric, { label: "Status", value: run.status }),
+          h(Metric, { label: "Duration", value: formatMs(snapshot.duration_ms) }),
+          h(Metric, { label: "Attempts", value: snapshot.totals?.attempts || 0 }),
+          h(Metric, { label: "Input", value: formatBytes(snapshot.totals?.input_bytes || 0) }),
+          h(Metric, { label: "Output", value: formatBytes(snapshot.totals?.output_bytes || 0) }),
+          h(Metric, { label: "Logs", value: formatBytes((snapshot.totals?.stdout_bytes || 0) + (snapshot.totals?.stderr_bytes || 0)) }),
+          h("div", { className: "legend" },
+            ["succeeded", "running", "waiting_human", "failed", "pending"].map((status) => h("span", { key: status }, h("i", { className: statusClass(status) }), status)),
+          ),
+        );
+      }
+
+      function Sidebar({ view }) {
+        const runs = view.mode === "dashboard" ? view.runs : view.runs || [];
+        return h("aside", { className: "sidebar" },
+          h("div", { className: "brand" }, h("h1", null, "AgentFlow"), h("p", null, "Workflow visualization")),
+          h("div", { className: "side-section" }, "Recent runs"),
+          h("div", { className: "run-list" }, runs.length ? runs.map((run) => h("a", { className: "run-item" + (view.run?.run_id === run.run_id ? " active" : ""), href: "?run=" + encodeURIComponent(run.run_id), key: run.run_id },
+            h("div", { className: "run-name" }, run.workflow),
+            h("div", { className: "run-meta" }, h("span", null, run.status), h("span", null, formatTime(run.updated_at))),
+          )) : h("div", { className: "empty" }, "No runs yet")),
+        );
+      }
+
+      function App() {
+        const [view, setView] = useState(null);
+        const [error, setError] = useState("");
+        const load = async () => {
+          try {
+            const response = await fetch(window.location.search ? "/api/state" + window.location.search : "/api/state");
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || "request failed");
+            setView(data);
+            setError("");
+          } catch (err) {
+            setError(err.message);
+          }
+        };
+        useEffect(() => {
+          load();
+          const timer = setInterval(load, 2000);
+          return () => clearInterval(timer);
+        }, []);
+        if (error) return h("div", { className: "error" }, "Unable to load visualization: " + error);
+        if (!view) return h("div", { className: "loading" }, "Loading AgentFlow visualization…");
+        if (view.mode === "dashboard") return h("div", { className: "shell" }, h(Sidebar, { view }), h("main", { className: "main" }, h("div", { className: "toolbar" }, h("div", { className: "title" }, h("h2", null, "AgentFlow runs"), h("p", null, "Select a run from the sidebar to inspect its graph"))), h("div", { className: "content" }, h("div", { className: "empty" }, "Choose a run to open its workflow graph."))));
+        const state = view.mode === "run" ? view.run.state : null;
+        return h("div", { className: "shell" },
+          h(Sidebar, { view }),
+          h("main", { className: "main" },
+            h("div", { className: "toolbar" },
+              h("div", { className: "title" },
+                h("h2", null, view.workflow.name),
+                h("p", null, view.mode === "run" ? view.run.run_id + " · updated " + formatTime(state.updatedAt) : view.source),
+              ),
+              h("button", { onClick: load }, "Refresh"),
+            ),
+            h("div", { className: "content" }, h(Flow, { workflow: view.workflow, state }), h(Summary, { view })),
+          ),
+        );
+      }
+
+      createRoot(document.getElementById("root")).render(h(App));
+    </script>
+  </body>
+</html>
