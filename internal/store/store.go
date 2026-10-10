@@ -28,7 +28,7 @@ func CreateRun(root string, workflow model.Workflow, inputs map[string]string, i
 	for _, node := range workflow.Nodes {
 		nodes[node.ID] = &model.NodeState{Status: "pending", Artifacts: map[string]string{}}
 	}
-	now := time.Now().UTC().Format(time.RFC3339)
+	now := time.Now().UTC().Format(time.RFC3339Nano)
 	run := &model.Run{RunID: runID, RunDir: runDir, Workflow: workflow, State: model.RunState{
 		RunID: runID, WorkflowName: workflow.Name, Status: "pending", Inputs: inputs, IdempotencyKey: idempotencyKey, Nodes: nodes, CreatedAt: now, UpdatedAt: now,
 	}}
@@ -84,12 +84,12 @@ func LoadRun(root, runID string) (*model.Run, error) {
 }
 
 func SaveState(run *model.Run) error {
-	run.State.UpdatedAt = time.Now().UTC().Format(time.RFC3339)
+	run.State.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	return writeJSON(filepath.Join(run.RunDir, "state.json"), run.State)
 }
 
 func AppendEvent(runDir string, event map[string]any) error {
-	event["at"] = time.Now().UTC().Format(time.RFC3339)
+	event["at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	data, err := json.Marshal(event)
 	if err != nil {
 		return err

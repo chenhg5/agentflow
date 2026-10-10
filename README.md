@@ -28,6 +28,11 @@ go run ./cmd/agentflow run get <run-id> --format json
 - `agentflow schema --all` exposes the command tree; `agentflow schema run start` returns one command contract; `agentflow schema workflow` returns the workflow JSON Schema.
 - `--dry-run` is available for run start, approval, rejection, resume, cancellation, and provider initialization.
 - `run start --idempotency-key <token>` safely replays an identical request without creating a duplicate run; a different request with the same key exits with code `5`.
+- `run metrics <run-id>` exposes per-node duration, attempts, prompt/result/log byte sizes, workspace, and session; `run stats [workflow-name]` aggregates historical efficiency.
+
+## Agent onboarding skill
+
+给 Claude Code、Codex 或其他 agent 使用的编排手册位于 [`skills/agentflow/SKILL.md`](skills/agentflow/SKILL.md)。它覆盖和用户澄清需求、生成 workflow、provider/session 绑定、校验、dry-run、人工审批、恢复以及 metrics/stats 观测。
 
 ## Agent drivers
 
@@ -59,6 +64,26 @@ For example, a command can write:
 ```
 
 Downstream nodes reference structured data with expressions such as `{{ nodes.review.result.decision }}`.
+
+## Observability
+
+Inspect one run with:
+
+```bash
+agentflow run metrics <run-id> --format json
+agentflow run logs <run-id> --format ndjson
+```
+
+`run metrics` reports run and node status, duration, retry attempts, human waiting time, workspace/session binding, and byte counts. `input_bytes` is the rendered prompt sent to the node, `output_bytes` is the structured result file, and `stdout_bytes`/`stderr_bytes` are log sizes. Structured results and logs stay separate.
+
+Aggregate historical runs to find slow or failure-prone steps:
+
+```bash
+agentflow run stats --format json
+agentflow run stats release-review --format json
+```
+
+The aggregate includes run counts, average/P50/P95/max durations, human waiting time, retry totals, and input/output/log byte totals. Run data is persisted under `.agentflow/runs/<run-id>/` so it can be inspected or exported by another tool.
 
 The Runner owns all state transitions. Agent processes receive `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, `AGENTFLOW_NODE_TOKEN`, and `AGENTFLOW_RESULT_FILE`; they write the result file and exit, while the Runner validates the file and advances dependent nodes. An Agent never writes `state.json` or starts the next node directly.
 

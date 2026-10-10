@@ -14,6 +14,7 @@ import (
 
 	"github.com/chenhg5/agentflow/internal/driver"
 	"github.com/chenhg5/agentflow/internal/engine"
+	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
@@ -129,6 +130,10 @@ func runCommand(args []string, root, cwd string) error {
 		return runGet(parsed, root)
 	case "logs":
 		return runLogs(parsed, root)
+	case "metrics":
+		return runMetrics(parsed, root)
+	case "stats":
+		return runStats(parsed, root)
 	case "approve", "reject":
 		return runDecision(verb, parsed, root, cwd)
 	case "resume":
@@ -294,6 +299,54 @@ func runLogs(parsed parsedArgs, root string) error {
 	return writeData(map[string]any{"ok": true, "run_id": run.RunID, "events": events}, parsed.Output())
 }
 
+func runMetrics(parsed parsedArgs, root string) error {
+	if len(parsed.Positionals) != 1 {
+		return usageError("run id is required", "Run `agentflow run metrics <run-id>`.", "run_id")
+	}
+	run, err := store.LoadRun(root, parsed.Positionals[0])
+	if err != nil {
+		return notFoundError("run", parsed.Positionals[0], parsed.Format)
+	}
+	return writeData(metrics.Snapshot(run, time.Now().UTC()), parsed.Output())
+}
+
+func runStats(parsed parsedArgs, root string) error {
+	if len(parsed.Positionals) > 1 {
+		return usageError("run stats accepts at most one workflow name", "Run `agentflow run stats [workflow-name]`.", "workflow_name")
+	}
+	workflowName := ""
+	if len(parsed.Positionals) == 1 {
+		workflowName = parsed.Positionals[0]
+	}
+	runs, err := loadRuns(root)
+	if err != nil {
+		return err
+	}
+	return writeData(metrics.Aggregate(runs, workflowName, time.Now().UTC()), parsed.Output())
+}
+
+func loadRuns(root string) ([]*model.Run, error) {
+	entries, err := os.ReadDir(filepath.Join(root, "runs"))
+	if os.IsNotExist(err) {
+		return []*model.Run{}, nil
+	}
+	if err != nil {
+		return nil, internalError(err)
+	}
+	runs := make([]*model.Run, 0, len(entries))
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		run, err := store.LoadRun(root, entry.Name())
+		if err != nil {
+			return nil, internalError(err)
+		}
+		runs = append(runs, run)
+	}
+	return runs, nil
+}
+
 func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 	if len(parsed.Positionals) < 2 {
 		return usageError(fmt.Sprintf("usage: agentflow run %s <run-id> <node-id> [message]", verb), "The node must be waiting_human.", "approval_arguments")
@@ -320,7 +373,14 @@ func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
 	node.Result = map[string]any{"decision": verb, "message": message}
+	node.Attempts = 1
+	resultBytes, marshalErr := json.Marshal(node.Result)
+	if marshalErr != nil {
+		return internalError(marshalErr)
+	}
+	node.OutputBytes = int64(len(resultBytes))
 	node.FinishedAt = now()
+	metrics.RefreshNode(node, time.Now().UTC())
 	if verb == "approve" {
 		node.Status = "succeeded"
 	} else {
@@ -331,6 +391,7 @@ func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 	}
 	if verb == "reject" {
 		run.State.Status = "failed"
+		metrics.MarkRunFinished(&run.State, time.Now().UTC())
 		if err := store.SaveState(run); err != nil {
 			return internalError(err)
 		}
@@ -410,6 +471,7 @@ func runCancel(parsed parsedArgs, root string) error {
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
 	run.State.Status = "cancelled"
+	metrics.MarkRunFinished(&run.State, time.Now().UTC())
 	if err := store.SaveState(run); err != nil {
 		return internalError(err)
 	}
@@ -739,6 +801,15 @@ func stdoutTTY() bool {
 
 func runPayload(run *model.Run) map[string]any {
 	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "status": run.State.Status, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+	if run.State.StartedAt != "" {
+		payload["started_at"] = run.State.StartedAt
+	}
+	if run.State.FinishedAt != "" {
+		payload["finished_at"] = run.State.FinishedAt
+	}
+	if run.State.DurationMs > 0 {
+		payload["duration_ms"] = run.State.DurationMs
+	}
 	if run.State.IdempotencyKey != "" {
 		payload["idempotency_key"] = run.State.IdempotencyKey
 	}
@@ -768,6 +839,8 @@ func commandSchema() map[string]any {
 		{"name": "run list", "description": "List workflow runs.", "flags": []map[string]any{flag("--page-size", "integer", "Maximum number of runs to return", false), flag("--page-all", "boolean", "Return every run", false), formatFlag}},
 		{"name": "run get", "description": "Get one run and its node states.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run logs", "description": "Read the append-only event log.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
+		{"name": "run metrics", "description": "Get one run's timing, attempts, and byte metrics.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
+		{"name": "run stats", "description": "Aggregate metrics across runs, optionally filtered by workflow name.", "arguments": []map[string]any{{"name": "workflow-name", "required": false, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run approve", "description": "Approve a waiting human node and continue the run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Approval message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run reject", "description": "Reject a waiting human node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Rejection message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run resume", "description": "Resume a persisted run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview pending nodes without executing them", false), formatFlag}},
@@ -781,7 +854,7 @@ func commandSchema() map[string]any {
 
 func isRunVerb(value string) bool {
 	switch value {
-	case "start", "list", "get", "logs", "approve", "reject", "resume", "cancel":
+	case "start", "list", "get", "logs", "metrics", "stats", "approve", "reject", "resume", "cancel":
 		return true
 	default:
 		return false
@@ -861,6 +934,8 @@ Verbs:
   list                    List runs
   get <run-id>            Get one run
   logs <run-id>           Read events
+  metrics <run-id>        Show timing and size metrics
+  stats [workflow-name]   Aggregate metrics across runs
   approve <run-id> <node-id> [message]
   reject <run-id> <node-id> [message]
   resume <run-id>
@@ -959,4 +1034,4 @@ func stderrTTY() bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
-func now() string { return time.Now().UTC().Format(time.RFC3339) }
+func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }

@@ -38,17 +38,24 @@ type Node struct {
 }
 
 type NodeState struct {
-	Status     string            `json:"status"`
-	Prompt     string            `json:"prompt,omitempty"`
-	Workspace  string            `json:"workspace,omitempty"`
-	SessionID  string            `json:"sessionId,omitempty"`
-	Reason     string            `json:"reason,omitempty"`
-	Error      string            `json:"error,omitempty"`
-	StartedAt  string            `json:"startedAt,omitempty"`
-	FinishedAt string            `json:"finishedAt,omitempty"`
-	Result     any               `json:"result,omitempty"`
-	Artifacts  map[string]string `json:"artifacts,omitempty"`
-	LeaseToken string            `json:"leaseToken,omitempty"`
+	Status         string            `json:"status"`
+	Prompt         string            `json:"prompt,omitempty"`
+	Workspace      string            `json:"workspace,omitempty"`
+	SessionID      string            `json:"sessionId,omitempty"`
+	Reason         string            `json:"reason,omitempty"`
+	Attempts       int               `json:"attempts,omitempty"`
+	DurationMs     int64             `json:"durationMs,omitempty"`
+	WaitDurationMs int64             `json:"waitDurationMs,omitempty"`
+	InputBytes     int64             `json:"inputBytes,omitempty"`
+	OutputBytes    int64             `json:"outputBytes,omitempty"`
+	StdoutBytes    int64             `json:"stdoutBytes,omitempty"`
+	StderrBytes    int64             `json:"stderrBytes,omitempty"`
+	Error          string            `json:"error,omitempty"`
+	StartedAt      string            `json:"startedAt,omitempty"`
+	FinishedAt     string            `json:"finishedAt,omitempty"`
+	Result         any               `json:"result,omitempty"`
+	Artifacts      map[string]string `json:"artifacts,omitempty"`
+	LeaseToken     string            `json:"leaseToken,omitempty"`
 }
 
 type RunState struct {
@@ -60,6 +67,9 @@ type RunState struct {
 	Nodes          map[string]*NodeState `json:"nodes"`
 	CreatedAt      string                `json:"createdAt"`
 	UpdatedAt      string                `json:"updatedAt"`
+	StartedAt      string                `json:"startedAt,omitempty"`
+	FinishedAt     string                `json:"finishedAt,omitempty"`
+	DurationMs     int64                 `json:"durationMs,omitempty"`
 }
 
 type Run struct {

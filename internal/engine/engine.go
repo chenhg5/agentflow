@@ -9,12 +9,14 @@ import (
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/driver"
+	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/template"
 )
 
 func Execute(run *model.Run, providers map[string]driver.Provider) error {
+	metrics.MarkRunStarted(&run.State, time.Now().UTC())
 	if hasWaitingHuman(run.State) {
 		run.State.Status = "waiting_human"
 		return store.SaveState(run)
@@ -80,6 +82,7 @@ func Execute(run *model.Run, providers map[string]driver.Provider) error {
 			}
 			if result.Status == "failed" {
 				run.State.Status = "failed"
+				metrics.MarkRunFinished(&run.State, time.Now().UTC())
 				return store.SaveState(run)
 			}
 		}
@@ -87,10 +90,12 @@ func Execute(run *model.Run, providers map[string]driver.Provider) error {
 	for _, node := range run.State.Nodes {
 		if node.Status == "pending" {
 			run.State.Status = "failed"
+			metrics.MarkRunFinished(&run.State, time.Now().UTC())
 			return store.SaveState(run)
 		}
 	}
 	run.State.Status = "succeeded"
+	metrics.MarkRunFinished(&run.State, time.Now().UTC())
 	if err := store.SaveState(run); err != nil {
 		return err
 	}
@@ -100,7 +105,7 @@ func Execute(run *model.Run, providers map[string]driver.Provider) error {
 func executeNode(run *model.Run, node model.Node, providers map[string]driver.Provider) (model.NodeState, error) {
 	state := run.State.Nodes[node.ID]
 	state.Status = "running"
-	state.StartedAt = time.Now().UTC().Format(time.RFC3339)
+	state.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	state.LeaseToken = store.NewToken()
 	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "node.started", "nodeId": node.ID, "nodeType": node.Type}); err != nil {
 		return *state, err
@@ -108,6 +113,7 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	if node.Type == "human" {
 		state.Status = "waiting_human"
 		state.Prompt = template.Render(node.Prompt, context(run.State))
+		state.InputBytes = int64(len([]byte(state.Prompt)))
 		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.waiting_human", "nodeId": node.ID, "prompt": state.Prompt})
 		return *state, nil
 	}
@@ -127,6 +133,7 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	if node.Type == "agent" {
 		prompt += "\n\nExecution contract: when the task is complete, write one JSON object to the file in AGENTFLOW_RESULT_FILE before exiting successfully. stdout and stderr are logs only."
 	}
+	state.InputBytes = int64(len([]byte(prompt)))
 	resultRelativePath := node.ID + ".result.json"
 	if node.Result != nil && node.Result.Path != "" {
 		resultRelativePath = node.Result.Path
@@ -148,12 +155,20 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	if node.Type == "agent" {
 		provider, ok := providers[node.Driver]
 		if !ok || (len(provider.Command) == 0 && len(provider.ResumeCommand) == 0) {
-			return model.NodeState{Status: "failed", Workspace: workspace, SessionID: sessionID, Error: fmt.Sprintf("driver %s is not configured; add .agentflow/providers.json", node.Driver)}, nil
+			state.Status = "failed"
+			state.Error = fmt.Sprintf("driver %s is not configured; add .agentflow/providers.json", node.Driver)
+			state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			metrics.RefreshNode(state, time.Now().UTC())
+			return *state, nil
 		}
 		commandTemplate := provider.Command
 		if sessionID != "" {
 			if len(provider.ResumeCommand) == 0 {
-				return model.NodeState{Status: "failed", Workspace: workspace, SessionID: sessionID, Error: fmt.Sprintf("driver %s does not define resumeCommand for session %s; configure a command that resumes an existing session", node.Driver, sessionID)}, nil
+				state.Status = "failed"
+				state.Error = fmt.Sprintf("driver %s does not define resumeCommand for session %s; configure a command that resumes an existing session", node.Driver, sessionID)
+				state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+				metrics.RefreshNode(state, time.Now().UTC())
+				return *state, nil
 			}
 			commandTemplate = provider.ResumeCommand
 		}
@@ -167,6 +182,7 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	}
 	var result driver.CommandResult
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
+		state.Attempts++
 		_ = os.Remove(resultFile)
 		stdin := ""
 		if node.PromptMode == "stdin" {
@@ -188,7 +204,9 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	if err := store.WriteArtifact(run.RunDir, stderrArtifact, []byte(result.Stderr)); err != nil {
 		return *state, err
 	}
-	state.FinishedAt = time.Now().UTC().Format(time.RFC3339)
+	state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	state.StdoutBytes = int64(len([]byte(result.Stdout)))
+	state.StderrBytes = int64(len([]byte(result.Stderr)))
 	if result.Code != 0 {
 		state.Status = "failed"
 		if result.TimedOut {
@@ -198,15 +216,18 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		}
 		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.failed", "nodeId": node.ID, "error": state.Error})
 		state.Artifacts = map[string]string{"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact), "stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact)}
+		metrics.RefreshNode(state, time.Now().UTC())
 		return *state, nil
 	}
-	structured, err := loadResult(resultFile)
+	structured, resultBytes, err := loadResult(resultFile)
 	if err != nil {
+		state.OutputBytes = resultBytes
 		if node.Type == "agent" || (node.Result != nil && node.Result.Required) {
 			state.Status = "failed"
 			state.Error = err.Error()
 			state.Artifacts = map[string]string{"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact), "stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact)}
 			_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.failed", "nodeId": node.ID, "error": state.Error})
+			metrics.RefreshNode(state, time.Now().UTC())
 			return *state, nil
 		}
 		structured = map[string]any{"exitCode": result.Code}
@@ -217,7 +238,9 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		if err := store.WriteArtifact(run.RunDir, resultRelativePath, append(data, '\n')); err != nil {
 			return *state, err
 		}
+		resultBytes = int64(len(data) + 1)
 	}
+	state.OutputBytes = resultBytes
 	state.Result = structured
 	if resultObject, ok := structured.(map[string]any); ok {
 		if returnedSession, ok := resultObject["session_id"].(string); ok && returnedSession != "" {
@@ -233,23 +256,24 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		"stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact),
 	}
 	state.Status = "succeeded"
+	metrics.RefreshNode(state, time.Now().UTC())
 	_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.succeeded", "nodeId": node.ID, "resultArtifact": state.Artifacts["result"]})
 	return *state, nil
 }
 
-func loadResult(file string) (any, error) {
+func loadResult(file string) (any, int64, error) {
 	data, err := os.ReadFile(file)
 	if err != nil {
-		return nil, fmt.Errorf("structured result is missing: write JSON to AGENTFLOW_RESULT_FILE (%s)", file)
+		return nil, 0, fmt.Errorf("structured result is missing: write JSON to AGENTFLOW_RESULT_FILE (%s)", file)
 	}
 	var result any
 	if err := json.Unmarshal(data, &result); err != nil {
-		return nil, fmt.Errorf("structured result is invalid JSON: %w", err)
+		return nil, int64(len(data)), fmt.Errorf("structured result is invalid JSON: %w", err)
 	}
 	if _, ok := result.(map[string]any); !ok {
-		return nil, fmt.Errorf("structured result must be a JSON object")
+		return nil, int64(len(data)), fmt.Errorf("structured result must be a JSON object")
 	}
-	return result, nil
+	return result, int64(len(data)), nil
 }
 
 func context(state model.RunState) map[string]any {

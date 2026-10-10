@@ -44,6 +44,10 @@ func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
 	if _, ok := run.State.Nodes["agent"].Artifacts["stdoutLog"]; !ok {
 		t.Fatal("stdout should be recorded as a log artifact")
 	}
+	state := run.State.Nodes["agent"]
+	if state.Attempts != 1 || state.OutputBytes <= 0 || state.StdoutBytes <= 0 {
+		t.Fatalf("expected execution metrics, got attempts=%d output_bytes=%d stdout_bytes=%d", state.Attempts, state.OutputBytes, state.StdoutBytes)
+	}
 }
 
 func TestAgentResumesSessionInWorkspace(t *testing.T) {
