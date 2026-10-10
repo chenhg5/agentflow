@@ -20,13 +20,16 @@ PLATFORMS := \
 
 SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: build test vet check release-all clean
+.PHONY: build test test-real vet check release-all clean
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/$(APP) $(CMD)
 
 test:
 	go test -count=1 ./...
+
+test-real: build
+	./scripts/real-agent-smoke.sh
 
 vet:
 	test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
@@ -45,7 +48,7 @@ release-all: clean check
 		mkdir -p $(DIST)/$(NAME) && \
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
 		cp README.md INSTALL.md providers.example.json workflow.schema.json $(DIST)/$(NAME)/ && \
-		cp -R examples skills $(DIST)/$(NAME)/ && \
+		cp -R examples skills docs scripts $(DIST)/$(NAME)/ && \
 		$(if $(EXT),(cd $(DIST) && zip -qr $(NAME).zip $(NAME)),tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
 		rm -rf $(DIST)/$(NAME) && \
 	) true

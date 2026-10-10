@@ -226,7 +226,7 @@ The same workflow, inputs, and idempotency key reuse the existing run. A differe
 
 ## Structured results and artifacts
 
-Agent nodes must write one JSON object to `AGENTFLOW_RESULT_FILE` before exiting with code `0`:
+Agent nodes must write one JSON object to `AGENTFLOW_RESULT_FILE` before exiting with code `0`. The runner also prints the exact absolute result path and workspace in the execution contract appended to the prompt. This matters for non-interactive agent sessions where reading process environment variables may be restricted:
 
 ```json
 {

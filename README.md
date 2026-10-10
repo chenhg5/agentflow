@@ -59,7 +59,7 @@ Agent nodes can bind both a workspace and an existing session:
 
 ## Structured node results
 
-Agent nodes must write a JSON object to the `AGENTFLOW_RESULT_FILE` environment variable before they exit successfully. The Runner stores that JSON under `node.result` and remains the only component that advances the workflow. stdout and stderr are retained only as log artifacts under `artifacts/logs/`.
+Agent nodes must write a JSON object to the `AGENTFLOW_RESULT_FILE` environment variable before they exit successfully. The runner also includes the exact absolute result path and workspace in the execution contract appended to the prompt, which helps non-interactive sessions that cannot inspect process environment variables. The Runner stores that JSON under `node.result` and remains the only component that advances the workflow. stdout and stderr are retained only as log artifacts under `artifacts/logs/`.
 
 For example, a command can write:
 
@@ -108,6 +108,8 @@ The server prints a local URL and refreshes run data every two seconds. Use `--p
 The Runner owns all state transitions. Agent processes receive `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, `AGENTFLOW_NODE_TOKEN`, and `AGENTFLOW_RESULT_FILE`; they write the result file and exit, while the Runner validates the file and advances dependent nodes. An Agent never writes `state.json` or starts the next node directly.
 
 The first release keeps drivers command based. This makes the workflow engine independent from a vendor SDK while preserving a path to richer session adapters later.
+
+For reproducible validation, [`docs/testing.md`](docs/testing.md) describes the deterministic test suite and an opt-in smoke workflow that invokes real Claude Code and Codex sessions.
 
 Build a standalone binary with:
 

@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,6 +49,30 @@ func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
 	state := run.State.Nodes["agent"]
 	if state.Attempts != 1 || state.OutputBytes <= 0 || state.StdoutBytes <= 0 {
 		t.Fatalf("expected execution metrics, got attempts=%d output_bytes=%d stdout_bytes=%d", state.Attempts, state.OutputBytes, state.StdoutBytes)
+	}
+}
+
+func TestAgentPromptIncludesExactResultPath(t *testing.T) {
+	workspace := t.TempDir()
+	workflow := model.Workflow{Version: "1", Name: "contract", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Workspace: workspace, Prompt: "work"}}}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	provider := driver.Provider{Command: []string{"sh", "-c", `printf '%s' "$AGENTFLOW_PROMPT" > prompt.txt; printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}}
+	if err := Execute(run, map[string]driver.Provider{"fake": provider}); err != nil {
+		t.Fatal(err)
+	}
+	if run.State.Status != "succeeded" {
+		t.Fatalf("status = %s, error = %q", run.State.Status, run.State.Nodes["agent"].Error)
+	}
+	prompt, err := os.ReadFile(filepath.Join(workspace, "prompt.txt"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	expected := filepath.Join(run.RunDir, "artifacts", "agent.result.json")
+	if !strings.Contains(string(prompt), expected) {
+		t.Fatalf("prompt did not include exact result path %q: %s", expected, prompt)
 	}
 }
 

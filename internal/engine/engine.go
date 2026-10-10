@@ -130,9 +130,6 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	sessionID := template.Render(node.Session, runContext)
 	state.SessionID = sessionID
 	prompt := template.Render(node.Prompt, runContext)
-	if node.Type == "agent" {
-		prompt += "\n\nExecution contract: when the task is complete, write one JSON object to the file in AGENTFLOW_RESULT_FILE before exiting successfully. stdout and stderr are logs only."
-	}
 	state.InputBytes = int64(len([]byte(prompt)))
 	resultRelativePath := node.ID + ".result.json"
 	if node.Result != nil && node.Result.Path != "" {
@@ -141,6 +138,10 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	resultFile, err := store.ArtifactPath(run.RunDir, resultRelativePath)
 	if err != nil {
 		return *state, err
+	}
+	if node.Type == "agent" {
+		prompt += fmt.Sprintf("\n\nExecution contract: when the task is complete, write one JSON object to AGENTFLOW_RESULT_FILE before exiting successfully. The exact result path for this node is %s. The workspace is %s. You may use the environment variable AGENTFLOW_RESULT_FILE as well. stdout and stderr are logs only.", resultFile, workspace)
+		state.InputBytes = int64(len([]byte(prompt)))
 	}
 	env := map[string]string{
 		"AGENTFLOW_RUN_ID":      run.RunID,
