@@ -12,7 +12,7 @@ import (
 )
 
 func TestAgentRequiresStructuredResult(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "result", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Prompt: "work"}}}
+	workflow := model.Workflow{Version: "1", Name: "result", Nodes: []model.Node{{ID: "agent", Type: "agent", Provider: "fake", Prompt: "work"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -27,7 +27,7 @@ func TestAgentRequiresStructuredResult(t *testing.T) {
 }
 
 func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "result", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Prompt: "work"}}}
+	workflow := model.Workflow{Version: "1", Name: "result", Nodes: []model.Node{{ID: "agent", Type: "agent", Provider: "fake", Prompt: "work"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
 
 func TestAgentPromptIncludesExactResultPath(t *testing.T) {
 	workspace := t.TempDir()
-	workflow := model.Workflow{Version: "1", Name: "contract", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Workspace: workspace, Prompt: "work"}}}
+	workflow := model.Workflow{Version: "1", Name: "contract", Nodes: []model.Node{{ID: "agent", Type: "agent", Provider: "fake", Workspace: workspace, Prompt: "work"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -78,7 +78,7 @@ func TestAgentPromptIncludesExactResultPath(t *testing.T) {
 
 func TestAgentResumesSessionInWorkspace(t *testing.T) {
 	workspace := t.TempDir()
-	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Workspace: workspace, Session: "session-123", Prompt: "continue"}}}
+	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "agent", Type: "agent", Provider: "fake", Workspace: workspace, Session: "session-123", Prompt: "continue"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -101,7 +101,7 @@ func TestAgentResumesSessionInWorkspace(t *testing.T) {
 }
 
 func TestAgentSessionRequiresResumeCommand(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "agent", Type: "agent", Driver: "fake", Session: "session-123", Prompt: "continue"}}}
+	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "agent", Type: "agent", Provider: "fake", Session: "session-123", Prompt: "continue"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)

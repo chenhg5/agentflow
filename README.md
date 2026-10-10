@@ -38,9 +38,18 @@ go run ./cmd/agentflow run get <run-id> --format json
 
 给 Claude Code、Codex 或其他 agent 使用的编排手册位于 [`skills/agentflow/SKILL.md`](skills/agentflow/SKILL.md)。它覆盖和用户澄清需求、生成 workflow、provider/session 绑定、校验、dry-run、人工审批、恢复以及 metrics/stats 观测。
 
-## Agent drivers
+## Agent providers
 
-Drivers are configured outside workflow definitions in `.agentflow/providers.json` or `~/.agentflow/providers.json`. Start from `providers.example.json` and adjust the command syntax for the installed Claude Code or Codex CLI. `command` starts a new session; `resumeCommand` is selected when an agent node sets `session`.
+Claude Code and Codex have built-in providers. Their binaries and provider-specific runtime options are configured outside workflow definitions in `.agentflow/providers.json` or `~/.agentflow/providers.json`. Start from [`providers.example.json`](providers.example.json). Custom agents can use `kind: "command"` with explicit command templates.
+
+```json
+{
+  "providers": {
+    "claude-code": { "kind": "claude-code", "binary": "claude" },
+    "codex": { "kind": "codex", "binary": "codex", "model": "gpt-5.6-sol", "sandbox": "workspace-write" }
+  }
+}
+```
 
 Agent nodes can bind both a workspace and an existing session:
 
@@ -48,7 +57,7 @@ Agent nodes can bind both a workspace and an existing session:
 {
   "id": "implement",
   "type": "agent",
-  "driver": "claude-code",
+  "provider": "claude-code",
   "workspace": "/Users/me/code/my-repo",
   "session": "{{ inputs.session_id }}",
   "prompt": "Implement the requested change and write the structured result."
@@ -107,7 +116,7 @@ The server prints a local URL and refreshes run data every two seconds. Use `--p
 
 The Runner owns all state transitions. Agent processes receive `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, `AGENTFLOW_NODE_TOKEN`, and `AGENTFLOW_RESULT_FILE`; they write the result file and exit, while the Runner validates the file and advances dependent nodes. An Agent never writes `state.json` or starts the next node directly.
 
-The first release keeps drivers command based. This makes the workflow engine independent from a vendor SDK while preserving a path to richer session adapters later.
+Provider adapters keep vendor-specific CLI and session behavior out of the workflow engine while preserving a generic command escape hatch. Session discovery and history are separate capabilities that can be added without changing workflow definitions.
 
 For reproducible validation, [`docs/testing.md`](docs/testing.md) describes the deterministic test suite and an opt-in smoke workflow that invokes real Claude Code and Codex sessions.
 
@@ -125,4 +134,4 @@ go build -o agentflow ./cmd/agentflow
 - retries, timeouts, and persisted run state
 - structured JSON node results with separate stdout/stderr log artifacts
 - human approve/reject/resume
-- Claude Code and Codex command driver configuration, including workspace and existing-session resume
+- built-in Claude Code and Codex providers, including workspace and existing-session resume

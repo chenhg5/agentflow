@@ -1,12 +1,19 @@
 {
-  "drivers": {
+  "providers": {
     "claude-code": {
-      "command": ["claude", "--print", "{{ prompt }}"],
-      "resumeCommand": ["claude", "--resume", "{{ session_id }}", "--print", "{{ prompt }}"]
+      "kind": "claude-code",
+      "binary": "claude"
     },
     "codex": {
-      "command": ["codex", "exec", "{{ prompt }}"],
-      "resumeCommand": ["codex", "exec", "resume", "{{ session_id }}", "{{ prompt }}"]
+      "kind": "codex",
+      "binary": "codex",
+      "model": "gpt-5.6-sol",
+      "sandbox": "workspace-write"
+    },
+    "custom-agent": {
+      "kind": "command",
+      "command": ["my-agent", "--prompt", "{{ prompt }}"],
+      "resumeCommand": ["my-agent", "--session", "{{ session_id }}", "--prompt", "{{ prompt }}"]
     }
   }
 }

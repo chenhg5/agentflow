@@ -154,26 +154,25 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	}
 	command := node.Command
 	if node.Type == "agent" {
-		provider, ok := providers[node.Driver]
-		if !ok || (len(provider.Command) == 0 && len(provider.ResumeCommand) == 0) {
+		provider, ok := providers[node.Provider]
+		if !ok {
 			state.Status = "failed"
-			state.Error = fmt.Sprintf("driver %s is not configured; add .agentflow/providers.json", node.Driver)
+			state.Error = fmt.Sprintf("provider %s is not configured; add .agentflow/providers.json", node.Provider)
 			state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 			metrics.RefreshNode(state, time.Now().UTC())
 			return *state, nil
 		}
-		commandTemplate := provider.Command
-		if sessionID != "" {
-			if len(provider.ResumeCommand) == 0 {
-				state.Status = "failed"
-				state.Error = fmt.Sprintf("driver %s does not define resumeCommand for session %s; configure a command that resumes an existing session", node.Driver, sessionID)
-				state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
-				metrics.RefreshNode(state, time.Now().UTC())
-				return *state, nil
-			}
-			commandTemplate = provider.ResumeCommand
+		command, err = driver.BuildCommand(node.Provider, provider, driver.Request{
+			Prompt: prompt, Workspace: workspace, SessionID: sessionID,
+			ResultFile: resultFile, RunID: run.RunID, NodeID: node.ID,
+		})
+		if err != nil {
+			state.Status = "failed"
+			state.Error = err.Error()
+			state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			metrics.RefreshNode(state, time.Now().UTC())
+			return *state, nil
 		}
-		command = driver.ExpandCommand(commandTemplate, prompt, workspace, sessionID, resultFile, run.RunID, node.ID)
 	} else {
 		command = template.RenderArray(command, runContext)
 	}

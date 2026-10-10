@@ -121,7 +121,7 @@ agentflow schema --all --format json
 agentflow doctor --format json
 ```
 
-Expected version output contains `version`, `commit`, `built`, `go`, and `platform`. `doctor` reports the current directory, configured drivers, and the local run store path.
+Expected version output contains `version`, `commit`, `built`, `go`, and `platform`. `doctor` reports the current directory, available providers, executable availability, and the local run store path.
 
 ## Configure agent providers
 
@@ -131,18 +131,20 @@ Provider configuration is separate from workflow definitions. Initialize a proje
 agentflow config init
 ```
 
-This creates `.agentflow/providers.json`. If a project-local file is absent, AgentFlow also checks `~/.agentflow/providers.json`. Edit the file for the installed CLI versions:
+This creates `.agentflow/providers.json`. If a project-local file is absent, AgentFlow also checks `~/.agentflow/providers.json`. Claude Code and Codex are built in; edit their binary and runtime settings for the installed CLI versions:
 
 ```json
 {
-  "drivers": {
+  "providers": {
     "claude-code": {
-      "command": ["claude", "--print", "{{ prompt }}"],
-      "resumeCommand": ["claude", "--resume", "{{ session_id }}", "--print", "{{ prompt }}"]
+      "kind": "claude-code",
+      "binary": "claude"
     },
     "codex": {
-      "command": ["codex", "exec", "{{ prompt }}"],
-      "resumeCommand": ["codex", "exec", "resume", "{{ session_id }}", "{{ prompt }}"]
+      "kind": "codex",
+      "binary": "codex",
+      "model": "gpt-5.6-sol",
+      "sandbox": "workspace-write"
     }
   }
 }
@@ -150,13 +152,15 @@ This creates `.agentflow/providers.json`. If a project-local file is absent, Age
 
 Rules:
 
-- `command` starts a new agent session.
-- `resumeCommand` is required when an agent node specifies `session`.
+- `claude-code` and `codex` are built-in providers. AgentFlow generates their start and resume commands.
+- `binary`, `model`, `sandbox`, `ephemeral`, and provider-specific flags belong in provider configuration.
+- Use `kind: "command"` with `command` and `resumeCommand` when integrating another CLI.
+- `resumeCommand` is required for a custom command provider when an agent node specifies `session`.
 - `workspace` becomes the child process working directory.
 - AgentFlow sets `AGENTFLOW_WORKSPACE`, `AGENTFLOW_SESSION_ID`, `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, and `AGENTFLOW_RESULT_FILE` for the process.
 - Command templates support `{{ prompt }}`, `{{ workspace }}`, `{{ session_id }}`, `{{ result_file }}`, `{{ run_id }}`, and `{{ node_id }}`.
 
-Never silently replace a missing `resumeCommand` with a new session. If a workflow names a session, the run should fail clearly until the provider is configured to resume it.
+Never silently replace a missing resume capability with a new session. If a workflow names a session, the run should fail clearly until the provider can resume it.
 
 ## Create and execute a workflow
 
@@ -188,7 +192,7 @@ A minimal agent workflow looks like this:
     {
       "id": "review",
       "type": "agent",
-      "driver": "claude-code",
+      "provider": "claude-code",
       "workspace": "{{ inputs.workspace }}",
       "session": "{{ inputs.session_id }}",
       "prompt": "Review the current changes. Write a JSON object with summary and decision to AGENTFLOW_RESULT_FILE."
@@ -330,8 +334,8 @@ rm -rf .agentflow
 
 Common fixes:
 
-- **Driver is not configured:** run `agentflow config init`, edit `.agentflow/providers.json`, and verify the provider command directly in the target workspace.
-- **Existing session cannot resume:** add a provider `resumeCommand` and provide the exact session ID. Do not remove `session` unless starting a new session is intentional.
+- **Provider executable is unavailable:** run `agentflow doctor --format json`, install the missing CLI, or set the provider `binary` path in `.agentflow/providers.json`.
+- **Existing session cannot resume:** check the provider-specific session ID and CLI login; custom `kind: "command"` providers also need a `resumeCommand`. Do not remove `session` unless starting a new session is intentional.
 - **Structured result is missing or invalid:** make the agent write a JSON object to `AGENTFLOW_RESULT_FILE`; stdout text does not count as the node result.
 - **Workflow validation fails:** fix the reported node ID, dependency, type, required field, or cycle before running again.
 - **Web UI is blank:** check browser access to `esm.sh` and `unpkg.com`, or use `run get`/`run metrics` as the CLI fallback.

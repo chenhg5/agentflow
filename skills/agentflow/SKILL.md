@@ -50,7 +50,7 @@ agentflow schema workflow --format json
     {
       "id": "inspect",
       "type": "agent",
-      "driver": "claude-code",
+      "provider": "claude-code",
       "workspace": "{{ inputs.workspace }}",
       "session": "{{ inputs.session_id }}",
       "prompt": "检查当前变更，并把结论写入 AGENTFLOW_RESULT_FILE。"
@@ -68,7 +68,7 @@ agentflow schema workflow --format json
 ### 节点约定
 
 - `shell`：使用 `command`，适合确定性的脚本和校验。
-- `agent`：使用 `driver`、`prompt`、可选的 `workspace` 和 `session`。
+- `agent`：使用 `provider`、`prompt`、可选的 `workspace` 和 `session`。
 - `human`：使用 `prompt`，运行后状态为 `waiting_human`，必须通过 CLI 决策才能继续。
 - `needs`：声明依赖节点 ID。
 - `when`：根据 `inputs` 或上游 `result` 做条件跳过。
@@ -81,14 +81,16 @@ Provider 配置在 `.agentflow/providers.json` 或 `~/.agentflow/providers.json`
 
 ```json
 {
-  "drivers": {
+  "providers": {
     "claude-code": {
-      "command": ["claude", "--print", "{{ prompt }}"],
-      "resumeCommand": ["claude", "--resume", "{{ session_id }}", "--print", "{{ prompt }}"]
+      "kind": "claude-code",
+      "binary": "claude"
     },
     "codex": {
-      "command": ["codex", "exec", "{{ prompt }}"],
-      "resumeCommand": ["codex", "exec", "resume", "{{ session_id }}", "{{ prompt }}"]
+      "kind": "codex",
+      "binary": "codex",
+      "model": "gpt-5.6-sol",
+      "sandbox": "workspace-write"
     }
   }
 }
@@ -96,9 +98,11 @@ Provider 配置在 `.agentflow/providers.json` 或 `~/.agentflow/providers.json`
 
 规则：
 
-- 没有 `session` 时选择 `command`，表示启动新 session。
-- 有 `session` 时选择 `resumeCommand`，表示向指定 session 发送下一轮任务。
-- 有 session 但没有 `resumeCommand` 时，节点应失败并修复 provider 配置；不要静默启动新 session。
+- `claude-code` 和 `codex` 是内置 provider，provider 负责拼接各自 CLI 的启动和 resume 参数。
+- `binary`、`model`、`sandbox` 等运行参数放在 provider 配置，不要写进 workflow。
+- 自定义 agent 使用 `kind: "command"`，并提供 `command` 与 `resumeCommand` 模板。
+- 有 `session` 时，内置 provider 会调用对应 CLI 的 resume 子命令；自定义 command provider 必须提供 `resumeCommand`。
+- 有 session 但无法 resume 时，节点应失败并修复 provider 配置；不要静默启动新 session。
 - Runner 使用节点的 workspace 作为进程工作目录，并设置 `AGENTFLOW_WORKSPACE`、`AGENTFLOW_SESSION_ID`。
 - provider command 可以使用 `{{ prompt }}`、`{{ workspace }}`、`{{ session_id }}`、`{{ result_file }}`、`{{ run_id }}` 和 `{{ node_id }}`。
 - Agent 也可以在结构化结果中返回 `session_id`，后续节点用 `{{ nodes.<id>.result.session_id }}` 继续该会话。
@@ -255,6 +259,6 @@ Web 页面会显示节点依赖、节点类型、状态、耗时、attempts 和�
 - 哪些节点需要人工审批；
 - 失败、重试、超时和取消如何处理；
 - 如何执行、如何审批、如何查看 metrics/stats；
-- 哪些 provider 命令需要用户根据本机 CLI 版本调整。
+- 内置 provider 使用哪个 binary、model、sandbox 或 permission 设置；自定义 command provider 的命令模板是否需要按本机 CLI 版本调整。
 
 执行后报告 run ID、最终状态、失败节点、耗时、attempts、输入/输出字节数，以及需要用户处理的审批节点。

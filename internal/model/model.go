@@ -24,7 +24,7 @@ type ResultSpec struct {
 type Node struct {
 	ID         string      `json:"id"`
 	Type       string      `json:"type"`
-	Driver     string      `json:"driver,omitempty"`
+	Provider   string      `json:"provider,omitempty"`
 	Command    []string    `json:"command,omitempty"`
 	Prompt     string      `json:"prompt,omitempty"`
 	PromptMode string      `json:"promptMode,omitempty"`

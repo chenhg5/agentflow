@@ -32,12 +32,19 @@ mkdir -p "$WORKSPACE/.agentflow"
 cp "$ROOT_DIR/examples/real-agent-pipeline.json" "$WORKSPACE/workflow.json"
 cat > "$WORKSPACE/.agentflow/providers.json" <<JSON
 {
-  "drivers": {
+  "providers": {
     "claude-code": {
-      "command": ["claude", "--print", "--permission-mode", "acceptEdits", "--permission-prompts", "none", "{{ prompt }}"]
+      "kind": "claude-code",
+      "binary": "claude",
+      "extraArgs": ["--permission-mode", "acceptEdits", "--permission-prompts", "none"]
     },
     "codex": {
-      "command": ["codex", "exec", "-m", "$MODEL", "--dangerously-bypass-approvals-and-sandbox", "--skip-git-repo-check", "--ephemeral", "{{ prompt }}"]
+      "kind": "codex",
+      "binary": "codex",
+      "model": "$MODEL",
+      "dangerouslyBypassApprovalsAndSandbox": true,
+      "skipGitRepoCheck": true,
+      "ephemeral": true
     }
   }
 }

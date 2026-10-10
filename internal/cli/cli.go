@@ -589,14 +589,14 @@ func configCommand(args []string, cwd string) error {
 		return internalError(err)
 	}
 	const example = `{
-  "drivers": {
+  "providers": {
     "claude-code": {
-      "command": ["claude", "--print", "{{ prompt }}"],
-      "resumeCommand": ["claude", "--resume", "{{ session_id }}", "--print", "{{ prompt }}"]
+      "kind": "claude-code",
+      "binary": "claude"
     },
     "codex": {
-      "command": ["codex", "exec", "{{ prompt }}"],
-      "resumeCommand": ["codex", "exec", "resume", "{{ session_id }}", "{{ prompt }}"]
+      "kind": "codex",
+      "binary": "codex"
     }
   }
 }
@@ -659,11 +659,14 @@ func doctorCommand(args []string, cwd string) error {
 		return internalError(err)
 	}
 	drivers := make([]string, 0, len(providers))
+	statuses := make([]driver.Status, 0, len(providers))
 	for name := range providers {
 		drivers = append(drivers, name)
+		statuses = append(statuses, driver.CheckProvider(name, providers[name]))
 	}
 	sort.Strings(drivers)
-	return writeData(map[string]any{"ok": true, "cwd": cwd, "provider_configured": len(drivers) > 0, "drivers": drivers, "run_store": filepath.Join(cwd, ".agentflow", "runs")}, parsed.Output())
+	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
+	return writeData(map[string]any{"ok": true, "cwd": cwd, "provider_configured": len(drivers) > 0, "providers": drivers, "drivers": drivers, "provider_status": statuses, "run_store": filepath.Join(cwd, ".agentflow", "runs")}, parsed.Output())
 }
 
 func readWorkflow(file, format string) (model.Workflow, error) {
@@ -937,7 +940,7 @@ func commandSchema() map[string]any {
 		{"name": "run cancel", "description": "Cancel a run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "schema", "description": "Inspect command metadata or the workflow schema.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
 		{"name": "config init", "description": "Create local provider configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
-		{"name": "doctor", "description": "Check local setup and configured drivers.", "flags": []map[string]any{formatFlag}},
+		{"name": "doctor", "description": "Check local setup and configured providers.", "flags": []map[string]any{formatFlag}},
 		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 		{"name": "version", "description": "Print version, commit, build time, Go version, and platform.", "flags": []map[string]any{formatFlag}},
 	}
