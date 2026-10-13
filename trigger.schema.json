@@ -30,7 +30,7 @@
           "type": "object",
           "properties": {
             "concurrency": { "enum": ["forbid", "allow"] },
-            "misfire": { "enum": ["skip", "fire-once"] }
+            "misfire": { "const": "skip" }
           },
           "additionalProperties": false
         }

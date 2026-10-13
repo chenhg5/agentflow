@@ -34,6 +34,12 @@ func LoadConfig(root string) (Config, error) {
 		if definition.Target.Workflow == "" {
 			return Config{}, fmt.Errorf("trigger %s needs target.workflow", definition.ID)
 		}
+		if definition.Policy.Concurrency != "" && definition.Policy.Concurrency != "forbid" && definition.Policy.Concurrency != "allow" {
+			return Config{}, fmt.Errorf("trigger %s has unsupported concurrency policy: %s", definition.ID, definition.Policy.Concurrency)
+		}
+		if definition.Policy.Misfire != "" && definition.Policy.Misfire != "skip" {
+			return Config{}, fmt.Errorf("trigger %s has unsupported misfire policy: %s (only skip is supported in this MVP)", definition.ID, definition.Policy.Misfire)
+		}
 		if definition.Source.Kind == "cron" && definition.Source.Expression == "" {
 			return Config{}, fmt.Errorf("cron trigger %s needs source.expression", definition.ID)
 		}
