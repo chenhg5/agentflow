@@ -14,6 +14,7 @@ make test-e2e
 ```
 
 The test uses shell nodes as deterministic stand-ins for agents. This verifies the runner and persistence boundary; the real provider smoke test below verifies Claude Code and Codex command construction separately.
+Set `AGENTFLOW_KEEP_WORKSPACE=1` to retain the temporary `.agentflow` directory for inspection after the test.
 
 ## Run the real smoke test
 

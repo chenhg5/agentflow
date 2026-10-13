@@ -6,6 +6,7 @@ set -euo pipefail
 # validation, handoff, and human approval paths.
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 AGENTFLOW_BIN=${AGENTFLOW_BIN:-"$ROOT_DIR/bin/agentflow"}
+KEEP_WORKSPACE=${AGENTFLOW_KEEP_WORKSPACE:-0}
 
 if [[ ! -x "$AGENTFLOW_BIN" ]]; then
   echo "agentflow binary not found at $AGENTFLOW_BIN; run 'make build' or set AGENTFLOW_BIN" >&2
@@ -14,7 +15,13 @@ fi
 command -v jq >/dev/null || { echo "jq is required" >&2; exit 2; }
 
 WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/agentflow-e2e.XXXXXX")
-cleanup() { rm -rf "$WORKSPACE"; }
+cleanup() {
+  if [[ "$KEEP_WORKSPACE" == "1" ]]; then
+    echo "workspace kept at $WORKSPACE"
+  else
+    rm -rf "$WORKSPACE"
+  fi
+}
 trap cleanup EXIT
 
 cat > "$WORKSPACE/contracts.json" <<'JSON'
