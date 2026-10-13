@@ -2,185 +2,134 @@ package schema
 
 import (
 	"fmt"
-	"math"
-	"reflect"
+	"sort"
 	"strings"
+
+	"github.com/chenhg5/agentflow/internal/model"
+	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-var contractTypes = map[string]bool{"object": true, "array": true, "string": true, "number": true, "integer": true, "boolean": true, "null": true}
+var fieldTypes = map[string]bool{"object": true, "array": true, "string": true, "number": true, "integer": true, "boolean": true, "null": true}
 
-// ValidateDefinition checks the shape of a contract before a workflow is
-// executed. Runtime values are checked separately by ValidateValue.
+// SchemaForFields turns Multigent-style field declarations into a strict
+// object contract. Field declarations remain useful metadata for agents and
+// UI while the generated schema enforces the same requirements at runtime.
+func SchemaForFields(fields []model.FieldSpec) map[string]any {
+	if len(fields) == 0 {
+		return nil
+	}
+	properties := map[string]any{}
+	required := []any{}
+	for _, field := range fields {
+		definition := map[string]any{"type": field.Type}
+		if field.Type == "" {
+			definition["type"] = "string"
+		}
+		if field.Description != "" {
+			definition["description"] = field.Description
+		}
+		properties[field.Name] = definition
+		if field.Required {
+			required = append(required, field.Name)
+		}
+	}
+	result := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
+	if len(required) > 0 {
+		result["required"] = required
+	}
+	return result
+}
+
+func EffectiveInputSchema(node model.Node) map[string]any {
+	if len(node.InputSchema) > 0 {
+		return node.InputSchema
+	}
+	return SchemaForFields(node.InputFields)
+}
+
+func EffectiveOutputSchema(node model.Node) map[string]any {
+	if len(node.OutputSchema) > 0 {
+		return node.OutputSchema
+	}
+	return SchemaForFields(node.OutputFields)
+}
+
+// ValidateDefinition compiles the complete JSON Schema contract. Workflow
+// validation and runtime validation therefore use the same implementation.
 func ValidateDefinition(name string, definition map[string]any) []string {
 	if len(definition) == 0 {
 		return nil
 	}
-	errors := []string{}
-	if expected, ok := definition["type"].(string); ok && expected != "" && !contractTypes[expected] {
-		errors = append(errors, fmt.Sprintf("%s has unsupported contract type %q", name, expected))
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	location := "mem://agentflow/" + sanitizeLocation(name) + ".json"
+	if err := compiler.AddResource(location, definition); err != nil {
+		return []string{fmt.Sprintf("%s is not a valid JSON Schema: %v", name, err)}
 	}
-	if properties, ok := definition["properties"].(map[string]any); ok {
-		for key, child := range properties {
-			childDefinition, ok := child.(map[string]any)
-			if !ok {
-				errors = append(errors, fmt.Sprintf("%s.properties.%s must be an object", name, key))
-				continue
-			}
-			errors = append(errors, ValidateDefinition(name+".properties."+key, childDefinition)...)
-		}
+	if _, err := compiler.Compile(location); err != nil {
+		return []string{fmt.Sprintf("%s is not a valid JSON Schema: %v", name, err)}
 	}
-	if items, ok := definition["items"].(map[string]any); ok {
-		errors = append(errors, ValidateDefinition(name+".items", items)...)
-	}
-	return errors
+	return nil
 }
 
-// ValidateValue validates a runtime value against the intentionally small
-// JSON-Schema subset supported by workflow node contracts. Keeping this local
-// avoids a dependency on a full schema engine while making contracts useful at
-// execution time.
+// ValidateValue validates a runtime value using JSON Schema draft 2020-12.
 func ValidateValue(name string, value any, definition map[string]any) []string {
 	if len(definition) == 0 {
 		return nil
 	}
-	errors := validateValue(name, value, definition)
-	return errors
+	compiler := jsonschema.NewCompiler()
+	compiler.DefaultDraft(jsonschema.Draft2020)
+	location := "mem://agentflow/runtime/" + sanitizeLocation(name) + ".json"
+	if err := compiler.AddResource(location, definition); err != nil {
+		return []string{fmt.Sprintf("%s schema is invalid: %v", name, err)}
+	}
+	compiled, err := compiler.Compile(location)
+	if err != nil {
+		return []string{fmt.Sprintf("%s schema is invalid: %v", name, err)}
+	}
+	if err := compiled.Validate(value); err != nil {
+		if validation, ok := err.(*jsonschema.ValidationError); ok {
+			var messages []string
+			collectValidationErrors(validation, &messages)
+			if len(messages) > 0 {
+				return messages
+			}
+		}
+		return []string{fmt.Sprintf("%s: %v", name, err)}
+	}
+	return nil
 }
 
-func validateValue(path string, value any, definition map[string]any) []string {
-	errors := []string{}
-	if enum, ok := definition["enum"].([]any); ok {
-		matched := false
-		for _, candidate := range enum {
-			if reflect.DeepEqual(candidate, value) || fmt.Sprint(candidate) == fmt.Sprint(value) {
-				matched = true
-				break
-			}
+func collectValidationErrors(err *jsonschema.ValidationError, messages *[]string) {
+	if len(err.Causes) == 0 {
+		path := "/"
+		if len(err.InstanceLocation) > 0 {
+			path = "/" + strings.Join(err.InstanceLocation, "/")
 		}
-		if !matched {
-			errors = append(errors, fmt.Sprintf("%s must be one of the declared enum values", path))
-		}
+		*messages = append(*messages, fmt.Sprintf("%s: %s", path, err.Error()))
+		return
 	}
-	if value == nil {
-		if definition["type"] != "null" && definition["nullable"] != true {
-			errors = append(errors, fmt.Sprintf("%s is required", path))
-		}
-		return errors
-	}
-	if expected, ok := definition["type"].(string); ok && expected != "" && !matchesType(value, expected) {
-		errors = append(errors, fmt.Sprintf("%s must be %s", path, expected))
-		return errors
-	}
-
-	switch object := value.(type) {
-	case map[string]any:
-		if required, ok := definition["required"].([]any); ok {
-			for _, item := range required {
-				key, ok := item.(string)
-				if !ok {
-					continue
-				}
-				if _, exists := object[key]; !exists {
-					errors = append(errors, fmt.Sprintf("%s.%s is required", path, key))
-				}
-			}
-		}
-		properties, _ := definition["properties"].(map[string]any)
-		for key, child := range properties {
-			childDefinition, ok := child.(map[string]any)
-			if !ok {
-				continue
-			}
-			if childValue, exists := object[key]; exists {
-				errors = append(errors, validateValue(path+"."+key, childValue, childDefinition)...)
-			}
-		}
-		if additional, ok := definition["additionalProperties"].(bool); ok && !additional {
-			for key := range object {
-				if _, known := properties[key]; !known {
-					errors = append(errors, fmt.Sprintf("%s.%s is not allowed", path, key))
-				}
-			}
-		}
-	case []any:
-		if items, ok := definition["items"].(map[string]any); ok {
-			for index, child := range object {
-				errors = append(errors, validateValue(fmt.Sprintf("%s[%d]", path, index), child, items)...)
-			}
-		}
-	}
-	if minimum, ok := number(definition["minimum"]); ok {
-		if actual, ok := number(value); ok && actual < minimum {
-			errors = append(errors, fmt.Sprintf("%s must be at least %v", path, minimum))
-		}
-	}
-	if minLength, ok := number(definition["minLength"]); ok {
-		if text, ok := value.(string); ok && float64(len([]rune(text))) < minLength {
-			errors = append(errors, fmt.Sprintf("%s must contain at least %v characters", path, minLength))
-		}
-	}
-	return errors
-}
-
-func matchesType(value any, expected string) bool {
-	switch expected {
-	case "object":
-		_, ok := value.(map[string]any)
-		return ok
-	case "array":
-		_, ok := value.([]any)
-		return ok
-	case "string":
-		_, ok := value.(string)
-		return ok
-	case "boolean":
-		_, ok := value.(bool)
-		return ok
-	case "number":
-		_, ok := number(value)
-		return ok
-	case "integer":
-		actual, ok := number(value)
-		return ok && math.Trunc(actual) == actual
-	case "null":
-		return value == nil
-	default:
-		return true
+	for _, cause := range err.Causes {
+		collectValidationErrors(cause, messages)
 	}
 }
 
-func number(value any) (float64, bool) {
-	switch current := value.(type) {
-	case float64:
-		return current, true
-	case float32:
-		return float64(current), true
-	case int:
-		return float64(current), true
-	case int64:
-		return float64(current), true
-	case int32:
-		return float64(current), true
-	case jsonNumber:
-		actual, err := current.Float64()
-		return actual, err == nil
-	default:
-		return 0, false
+func sanitizeLocation(value string) string {
+	value = strings.NewReplacer("/", "_", " ", "_", ".", "_").Replace(value)
+	if value == "" {
+		return "contract"
 	}
-}
-
-// jsonNumber is kept as a tiny interface so this package does not need to
-// expose encoding/json's concrete number type in the public API.
-type jsonNumber interface {
-	Float64() (float64, error)
+	return value
 }
 
 func FormatContractErrors(prefix string, errors []string) string {
 	if len(errors) == 0 {
 		return ""
 	}
+	ordered := append([]string(nil), errors...)
+	sort.Strings(ordered)
 	if prefix == "" {
-		return strings.Join(errors, "; ")
+		return strings.Join(ordered, "; ")
 	}
-	return prefix + ": " + strings.Join(errors, "; ")
+	return prefix + ": " + strings.Join(ordered, "; ")
 }

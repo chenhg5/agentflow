@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/driver"
@@ -106,6 +107,9 @@ func Execute(run *model.Run, providers map[string]driver.Provider) error {
 func executeNode(run *model.Run, node model.Node, providers map[string]driver.Provider) (model.NodeState, error) {
 	state := run.State.Nodes[node.ID]
 	state.Status = "running"
+	if state.Artifacts == nil {
+		state.Artifacts = map[string]string{}
+	}
 	state.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	state.LeaseToken = store.NewToken()
 	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "node.started", "nodeId": node.ID, "nodeType": node.Type}); err != nil {
@@ -114,8 +118,13 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	if node.Type == "human" {
 		state.Status = "waiting_human"
 		runContext := context(run.State)
-		state.Input = template.RenderValue(node.Input, runContext)
-		if problems := schema.ValidateValue("input", state.Input, node.InputSchema); len(problems) > 0 {
+		state.Input = resolveInput(run, node, runContext)
+		inputArtifact := node.ID + ".input.json"
+		if err := writeJSONArtifact(run.RunDir, inputArtifact, state.Input); err != nil {
+			return *state, err
+		}
+		state.Artifacts["input"] = "artifacts/" + filepath.ToSlash(inputArtifact)
+		if problems := schema.ValidateValue("input", state.Input, schema.EffectiveInputSchema(node)); len(problems) > 0 {
 			state.Status = "failed"
 			state.Error = schema.FormatContractErrors("input schema validation failed", problems)
 			state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -138,8 +147,13 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	}
 	state.Workspace = workspace
 	runContext := context(run.State)
-	state.Input = template.RenderValue(node.Input, runContext)
-	if problems := schema.ValidateValue("input", state.Input, node.InputSchema); len(problems) > 0 {
+	state.Input = resolveInput(run, node, runContext)
+	inputArtifact := node.ID + ".input.json"
+	if err := writeJSONArtifact(run.RunDir, inputArtifact, state.Input); err != nil {
+		return *state, err
+	}
+	state.Artifacts["input"] = "artifacts/" + filepath.ToSlash(inputArtifact)
+	if problems := schema.ValidateValue("input", state.Input, schema.EffectiveInputSchema(node)); len(problems) > 0 {
 		state.Status = "failed"
 		state.Error = schema.FormatContractErrors("input schema validation failed", problems)
 		state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -163,7 +177,7 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		return *state, err
 	}
 	if node.Type == "agent" {
-		prompt += fmt.Sprintf("\n\nExecution contract: when the task is complete, write one JSON object to AGENTFLOW_RESULT_FILE before exiting successfully. The exact result path for this node is %s. The workspace is %s. Structured node input is %s. You may use the environment variable AGENTFLOW_RESULT_FILE as well. stdout and stderr are logs only.", resultFile, workspace, string(inputJSON))
+		prompt += fmt.Sprintf("\n\nExecution contract: when the task is complete, write one JSON object to AGENTFLOW_RESULT_FILE before exiting successfully. The exact result path for this node is %s. The workspace is %s. Structured node input is %s. Expected input fields are %s. Required output fields are %s. You may use the environment variable AGENTFLOW_RESULT_FILE as well. stdout and stderr are logs only.", resultFile, workspace, string(inputJSON), fieldSummary(node.InputFields), fieldSummary(node.OutputFields))
 		state.InputBytes = int64(len([]byte(prompt)) + len(inputJSON))
 	}
 	env := map[string]string{
@@ -238,7 +252,8 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 			state.Error = fmt.Sprintf("command exited with code %d", result.Code)
 		}
 		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.failed", "nodeId": node.ID, "error": state.Error})
-		state.Artifacts = map[string]string{"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact), "stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact)}
+		state.Artifacts["stdoutLog"] = "artifacts/" + filepath.ToSlash(stdoutArtifact)
+		state.Artifacts["stderrLog"] = "artifacts/" + filepath.ToSlash(stderrArtifact)
 		metrics.RefreshNode(state, time.Now().UTC())
 		return *state, nil
 	}
@@ -248,7 +263,8 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		if node.Type == "agent" || (node.Result != nil && node.Result.Required) {
 			state.Status = "failed"
 			state.Error = err.Error()
-			state.Artifacts = map[string]string{"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact), "stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact)}
+			state.Artifacts["stdoutLog"] = "artifacts/" + filepath.ToSlash(stdoutArtifact)
+			state.Artifacts["stderrLog"] = "artifacts/" + filepath.ToSlash(stderrArtifact)
 			_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.failed", "nodeId": node.ID, "error": state.Error})
 			metrics.RefreshNode(state, time.Now().UTC())
 			return *state, nil
@@ -265,14 +281,12 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	}
 	state.OutputBytes = resultBytes
 	state.Result = structured
-	if problems := schema.ValidateValue("output", structured, node.OutputSchema); len(problems) > 0 {
+	if problems := schema.ValidateValue("output", structured, schema.EffectiveOutputSchema(node)); len(problems) > 0 {
 		state.Status = "failed"
 		state.Error = schema.FormatContractErrors("output schema validation failed", problems)
-		state.Artifacts = map[string]string{
-			"result":    "artifacts/" + filepath.ToSlash(resultRelativePath),
-			"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact),
-			"stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact),
-		}
+		state.Artifacts["result"] = "artifacts/" + filepath.ToSlash(resultRelativePath)
+		state.Artifacts["stdoutLog"] = "artifacts/" + filepath.ToSlash(stdoutArtifact)
+		state.Artifacts["stderrLog"] = "artifacts/" + filepath.ToSlash(stderrArtifact)
 		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.failed", "nodeId": node.ID, "error": state.Error})
 		metrics.RefreshNode(state, time.Now().UTC())
 		return *state, nil
@@ -285,15 +299,100 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 			state.SessionID = returnedSession
 		}
 	}
-	state.Artifacts = map[string]string{
-		"result":    "artifacts/" + filepath.ToSlash(resultRelativePath),
-		"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact),
-		"stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact),
-	}
+	state.Artifacts["result"] = "artifacts/" + filepath.ToSlash(resultRelativePath)
+	state.Artifacts["stdoutLog"] = "artifacts/" + filepath.ToSlash(stdoutArtifact)
+	state.Artifacts["stderrLog"] = "artifacts/" + filepath.ToSlash(stderrArtifact)
 	state.Status = "succeeded"
 	metrics.RefreshNode(state, time.Now().UTC())
 	_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.succeeded", "nodeId": node.ID, "resultArtifact": state.Artifacts["result"]})
 	return *state, nil
+}
+
+func resolveInput(run *model.Run, node model.Node, runContext map[string]any) any {
+	input := map[string]any{}
+	for _, field := range inputFields(node) {
+		if value, ok := lookupDependencyField(run, node, field); ok {
+			input[field] = value
+		}
+	}
+	for target, expression := range node.InputMapping {
+		if value, ok := resolveMappingExpression(run, node, expression, runContext); ok {
+			input[target] = value
+		}
+	}
+	if node.Input != nil {
+		if rendered, ok := template.RenderValue(node.Input, runContext).(map[string]any); ok {
+			for key, value := range rendered {
+				input[key] = value
+			}
+		}
+	}
+	if len(input) == 0 && node.Input == nil && node.InputSchema == nil && len(node.InputFields) == 0 && len(node.InputMapping) == 0 {
+		return nil
+	}
+	return input
+}
+
+func inputFields(node model.Node) []string {
+	if len(node.InputFields) > 0 {
+		fields := make([]string, 0, len(node.InputFields))
+		for _, field := range node.InputFields {
+			fields = append(fields, field.Name)
+		}
+		return fields
+	}
+	properties, _ := node.InputSchema["properties"].(map[string]any)
+	fields := make([]string, 0, len(properties))
+	for field := range properties {
+		fields = append(fields, field)
+	}
+	return fields
+}
+
+func lookupDependencyField(run *model.Run, node model.Node, field string) (any, bool) {
+	for _, dependencyID := range node.Needs {
+		dependency := run.State.Nodes[dependencyID]
+		if result, ok := dependency.Result.(map[string]any); ok {
+			if value, exists := result[field]; exists {
+				return value, true
+			}
+		}
+	}
+	return nil, false
+}
+
+func resolveMappingExpression(run *model.Run, node model.Node, expression string, runContext map[string]any) (any, bool) {
+	expression = strings.TrimSpace(expression)
+	if strings.HasPrefix(expression, "$node.") {
+		expression = "nodes." + strings.TrimPrefix(expression, "$node.")
+		expression = strings.Replace(expression, ".output.", ".result.", 1)
+	} else if strings.HasPrefix(expression, "$output.") {
+		field := strings.TrimPrefix(expression, "$output.")
+		return lookupDependencyField(run, node, field)
+	} else if strings.HasPrefix(expression, "$input.") {
+		field := strings.TrimPrefix(expression, "$input.")
+		value, ok := run.State.Inputs[field]
+		return value, ok
+	} else if strings.HasPrefix(expression, "{{") {
+		return template.RenderValue(expression, runContext), true
+	}
+	return template.Lookup(runContext, expression)
+}
+
+func fieldSummary(fields []model.FieldSpec) string {
+	data, _ := json.Marshal(fields)
+	if len(data) == 0 || string(data) == "null" {
+		return "[]"
+	}
+	return string(data)
+}
+
+func writeJSONArtifact(runDir, relativePath string, value any) error {
+	data, err := json.MarshalIndent(value, "", "  ")
+	if err != nil {
+		return err
+	}
+	return store.WriteArtifact(runDir, relativePath, append(data, '\n'))
 }
 
 func loadResult(file string) (any, int64, error) {

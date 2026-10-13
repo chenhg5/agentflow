@@ -52,3 +52,30 @@ func TestValidateContractDefinition(t *testing.T) {
 		t.Fatalf("expected unsupported contract type error, got %v", errors)
 	}
 }
+
+func TestFullJSONSchemaKeywords(t *testing.T) {
+	definition := map[string]any{
+		"type":     "object",
+		"required": []any{"slug"},
+		"properties": map[string]any{
+			"slug": map[string]any{"type": "string", "pattern": "^[a-z]+$"},
+		},
+		"additionalProperties": false,
+	}
+	if errors := ValidateValue("output", map[string]any{"slug": "valid"}, definition); len(errors) != 0 {
+		t.Fatalf("valid full schema errors: %v", errors)
+	}
+	if errors := ValidateValue("output", map[string]any{"slug": "Not-valid", "extra": true}, definition); len(errors) == 0 {
+		t.Fatal("expected pattern and additional property errors")
+	}
+}
+
+func TestFieldSchemaRequiresDeclaredFields(t *testing.T) {
+	node := model.Node{InputFields: []model.FieldSpec{{Name: "summary", Type: "string", Required: true}}}
+	if errors := ValidateValue("input", map[string]any{"summary": "ok"}, EffectiveInputSchema(node)); len(errors) != 0 {
+		t.Fatalf("valid field schema errors: %v", errors)
+	}
+	if errors := ValidateValue("input", map[string]any{"other": "bad"}, EffectiveInputSchema(node)); len(errors) == 0 {
+		t.Fatal("expected missing and unknown field errors")
+	}
+}

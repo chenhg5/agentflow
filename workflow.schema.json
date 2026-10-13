@@ -31,6 +31,9 @@
         "input": { "type": "object", "description": "Structured input template passed to this node" },
         "inputSchema": { "$ref": "#/$defs/contract", "description": "Runtime JSON contract for the rendered node input" },
         "outputSchema": { "$ref": "#/$defs/contract", "description": "Runtime JSON contract for the structured node result" },
+        "inputFields": { "type": "array", "items": { "$ref": "#/$defs/field" }, "description": "Named input fields exposed to agents and used for automatic handoff" },
+        "outputFields": { "type": "array", "items": { "$ref": "#/$defs/field" }, "description": "Named output fields exposed to agents and used to derive a strict output contract" },
+        "inputMapping": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Explicit target-field mappings such as $node.inspect.output.summary or $output.summary" },
         "timeoutMs": { "type": "integer", "minimum": 1 },
         "result": {
           "type": "object",
@@ -48,7 +51,7 @@
     },
     "contract": {
       "type": "object",
-      "description": "Supported JSON Schema subset: type, properties, required, additionalProperties, items, enum, minimum, minLength",
+      "description": "JSON Schema draft 2020-12 contract. AgentFlow validates the full schema at workflow load and node execution.",
       "properties": {
         "type": { "enum": ["object", "array", "string", "number", "integer", "boolean", "null"] },
         "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/contract" } },
@@ -58,7 +61,25 @@
         "enum": { "type": "array" },
         "minimum": { "type": "number" },
         "minLength": { "type": "integer", "minimum": 0 },
-        "nullable": { "type": "boolean" }
+        "pattern": { "type": "string" },
+        "format": { "type": "string" },
+        "const": {},
+        "oneOf": { "type": "array", "items": { "$ref": "#/$defs/contract" } },
+        "anyOf": { "type": "array", "items": { "$ref": "#/$defs/contract" } },
+        "allOf": { "type": "array", "items": { "$ref": "#/$defs/contract" } },
+        "$ref": { "type": "string" },
+        "description": { "type": "string" }
+      },
+      "additionalProperties": true
+    },
+    "field": {
+      "type": "object",
+      "required": ["name"],
+      "properties": {
+        "name": { "type": "string", "minLength": 1 },
+        "type": { "enum": ["object", "array", "string", "number", "integer", "boolean", "null"] },
+        "description": { "type": "string" },
+        "required": { "type": "boolean" }
       },
       "additionalProperties": false
     }

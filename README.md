@@ -89,7 +89,7 @@ Nodes can make this boundary explicit with `input`, `inputSchema`, and `outputSc
 }
 ```
 
-The supported contract subset is documented in [`INSTALL.md`](INSTALL.md). stdout and stderr remain logs; only `AGENTFLOW_RESULT_FILE` is business output.
+Contracts use JSON Schema draft 2020-12, so constraints such as `pattern`, `oneOf`, `const`, nested arrays, and strict `additionalProperties` are enforced both when loading a workflow and when a node runs. For field-oriented handoff, add `inputFields` and `outputFields`; `outputFields` derive a strict object schema when `outputSchema` is omitted. Downstream input is built by explicit `inputMapping` first, then by matching field names from direct dependencies, with an explicit `input` template taking precedence. The rendered input is saved as `artifacts/<node>.input.json`. stdout and stderr remain logs; only `AGENTFLOW_RESULT_FILE` is business output.
 
 ## Cron and webhook triggers
 

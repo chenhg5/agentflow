@@ -551,7 +551,7 @@ func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 		if definition.ID != parsed.Positionals[1] {
 			continue
 		}
-		if problems := schema.ValidateValue("output", node.Result, definition.OutputSchema); len(problems) > 0 {
+		if problems := schema.ValidateValue("output", node.Result, schema.EffectiveOutputSchema(definition)); len(problems) > 0 {
 			return &CommandError{Code: ExitUsageError, Kind: "invalid_human_output", Message: schema.FormatContractErrors("human decision does not satisfy output schema", problems), Suggestion: "Adjust the approval message or remove the incompatible output schema.", Format: parsed.Format}
 		}
 		break
@@ -562,6 +562,14 @@ func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 		return internalError(marshalErr)
 	}
 	node.OutputBytes = int64(len(resultBytes))
+	resultArtifact := parsed.Positionals[1] + ".result.json"
+	if err := store.WriteArtifact(run.RunDir, resultArtifact, append(resultBytes, '\n')); err != nil {
+		return internalError(err)
+	}
+	if node.Artifacts == nil {
+		node.Artifacts = map[string]string{}
+	}
+	node.Artifacts["result"] = "artifacts/" + filepath.ToSlash(resultArtifact)
 	node.FinishedAt = now()
 	metrics.RefreshNode(node, time.Now().UTC())
 	if verb == "approve" {

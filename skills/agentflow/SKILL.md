@@ -140,7 +140,26 @@ Agent 成功退出前必须向 `AGENTFLOW_RESULT_FILE` 写入一个 JSON object�
 }
 ```
 
-`input` 在节点启动前渲染并校验，`outputSchema` 在结果文件解析后校验。精确占位符会保留源值类型；不要通过 stdout/stderr 传递业务数据。
+`input` 在节点启动前渲染并校验，`outputSchema` 在结果文件解析后校验。契约使用 JSON Schema draft 2020-12；不要只依赖 prompt 描述字段。精确占位符会保留源值类型；不要通过 stdout/stderr 传递业务数据。
+
+对于字段较多的流程，使用 Multigent 风格的字段声明：
+
+```json
+{
+  "id": "verify",
+  "type": "agent",
+  "needs": ["inspect"],
+  "inputFields": [
+    { "name": "summary", "type": "string", "description": "检查摘要", "required": true }
+  ],
+  "outputFields": [
+    { "name": "verified", "type": "boolean", "description": "是否通过", "required": true }
+  ],
+  "inputMapping": { "summary": "$node.inspect.output.summary" }
+}
+```
+
+`outputFields` 在没有 `outputSchema` 时会生成严格 object schema，缺少必填字段或返回未知字段都会失败。`inputMapping` 支持 `$node.<id>.output.<field>`、`$output.<field>` 和 `$input.<field>`；没有显式 mapping 时，直接依赖节点之间同名字段会自动传递，显式 `input` 模板优先级最高。每个节点的渲染后输入会保存为 `.agentflow/runs/<run-id>/artifacts/<node-id>.input.json`，便于审计和重放。
 
 ## 6. 校验和执行流程
 

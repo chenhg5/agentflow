@@ -2,6 +2,8 @@ package schema
 
 import (
 	"fmt"
+	"strings"
+
 	"github.com/chenhg5/agentflow/internal/model"
 )
 
@@ -42,8 +44,22 @@ func Validate(workflow model.Workflow) []string {
 		if (node.Type == "agent" || node.Type == "human") && node.Prompt == "" {
 			errors = append(errors, fmt.Sprintf("%s node %s needs a prompt", node.Type, node.ID))
 		}
-		errors = append(errors, ValidateDefinition(fmt.Sprintf("node %s inputSchema", node.ID), node.InputSchema)...)
-		errors = append(errors, ValidateDefinition(fmt.Sprintf("node %s outputSchema", node.ID), node.OutputSchema)...)
+		errors = append(errors, validateFields(node.ID, "inputFields", node.InputFields)...)
+		errors = append(errors, validateFields(node.ID, "outputFields", node.OutputFields)...)
+		errors = append(errors, ValidateDefinition(fmt.Sprintf("node %s inputSchema", node.ID), EffectiveInputSchema(node))...)
+		errors = append(errors, ValidateDefinition(fmt.Sprintf("node %s outputSchema", node.ID), EffectiveOutputSchema(node))...)
+		errors = append(errors, validateFieldSchemaConsistency(node.ID, "inputFields", node.InputFields, node.InputSchema)...)
+		errors = append(errors, validateFieldSchemaConsistency(node.ID, "outputFields", node.OutputFields, node.OutputSchema)...)
+		if node.InputMapping != nil {
+			for target, source := range node.InputMapping {
+				if strings.TrimSpace(target) == "" {
+					errors = append(errors, fmt.Sprintf("node %s inputMapping has an empty target field", node.ID))
+				}
+				if strings.TrimSpace(source) == "" {
+					errors = append(errors, fmt.Sprintf("node %s inputMapping.%s has an empty source expression", node.ID, target))
+				}
+			}
+		}
 	}
 	for _, node := range workflow.Nodes {
 		for _, dependency := range node.Needs {
@@ -54,6 +70,53 @@ func Validate(workflow model.Workflow) []string {
 	}
 	if len(errors) == 0 && hasCycle(workflow.Nodes) {
 		errors = append(errors, "workflow contains a dependency cycle")
+	}
+	return errors
+}
+
+func validateFields(nodeID, kind string, fields []model.FieldSpec) []string {
+	errors := []string{}
+	seen := map[string]bool{}
+	for _, field := range fields {
+		if field.Name == "" {
+			errors = append(errors, fmt.Sprintf("node %s %s contains a field without a name", nodeID, kind))
+			continue
+		}
+		if seen[field.Name] {
+			errors = append(errors, fmt.Sprintf("node %s %s contains duplicate field: %s", nodeID, kind, field.Name))
+		}
+		seen[field.Name] = true
+		if field.Type != "" && !fieldTypes[field.Type] {
+			errors = append(errors, fmt.Sprintf("node %s %s.%s has unsupported type %q", nodeID, kind, field.Name, field.Type))
+		}
+	}
+	return errors
+}
+
+func validateFieldSchemaConsistency(nodeID, kind string, fields []model.FieldSpec, definition map[string]any) []string {
+	if len(fields) == 0 || len(definition) == 0 {
+		return nil
+	}
+	properties, _ := definition["properties"].(map[string]any)
+	if properties == nil {
+		return []string{fmt.Sprintf("node %s %s require a schema with properties", nodeID, kind)}
+	}
+	required := map[string]bool{}
+	if values, ok := definition["required"].([]any); ok {
+		for _, value := range values {
+			if name, ok := value.(string); ok {
+				required[name] = true
+			}
+		}
+	}
+	errors := []string{}
+	for _, field := range fields {
+		if _, ok := properties[field.Name]; !ok {
+			errors = append(errors, fmt.Sprintf("node %s %s field %s is missing from schema properties", nodeID, kind, field.Name))
+		}
+		if field.Required && !required[field.Name] {
+			errors = append(errors, fmt.Sprintf("node %s %s field %s must be required in schema", nodeID, kind, field.Name))
+		}
 	}
 	return errors
 }

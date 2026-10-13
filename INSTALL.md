@@ -220,7 +220,7 @@ A minimal agent workflow looks like this:
 
 ### Node input and output contracts
 
-Each node can declare a structured `input`, `inputSchema`, and `outputSchema`. Exact placeholders keep their JSON type, so a number from an earlier result remains a number in the next node's input. Agent and shell stdout/stderr are stored as logs only; the node result is read from `AGENTFLOW_RESULT_FILE` and checked against `outputSchema`.
+Each node can declare a structured `input`, `inputSchema`, and `outputSchema`. Contracts use JSON Schema draft 2020-12 and are checked when the workflow is loaded and when the node runs. Exact placeholders keep their JSON type, so a number from an earlier result remains a number in the next node's input. Agent and shell stdout/stderr are stored as logs only; the node result is read from `AGENTFLOW_RESULT_FILE` and checked against `outputSchema`.
 
 ```json
 {
@@ -251,7 +251,7 @@ Each node can declare a structured `input`, `inputSchema`, and `outputSchema`. E
 }
 ```
 
-The supported contract subset is `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `minimum`, and `minLength`. A contract failure marks the node failed and is visible through `run get`, `run metrics`, and the web view.
+For Multigent-style field handoff, use `inputFields` and `outputFields` with `name`, `type`, `description`, and `required`. `outputFields` derive a strict object schema when `outputSchema` is omitted. A downstream node can map values explicitly with `inputMapping`, for example `{ "summary": "$node.inspect.output.summary" }`. Without an explicit mapping, matching field names from direct dependencies are copied automatically; an explicit `input` template wins over both. Each rendered input is persisted at `.agentflow/runs/<run-id>/artifacts/<node>.input.json`. A contract failure marks the node failed and is visible through `run get`, `run metrics`, and the web view.
 
 ## Scheduled and webhook triggers
 

@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -132,5 +133,56 @@ func TestNodeContractsPersistInputAndValidateOutput(t *testing.T) {
 	}
 	if run.State.Status != "succeeded" || run.State.Nodes["step"].Input.(map[string]any)["name"] != "Ada" {
 		t.Fatalf("unexpected contract run: status=%s input=%#v error=%q", run.State.Status, run.State.Nodes["step"].Input, run.State.Nodes["step"].Error)
+	}
+}
+
+func TestNodeFieldsAutomaticallyPropagateAndPersistInputArtifact(t *testing.T) {
+	workflow := model.Workflow{Version: "1", Name: "handoff"}
+	workflow.Nodes = []model.Node{
+		{ID: "produce", Type: "shell", Command: []string{"sh", "-c", `printf '{"summary":"ok","count":2,"ignored":true}' > "$AGENTFLOW_RESULT_FILE"`}},
+		{ID: "consume", Type: "shell", Needs: []string{"produce"}, InputFields: []model.FieldSpec{{Name: "summary", Type: "string", Required: true}, {Name: "count", Type: "integer", Required: true}}, OutputFields: []model.FieldSpec{{Name: "done", Type: "boolean", Required: true}}, Command: []string{"sh", "-c", `printf '{"done":true}' > "$AGENTFLOW_RESULT_FILE"`}},
+	}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Execute(run, nil); err != nil {
+		t.Fatal(err)
+	}
+	if run.State.Status != "succeeded" {
+		t.Fatalf("status=%s error=%q", run.State.Status, run.State.Nodes["consume"].Error)
+	}
+	input, ok := run.State.Nodes["consume"].Input.(map[string]any)
+	if !ok || input["summary"] != "ok" || input["count"] != float64(2) {
+		t.Fatalf("unexpected propagated input: %#v", run.State.Nodes["consume"].Input)
+	}
+	data, err := os.ReadFile(filepath.Join(run.RunDir, "artifacts", "consume.input.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var persisted map[string]any
+	if err := json.Unmarshal(data, &persisted); err != nil || persisted["summary"] != "ok" {
+		t.Fatalf("unexpected input artifact: %s", data)
+	}
+}
+
+func TestExplicitInputMappingPreservesTypes(t *testing.T) {
+	workflow := model.Workflow{Version: "1", Name: "mapping"}
+	workflow.Nodes = []model.Node{
+		{ID: "produce", Type: "shell", Command: []string{"sh", "-c", `printf '{"count":3}' > "$AGENTFLOW_RESULT_FILE"`}},
+		{ID: "consume", Type: "shell", Needs: []string{"produce"}, InputMapping: map[string]string{"count": "$node.produce.output.count"}, InputSchema: map[string]any{"type": "object", "required": []any{"count"}, "properties": map[string]any{"count": map[string]any{"type": "integer"}}}, Command: []string{"sh", "-c", `printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}},
+	}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Execute(run, nil); err != nil {
+		t.Fatal(err)
+	}
+	if run.State.Status != "succeeded" {
+		t.Fatalf("status=%s error=%q", run.State.Status, run.State.Nodes["consume"].Error)
+	}
+	if got := run.State.Nodes["consume"].Input.(map[string]any)["count"]; got != float64(3) {
+		t.Fatalf("mapping changed type: %#v", got)
 	}
 }

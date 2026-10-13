@@ -21,23 +21,33 @@ type ResultSpec struct {
 	Required bool   `json:"required,omitempty"`
 }
 
+type FieldSpec struct {
+	Name        string `json:"name"`
+	Type        string `json:"type,omitempty"`
+	Description string `json:"description,omitempty"`
+	Required    bool   `json:"required,omitempty"`
+}
+
 type Node struct {
-	ID           string         `json:"id"`
-	Type         string         `json:"type"`
-	Provider     string         `json:"provider,omitempty"`
-	Command      []string       `json:"command,omitempty"`
-	Prompt       string         `json:"prompt,omitempty"`
-	PromptMode   string         `json:"promptMode,omitempty"`
-	Workspace    string         `json:"workspace,omitempty"`
-	Session      string         `json:"session,omitempty"`
-	Input        map[string]any `json:"input,omitempty"`
-	InputSchema  map[string]any `json:"inputSchema,omitempty"`
-	OutputSchema map[string]any `json:"outputSchema,omitempty"`
-	Needs        []string       `json:"needs,omitempty"`
-	When         string         `json:"when,omitempty"`
-	TimeoutMs    int            `json:"timeoutMs,omitempty"`
-	Retry        Retry          `json:"retry,omitempty"`
-	Result       *ResultSpec    `json:"result,omitempty"`
+	ID           string            `json:"id"`
+	Type         string            `json:"type"`
+	Provider     string            `json:"provider,omitempty"`
+	Command      []string          `json:"command,omitempty"`
+	Prompt       string            `json:"prompt,omitempty"`
+	PromptMode   string            `json:"promptMode,omitempty"`
+	Workspace    string            `json:"workspace,omitempty"`
+	Session      string            `json:"session,omitempty"`
+	Input        map[string]any    `json:"input,omitempty"`
+	InputSchema  map[string]any    `json:"inputSchema,omitempty"`
+	OutputSchema map[string]any    `json:"outputSchema,omitempty"`
+	InputFields  []FieldSpec       `json:"inputFields,omitempty"`
+	OutputFields []FieldSpec       `json:"outputFields,omitempty"`
+	InputMapping map[string]string `json:"inputMapping,omitempty"`
+	Needs        []string          `json:"needs,omitempty"`
+	When         string            `json:"when,omitempty"`
+	TimeoutMs    int               `json:"timeoutMs,omitempty"`
+	Retry        Retry             `json:"retry,omitempty"`
+	Result       *ResultSpec       `json:"result,omitempty"`
 }
 
 type NodeState struct {
