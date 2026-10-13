@@ -16,6 +16,17 @@ workflow.json  ->  agentflow run start  ->  .agentflow/runs/<run-id>/
 
 The workflow source belongs to the user or project. AgentFlow keeps a copy in each run directory as an immutable execution snapshot.
 
+Trigger definitions are also project configuration. Keep them in `.agentflow/triggers.json`; AgentFlow stores delivery receipts and queued dispatch jobs beside the run store:
+
+```text
+.agentflow/
+├── providers.json
+├── triggers.json
+├── trigger-deliveries/<delivery-hash>.json
+├── dispatch/<run-id>.json
+└── runs/<run-id>/
+```
+
 ## Guidance for the installing agent
 
 - **Ask before changing scope.** Confirm the user's OS, preferred install method, project directory, agent CLI, provider sessions, and whether the local web UI should be reachable outside localhost.
@@ -206,6 +217,71 @@ A minimal agent workflow looks like this:
   ]
 }
 ```
+
+### Node input and output contracts
+
+Each node can declare a structured `input`, `inputSchema`, and `outputSchema`. Exact placeholders keep their JSON type, so a number from an earlier result remains a number in the next node's input. Agent and shell stdout/stderr are stored as logs only; the node result is read from `AGENTFLOW_RESULT_FILE` and checked against `outputSchema`.
+
+```json
+{
+  "id": "verify",
+  "type": "agent",
+  "provider": "codex",
+  "needs": ["inspect"],
+  "input": {
+    "summary": "{{ nodes.inspect.result.summary }}",
+    "line_count": "{{ nodes.inspect.result.line_count }}"
+  },
+  "inputSchema": {
+    "type": "object",
+    "required": ["summary", "line_count"],
+    "properties": {
+      "summary": { "type": "string" },
+      "line_count": { "type": "integer", "minimum": 1 }
+    },
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "required": ["verified"],
+    "properties": { "verified": { "type": "boolean" } },
+    "additionalProperties": false
+  },
+  "prompt": "Verify the structured input and write one JSON object to AGENTFLOW_RESULT_FILE."
+}
+```
+
+The supported contract subset is `type`, `properties`, `required`, `additionalProperties`, `items`, `enum`, `minimum`, and `minLength`. A contract failure marks the node failed and is visible through `run get`, `run metrics`, and the web view.
+
+## Scheduled and webhook triggers
+
+Create `.agentflow/triggers.json` from [`examples/triggers.json`](examples/triggers.json), then validate it:
+
+```bash
+agentflow trigger validate --format json
+agentflow trigger list --format json
+```
+
+Run the persistent service when you want AgentFlow to own the scheduler and webhook listener:
+
+```bash
+agentflow trigger serve --host 127.0.0.1 --port 7071
+```
+
+The service uses five-field cron expressions and the configured timezone. Each cron occurrence and webhook delivery is written to `trigger-deliveries/`, then creates a `dispatch/<run-id>.json` queue record before a worker starts the run. A restart recovers queued jobs. Webhooks use `POST /triggers/<id>` by default; configure HMAC SHA-256 or bearer authentication and never put secrets in JSON.
+
+For system cron, launchd, or Kubernetes CronJob, use the same dispatcher without running a long-lived HTTP process:
+
+```bash
+agentflow trigger fire nightly-review \
+  --scheduled-at 2026-10-13T02:00:00+08:00 \
+  --delivery-id nightly-review-20261013 \
+  --format json
+```
+
+`delivery-id` is the idempotency boundary. Repeating a delivery returns the original run reference and does not execute the workflow twice. `policy.concurrency: "forbid"` records a skipped delivery while another run from the same trigger is active.
+
+Triggered runs expose `trigger.id`, `trigger.kind`, `trigger.deliveryId`, `trigger.scheduledAt`, and `trigger.receivedAt` in `run get` and `run metrics`.
 
 Validate before executing:
 

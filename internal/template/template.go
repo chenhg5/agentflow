@@ -27,6 +27,37 @@ func RenderArray(values []string, context map[string]any) []string {
 	return result
 }
 
+// RenderValue renders a JSON-compatible value while preserving the type of an
+// exact placeholder. For example, "{{ nodes.build.result.count }}" resolves to
+// a number, while "count={{ nodes.build.result.count }}" remains a string.
+func RenderValue(value any, context map[string]any) any {
+	switch current := value.(type) {
+	case string:
+		match := placeholder.FindStringSubmatch(current)
+		if match != nil && match[0] == current {
+			if resolved, ok := Lookup(context, strings.TrimSpace(match[1])); ok {
+				return resolved
+			}
+			return nil
+		}
+		return Render(current, context)
+	case map[string]any:
+		result := make(map[string]any, len(current))
+		for key, item := range current {
+			result[key] = RenderValue(item, context)
+		}
+		return result
+	case []any:
+		result := make([]any, len(current))
+		for index, item := range current {
+			result[index] = RenderValue(item, context)
+		}
+		return result
+	default:
+		return value
+	}
+}
+
 func Lookup(context map[string]any, expression string) (any, bool) {
 	var current any = context
 	for _, key := range strings.Split(expression, ".") {

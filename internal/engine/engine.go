@@ -11,6 +11,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/driver"
 	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
+	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/template"
 )
@@ -112,8 +113,18 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	}
 	if node.Type == "human" {
 		state.Status = "waiting_human"
-		state.Prompt = template.Render(node.Prompt, context(run.State))
-		state.InputBytes = int64(len([]byte(state.Prompt)))
+		runContext := context(run.State)
+		state.Input = template.RenderValue(node.Input, runContext)
+		if problems := schema.ValidateValue("input", state.Input, node.InputSchema); len(problems) > 0 {
+			state.Status = "failed"
+			state.Error = schema.FormatContractErrors("input schema validation failed", problems)
+			state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+			metrics.RefreshNode(state, time.Now().UTC())
+			return *state, nil
+		}
+		state.Prompt = template.Render(node.Prompt, runContext)
+		inputJSON, _ := json.Marshal(state.Input)
+		state.InputBytes = int64(len([]byte(state.Prompt)) + len(inputJSON))
 		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.waiting_human", "nodeId": node.ID, "prompt": state.Prompt})
 		return *state, nil
 	}
@@ -127,10 +138,22 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	}
 	state.Workspace = workspace
 	runContext := context(run.State)
+	state.Input = template.RenderValue(node.Input, runContext)
+	if problems := schema.ValidateValue("input", state.Input, node.InputSchema); len(problems) > 0 {
+		state.Status = "failed"
+		state.Error = schema.FormatContractErrors("input schema validation failed", problems)
+		state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
+		metrics.RefreshNode(state, time.Now().UTC())
+		return *state, nil
+	}
 	sessionID := template.Render(node.Session, runContext)
 	state.SessionID = sessionID
 	prompt := template.Render(node.Prompt, runContext)
-	state.InputBytes = int64(len([]byte(prompt)))
+	inputJSON, marshalErr := json.Marshal(state.Input)
+	if marshalErr != nil {
+		return *state, marshalErr
+	}
+	state.InputBytes = int64(len([]byte(prompt)) + len(inputJSON))
 	resultRelativePath := node.ID + ".result.json"
 	if node.Result != nil && node.Result.Path != "" {
 		resultRelativePath = node.Result.Path
@@ -140,8 +163,8 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 		return *state, err
 	}
 	if node.Type == "agent" {
-		prompt += fmt.Sprintf("\n\nExecution contract: when the task is complete, write one JSON object to AGENTFLOW_RESULT_FILE before exiting successfully. The exact result path for this node is %s. The workspace is %s. You may use the environment variable AGENTFLOW_RESULT_FILE as well. stdout and stderr are logs only.", resultFile, workspace)
-		state.InputBytes = int64(len([]byte(prompt)))
+		prompt += fmt.Sprintf("\n\nExecution contract: when the task is complete, write one JSON object to AGENTFLOW_RESULT_FILE before exiting successfully. The exact result path for this node is %s. The workspace is %s. Structured node input is %s. You may use the environment variable AGENTFLOW_RESULT_FILE as well. stdout and stderr are logs only.", resultFile, workspace, string(inputJSON))
+		state.InputBytes = int64(len([]byte(prompt)) + len(inputJSON))
 	}
 	env := map[string]string{
 		"AGENTFLOW_RUN_ID":      run.RunID,
@@ -242,6 +265,18 @@ func executeNode(run *model.Run, node model.Node, providers map[string]driver.Pr
 	}
 	state.OutputBytes = resultBytes
 	state.Result = structured
+	if problems := schema.ValidateValue("output", structured, node.OutputSchema); len(problems) > 0 {
+		state.Status = "failed"
+		state.Error = schema.FormatContractErrors("output schema validation failed", problems)
+		state.Artifacts = map[string]string{
+			"result":    "artifacts/" + filepath.ToSlash(resultRelativePath),
+			"stdoutLog": "artifacts/" + filepath.ToSlash(stdoutArtifact),
+			"stderrLog": "artifacts/" + filepath.ToSlash(stderrArtifact),
+		}
+		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.failed", "nodeId": node.ID, "error": state.Error})
+		metrics.RefreshNode(state, time.Now().UTC())
+		return *state, nil
+	}
 	if resultObject, ok := structured.(map[string]any); ok {
 		if returnedSession, ok := resultObject["session_id"].(string); ok && returnedSession != "" {
 			state.SessionID = returnedSession
@@ -279,7 +314,7 @@ func loadResult(file string) (any, int64, error) {
 func context(state model.RunState) map[string]any {
 	nodes := map[string]any{}
 	for id, node := range state.Nodes {
-		nodes[id] = map[string]any{"status": node.Status, "result": node.Result, "artifacts": node.Artifacts, "prompt": node.Prompt}
+		nodes[id] = map[string]any{"status": node.Status, "input": node.Input, "result": node.Result, "artifacts": node.Artifacts, "prompt": node.Prompt}
 	}
 	return map[string]any{"inputs": state.Inputs, "nodes": nodes}
 }

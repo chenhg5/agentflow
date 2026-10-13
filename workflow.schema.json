@@ -28,6 +28,9 @@
         "promptMode": { "enum": ["arg", "stdin"] },
         "workspace": { "type": "string" },
         "session": { "type": "string", "minLength": 1, "description": "Existing agent session ID or a template resolving to one" },
+        "input": { "type": "object", "description": "Structured input template passed to this node" },
+        "inputSchema": { "$ref": "#/$defs/contract", "description": "Runtime JSON contract for the rendered node input" },
+        "outputSchema": { "$ref": "#/$defs/contract", "description": "Runtime JSON contract for the structured node result" },
         "timeoutMs": { "type": "integer", "minimum": 1 },
         "result": {
           "type": "object",
@@ -40,6 +43,22 @@
         "needs": { "type": "array", "items": { "type": "string" } },
         "when": { "type": "string" },
         "retry": { "type": "object", "properties": { "maxAttempts": { "type": "integer", "minimum": 1 } }, "additionalProperties": false }
+      },
+      "additionalProperties": false
+    },
+    "contract": {
+      "type": "object",
+      "description": "Supported JSON Schema subset: type, properties, required, additionalProperties, items, enum, minimum, minLength",
+      "properties": {
+        "type": { "enum": ["object", "array", "string", "number", "integer", "boolean", "null"] },
+        "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/contract" } },
+        "required": { "type": "array", "items": { "type": "string" } },
+        "additionalProperties": { "type": "boolean" },
+        "items": { "$ref": "#/$defs/contract" },
+        "enum": { "type": "array" },
+        "minimum": { "type": "number" },
+        "minLength": { "type": "integer", "minimum": 0 },
+        "nullable": { "type": "boolean" }
       },
       "additionalProperties": false
     }

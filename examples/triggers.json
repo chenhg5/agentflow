@@ -1,0 +1,50 @@
+{
+  "triggers": [
+    {
+      "id": "nightly-review",
+      "enabled": true,
+      "source": {
+        "kind": "cron",
+        "expression": "0 2 * * *",
+        "timezone": "Asia/Shanghai"
+      },
+      "target": {
+        "workflow": "workflows/nightly-review.json"
+      },
+      "inputs": {
+        "workspace": "/workspace/repository",
+        "mode": "nightly"
+      },
+      "policy": {
+        "concurrency": "forbid",
+        "misfire": "skip"
+      }
+    },
+    {
+      "id": "github-pull-request",
+      "enabled": true,
+      "source": {
+        "kind": "webhook",
+        "path": "/triggers/github-pull-request",
+        "method": "POST",
+        "auth": {
+          "kind": "hmac-sha256",
+          "secretEnv": "AGENTFLOW_GITHUB_SECRET"
+        },
+        "deliveryIDHeader": "X-GitHub-Delivery",
+        "maxBodyBytes": 1048576
+      },
+      "target": {
+        "workflow": "workflows/pr-review.json"
+      },
+      "bindings": {
+        "repo": { "from": "json", "path": "$.repository.full_name" },
+        "action": { "from": "json", "path": "$.action" },
+        "pr_number": { "from": "json", "path": "$.number" }
+      },
+      "policy": {
+        "concurrency": "forbid"
+      }
+    }
+  ]
+}

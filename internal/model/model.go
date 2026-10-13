@@ -22,19 +22,22 @@ type ResultSpec struct {
 }
 
 type Node struct {
-	ID         string      `json:"id"`
-	Type       string      `json:"type"`
-	Provider   string      `json:"provider,omitempty"`
-	Command    []string    `json:"command,omitempty"`
-	Prompt     string      `json:"prompt,omitempty"`
-	PromptMode string      `json:"promptMode,omitempty"`
-	Workspace  string      `json:"workspace,omitempty"`
-	Session    string      `json:"session,omitempty"`
-	Needs      []string    `json:"needs,omitempty"`
-	When       string      `json:"when,omitempty"`
-	TimeoutMs  int         `json:"timeoutMs,omitempty"`
-	Retry      Retry       `json:"retry,omitempty"`
-	Result     *ResultSpec `json:"result,omitempty"`
+	ID           string         `json:"id"`
+	Type         string         `json:"type"`
+	Provider     string         `json:"provider,omitempty"`
+	Command      []string       `json:"command,omitempty"`
+	Prompt       string         `json:"prompt,omitempty"`
+	PromptMode   string         `json:"promptMode,omitempty"`
+	Workspace    string         `json:"workspace,omitempty"`
+	Session      string         `json:"session,omitempty"`
+	Input        map[string]any `json:"input,omitempty"`
+	InputSchema  map[string]any `json:"inputSchema,omitempty"`
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	Needs        []string       `json:"needs,omitempty"`
+	When         string         `json:"when,omitempty"`
+	TimeoutMs    int            `json:"timeoutMs,omitempty"`
+	Retry        Retry          `json:"retry,omitempty"`
+	Result       *ResultSpec    `json:"result,omitempty"`
 }
 
 type NodeState struct {
@@ -54,6 +57,7 @@ type NodeState struct {
 	StartedAt      string            `json:"startedAt,omitempty"`
 	FinishedAt     string            `json:"finishedAt,omitempty"`
 	Result         any               `json:"result,omitempty"`
+	Input          any               `json:"input,omitempty"`
 	Artifacts      map[string]string `json:"artifacts,omitempty"`
 	LeaseToken     string            `json:"leaseToken,omitempty"`
 }
@@ -70,6 +74,15 @@ type RunState struct {
 	StartedAt      string                `json:"startedAt,omitempty"`
 	FinishedAt     string                `json:"finishedAt,omitempty"`
 	DurationMs     int64                 `json:"durationMs,omitempty"`
+	Trigger        *TriggerInfo          `json:"trigger,omitempty"`
+}
+
+type TriggerInfo struct {
+	ID          string `json:"id"`
+	Kind        string `json:"kind"`
+	DeliveryID  string `json:"deliveryId,omitempty"`
+	ScheduledAt string `json:"scheduledAt,omitempty"`
+	ReceivedAt  string `json:"receivedAt,omitempty"`
 }
 
 type Run struct {

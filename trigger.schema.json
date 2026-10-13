@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://agentflow.dev/schema/triggers-v1.json",
+  "title": "AgentFlow Triggers",
+  "type": "object",
+  "required": ["triggers"],
+  "properties": {
+    "triggers": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/trigger" }
+    }
+  },
+  "$defs": {
+    "trigger": {
+      "type": "object",
+      "required": ["id", "enabled", "source", "target"],
+      "properties": {
+        "id": { "type": "string", "minLength": 1 },
+        "enabled": { "type": "boolean" },
+        "source": { "$ref": "#/$defs/source" },
+        "target": {
+          "type": "object",
+          "required": ["workflow"],
+          "properties": { "workflow": { "type": "string", "minLength": 1 } },
+          "additionalProperties": false
+        },
+        "inputs": { "type": "object", "additionalProperties": { "type": "string" } },
+        "bindings": { "type": "object", "additionalProperties": { "$ref": "#/$defs/binding" } },
+        "policy": {
+          "type": "object",
+          "properties": {
+            "concurrency": { "enum": ["forbid", "allow"] },
+            "misfire": { "enum": ["skip", "fire-once"] }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "source": {
+      "type": "object",
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["cron", "webhook"] },
+        "expression": { "type": "string" },
+        "timezone": { "type": "string" },
+        "path": { "type": "string" },
+        "method": { "type": "string" },
+        "deliveryIDHeader": { "type": "string" },
+        "signatureHeader": { "type": "string" },
+        "maxBodyBytes": { "type": "integer", "minimum": 1 },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "kind": { "enum": ["hmac-sha256", "bearer"] },
+            "secretEnv": { "type": "string" },
+            "tokenEnv": { "type": "string" }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "binding": {
+      "type": "object",
+      "required": ["from"],
+      "properties": {
+        "from": { "enum": ["json", "payload", "header", "headers", "attribute", "attributes"] },
+        "path": { "type": "string" },
+        "name": { "type": "string" }
+      },
+      "additionalProperties": false
+    }
+  }
+}

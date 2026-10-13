@@ -28,3 +28,27 @@ func TestSessionIsOnlyValidOnAgentNodes(t *testing.T) {
 		t.Fatalf("unexpected validation errors: %v", errors)
 	}
 }
+
+func TestValidateValueContract(t *testing.T) {
+	definition := map[string]any{
+		"type":     "object",
+		"required": []any{"count"},
+		"properties": map[string]any{
+			"count": map[string]any{"type": "integer", "minimum": float64(1)},
+		},
+		"additionalProperties": false,
+	}
+	if errors := ValidateValue("input", map[string]any{"count": float64(2)}, definition); len(errors) != 0 {
+		t.Fatalf("valid contract errors: %v", errors)
+	}
+	if errors := ValidateValue("input", map[string]any{"count": float64(0), "extra": true}, definition); len(errors) < 2 {
+		t.Fatalf("expected minimum and additional property errors, got %v", errors)
+	}
+}
+
+func TestValidateContractDefinition(t *testing.T) {
+	definition := map[string]any{"type": "object", "properties": map[string]any{"count": map[string]any{"type": "made-up"}}}
+	if errors := ValidateDefinition("outputSchema", definition); len(errors) != 1 {
+		t.Fatalf("expected unsupported contract type error, got %v", errors)
+	}
+}

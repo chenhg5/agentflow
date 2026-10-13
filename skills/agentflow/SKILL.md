@@ -121,6 +121,27 @@ Agent 成功退出前必须向 `AGENTFLOW_RESULT_FILE` 写入一个 JSON object�
 
 不要把 stdout 或 stderr 当作节点输出。Runner 会把它们保存成日志 artifact，并只把结果文件解析为 `node.result`。下游节点通过 `{{ nodes.inspect.result.summary }}` 读取结果。
 
+节点可以把上下游边界写成显式契约：
+
+```json
+{
+  "input": { "summary": "{{ nodes.inspect.result.summary }}" },
+  "inputSchema": {
+    "type": "object",
+    "required": ["summary"],
+    "properties": { "summary": { "type": "string" } },
+    "additionalProperties": false
+  },
+  "outputSchema": {
+    "type": "object",
+    "required": ["decision"],
+    "properties": { "decision": { "type": "string" } }
+  }
+}
+```
+
+`input` 在节点启动前渲染并校验，`outputSchema` 在结果文件解析后校验。精确占位符会保留源值类型；不要通过 stdout/stderr 传递业务数据。
+
 ## 6. 校验和执行流程
 
 ### 6.1 校验
@@ -189,7 +210,7 @@ agentflow run metrics <run-id> --format json
 
 - run 总耗时和状态；
 - 每个节点的 `duration_ms`、`waiting_ms`、`attempts`；
-- `input_bytes`：发送给节点的渲染后 prompt 字节数；
+- `input_bytes`：发送给节点的渲染后 prompt 加结构化 input 字节数；
 - `output_bytes`：结构化 result 文件字节数；
 - `stdout_bytes` / `stderr_bytes`：日志字节数；
 - agent 的 workspace 和 session ID。
@@ -239,7 +260,30 @@ agentflow web --run <run-id>
 
 Web 页面会显示节点依赖、节点类型、状态、耗时、attempts 和输出大小；run 页面会每两秒刷新一次状态。CLI 会打印本地 URL。可以用 `--port 0` 选择可用端口，用 `--host 0.0.0.0` 暴露到局域网时必须确认网络访问范围。
 
-## 9. 效率优化闭环
+## 9. Cron 和 webhook trigger
+
+Trigger 配置放在 `.agentflow/triggers.json`，不是 workflow JSON。先检查再运行服务：
+
+```bash
+agentflow trigger validate --format json
+agentflow trigger list --format json
+agentflow trigger serve --host 127.0.0.1 --port 7071
+```
+
+`trigger serve` 内置 cron scheduler、webhook HTTP server 和持久化 run worker。每个事件先写入 `trigger-deliveries/`，再写入 `dispatch/<run-id>.json`，随后异步执行目标 workflow。进程重启会恢复仍处于 queued 的 dispatch。
+
+如果使用系统 cron/launchd/Kubernetes CronJob，只调用一次 dispatcher：
+
+```bash
+agentflow trigger fire nightly-review \
+  --scheduled-at 2026-10-13T02:00:00+08:00 \
+  --delivery-id nightly-review-20261013 \
+  --format json
+```
+
+Webhook 默认是 `POST` 到 trigger 的 `source.path`。使用 `source.auth` 配置 HMAC SHA-256 或 bearer token；签名 secret 只能来自环境变量。`delivery-id` 是幂等边界，重复投递会复用原 run。`policy.concurrency: "forbid"` 会在同一 trigger 有活动 run 时记录 skipped。
+
+## 10. 效率优化闭环
 
 1. 先看 `run stats <workflow-name>`，定位 P95 高或失败率高的节点。
 2. 再看对应 run 的 `run metrics`，区分 agent 执行时间、人工等待时间和重试时间。

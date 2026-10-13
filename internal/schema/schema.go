@@ -42,6 +42,8 @@ func Validate(workflow model.Workflow) []string {
 		if (node.Type == "agent" || node.Type == "human") && node.Prompt == "" {
 			errors = append(errors, fmt.Sprintf("%s node %s needs a prompt", node.Type, node.ID))
 		}
+		errors = append(errors, ValidateDefinition(fmt.Sprintf("node %s inputSchema", node.ID), node.InputSchema)...)
+		errors = append(errors, ValidateDefinition(fmt.Sprintf("node %s outputSchema", node.ID), node.OutputSchema)...)
 	}
 	for _, node := range workflow.Nodes {
 		for _, dependency := range node.Needs {

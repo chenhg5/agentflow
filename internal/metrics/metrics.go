@@ -9,16 +9,17 @@ import (
 
 // RunSnapshot is the observable execution summary for one workflow run.
 type RunSnapshot struct {
-	OK         bool           `json:"ok"`
-	RunID      string         `json:"run_id"`
-	Workflow   string         `json:"workflow"`
-	Status     string         `json:"status"`
-	StartedAt  string         `json:"started_at,omitempty"`
-	FinishedAt string         `json:"finished_at,omitempty"`
-	AsOf       string         `json:"as_of"`
-	DurationMs int64          `json:"duration_ms"`
-	Totals     ByteTotals     `json:"totals"`
-	Nodes      []NodeSnapshot `json:"nodes"`
+	OK         bool               `json:"ok"`
+	RunID      string             `json:"run_id"`
+	Workflow   string             `json:"workflow"`
+	Status     string             `json:"status"`
+	Trigger    *model.TriggerInfo `json:"trigger,omitempty"`
+	StartedAt  string             `json:"started_at,omitempty"`
+	FinishedAt string             `json:"finished_at,omitempty"`
+	AsOf       string             `json:"as_of"`
+	DurationMs int64              `json:"duration_ms"`
+	Totals     ByteTotals         `json:"totals"`
+	Nodes      []NodeSnapshot     `json:"nodes"`
 }
 
 type NodeSnapshot struct {
@@ -105,6 +106,7 @@ func Snapshot(run *model.Run, asOf time.Time) RunSnapshot {
 		RunID:      run.RunID,
 		Workflow:   run.State.WorkflowName,
 		Status:     run.State.Status,
+		Trigger:    run.State.Trigger,
 		StartedAt:  startedAt,
 		FinishedAt: finishedAt,
 		AsOf:       asOf.UTC().Format(time.RFC3339Nano),

@@ -33,6 +33,7 @@ go run ./cmd/agentflow run get <run-id> --format json
 - `--dry-run` is available for run start, approval, rejection, resume, cancellation, and provider initialization.
 - `run start --idempotency-key <token>` safely replays an identical request without creating a duplicate run; a different request with the same key exits with code `5`.
 - `run metrics <run-id>` exposes per-node duration, attempts, prompt/result/log byte sizes, workspace, and session; `run stats [workflow-name]` aggregates historical efficiency.
+- `trigger list`, `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher for cron and webhook events.
 
 ## Agent onboarding skill
 
@@ -78,6 +79,29 @@ For example, a command can write:
 
 Downstream nodes reference structured data with expressions such as `{{ nodes.review.result.decision }}`.
 
+Nodes can make this boundary explicit with `input`, `inputSchema`, and `outputSchema`. Exact placeholders preserve JSON types, and contract failures stop the node before the command starts or after the structured result is read:
+
+```json
+{
+  "input": { "count": "{{ nodes.inspect.result.line_count }}" },
+  "inputSchema": { "type": "object", "required": ["count"], "properties": { "count": { "type": "integer" } } },
+  "outputSchema": { "type": "object", "required": ["verified"], "properties": { "verified": { "type": "boolean" } } }
+}
+```
+
+The supported contract subset is documented in [`INSTALL.md`](INSTALL.md). stdout and stderr remain logs; only `AGENTFLOW_RESULT_FILE` is business output.
+
+## Cron and webhook triggers
+
+Store trigger definitions in `.agentflow/triggers.json` and start the long-lived runtime:
+
+```bash
+agentflow trigger validate --format json
+agentflow trigger serve --host 127.0.0.1 --port 7071
+```
+
+The service runs cron scheduling, webhook HTTP intake, durable delivery receipts, a dispatch queue, and workers. A webhook is acknowledged with `202` after the delivery and queued run are persisted. For an external scheduler, use `agentflow trigger fire <trigger-id> --scheduled-at ... --delivery-id ...`; repeated delivery IDs are idempotent. See [`examples/triggers.json`](examples/triggers.json) and [`docs/trigger-architecture.md`](docs/trigger-architecture.md).
+
 ## Observability
 
 Inspect one run with:
@@ -87,7 +111,7 @@ agentflow run metrics <run-id> --format json
 agentflow run logs <run-id> --format ndjson
 ```
 
-`run metrics` reports run and node status, duration, retry attempts, human waiting time, workspace/session binding, and byte counts. `input_bytes` is the rendered prompt sent to the node, `output_bytes` is the structured result file, and `stdout_bytes`/`stderr_bytes` are log sizes. Structured results and logs stay separate.
+`run metrics` reports run and node status, trigger metadata, duration, retry attempts, human waiting time, workspace/session binding, and byte counts. `input_bytes` is the rendered prompt plus structured node input, `output_bytes` is the structured result file, and `stdout_bytes`/`stderr_bytes` are log sizes. Structured results and logs stay separate.
 
 Aggregate historical runs to find slow or failure-prone steps:
 
@@ -133,5 +157,7 @@ go build -o agentflow ./cmd/agentflow
 - dependency ordering and conditional `when` expressions
 - retries, timeouts, and persisted run state
 - structured JSON node results with separate stdout/stderr log artifacts
+- explicit node input/output schemas with runtime validation
 - human approve/reject/resume
 - built-in Claude Code and Codex providers, including workspace and existing-session resume
+- cron/webhook triggers with durable dispatch and idempotent deliveries

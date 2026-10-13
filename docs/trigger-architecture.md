@@ -1,6 +1,6 @@
 # AgentFlow Trigger Architecture
 
-本文档定义外部触发能力的领域边界和第一版实现约束。当前 AgentFlow 只有手动 `run start`；cron、webhook 和其他事件源属于后续能力，不能把它们直接实现成 engine 中的特殊分支。
+本文档定义外部触发能力的领域边界和第一版实现约束。当前 MVP 已提供 `trigger fire`、`trigger serve`、cron、webhook、幂等 delivery、持久化 dispatch 和 queued worker；新的事件源仍然不能直接实现成 engine 中的特殊分支。
 
 ## 1. Bounded contexts
 
@@ -107,12 +107,16 @@ type EventSink func(context.Context, TriggerEvent) error
 type Source interface {
     ID() string
     Kind() string
+}
+
+type ServingSource interface {
+    Source
     Serve(context.Context, EventSink) error
 }
 ```
 
 - `CronSource` 在内部维护 timer，按计划产生 `TriggerEvent`。
-- `WebhookSource` 提供 HTTP listener，鉴权、限流、读取 body 后产生 `TriggerEvent`。
+- `WebhookSource` 提供 HTTP handler，鉴权、body limit、读取 body 后产生 `TriggerEvent`；所有 webhook 共用一个 listener。
 - 未来可以增加 `GitHubSource`、`QueueSource`、`FileSource`，它们不需要修改 engine。
 
 Source 只负责“发现事件”。它不负责 workflow 查找、输入映射、幂等判断和启动 run。
@@ -282,13 +286,14 @@ cli / http / cron adapters
 
 `internal/engine` 不导入 `net/http`、cron library 或 webhook package。`internal/trigger` 也不直接调用 `store.SaveState`，所有状态变化经过 application service。
 
-## 8. Implementation order
+## 8. MVP implementation status
 
-1. 提取 `RunStarter`，让现有 `run start` 先实现这个 port。
-2. 增加 `TriggerDefinition`、`TriggerEvent`、delivery receipt 和 input binding 的纯 domain tests。
-3. 实现 `agentflow trigger fire`，用手动事件验证幂等、并发和输入映射。
-4. 实现 `CronSource` 和 `trigger serve`。
-5. 实现带 HMAC、body limit、202/重复 delivery 语义的 `WebhookSource`。
-6. 增加 queued run worker、恢复未完成 dispatch、优雅停机和 Web UI 观测。
+1. `RunStarter`、`Dispatcher`、delivery receipt 和 input binding 已在 `internal/trigger` 中实现。
+2. `agentflow trigger fire` 复用同一个 dispatcher，支持稳定 delivery ID 和并发策略。
+3. `agentflow trigger serve` 启动五字段 cron、按 timezone 调度、webhook HTTP listener 和 queued worker。
+4. webhook 支持 body limit、HMAC SHA-256、bearer token、标量 JSONPath binding 和重复 delivery 去重。
+5. `.agentflow/dispatch/<run-id>.json` 在服务重启时恢复 queued job；run 和 trigger metadata 继续写入现有观测接口。
 
-每一步都通过 port 测试，不使用真实 Claude Code/Codex 作为 trigger 单元测试；真实 provider smoke test 继续单独保留。
+后续可以增加 `queue`/`replace` 并发语义、misfire 补偿策略、外部队列 source 和 UI 中的 trigger delivery 视图，但这些扩展不需要修改 engine。
+
+Trigger 的单元测试使用 fake `RunStarter` 和本地 shell workflow，不调用真实 Claude Code/Codex；真实 provider smoke test 继续单独保留。

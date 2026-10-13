@@ -14,3 +14,17 @@ func TestRenderAndEvaluateWhen(t *testing.T) {
 		t.Fatal("expected contains expression to pass")
 	}
 }
+
+func TestRenderValuePreservesExactPlaceholderType(t *testing.T) {
+	context := map[string]any{"nodes": map[string]any{"build": map[string]any{"result": map[string]any{"count": float64(3), "ok": true}}}}
+	value := RenderValue(map[string]any{
+		"count": "{{ nodes.build.result.count }}",
+		"ok":    "prefix={{ nodes.build.result.ok }}",
+	}, context).(map[string]any)
+	if count, ok := value["count"].(float64); !ok || count != 3 {
+		t.Fatalf("exact placeholder lost number type: %#v", value["count"])
+	}
+	if value["ok"] != "prefix=true" {
+		t.Fatalf("embedded placeholder was not rendered as text: %#v", value["ok"])
+	}
+}

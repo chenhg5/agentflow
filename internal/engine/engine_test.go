@@ -114,3 +114,23 @@ func TestAgentSessionRequiresResumeCommand(t *testing.T) {
 		t.Fatalf("expected resume command failure, got status=%s error=%q", run.State.Status, state.Error)
 	}
 }
+
+func TestNodeContractsPersistInputAndValidateOutput(t *testing.T) {
+	workflow := model.Workflow{Version: "1", Name: "contracts", Inputs: map[string]model.InputDefinition{"name": {Required: true}}, Nodes: []model.Node{{
+		ID: "step", Type: "shell", Command: []string{"sh", "-c", `printf '{"greeting":"hello"}' > "$AGENTFLOW_RESULT_FILE"`},
+		Input:        map[string]any{"name": "{{ inputs.name }}"},
+		InputSchema:  map[string]any{"type": "object", "required": []any{"name"}, "properties": map[string]any{"name": map[string]any{"type": "string"}}},
+		OutputSchema: map[string]any{"type": "object", "required": []any{"greeting"}, "properties": map[string]any{"greeting": map[string]any{"type": "string"}}},
+	}},
+	}
+	run, err := store.CreateRun(t.TempDir(), workflow, map[string]string{"name": "Ada"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := Execute(run, nil); err != nil {
+		t.Fatal(err)
+	}
+	if run.State.Status != "succeeded" || run.State.Nodes["step"].Input.(map[string]any)["name"] != "Ada" {
+		t.Fatalf("unexpected contract run: status=%s input=%#v error=%q", run.State.Status, run.State.Nodes["step"].Input, run.State.Nodes["step"].Error)
+	}
+}

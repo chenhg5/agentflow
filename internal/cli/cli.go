@@ -2,14 +2,17 @@ package cli
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"reflect"
 	"sort"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/driver"
@@ -19,6 +22,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/template"
+	"github.com/chenhg5/agentflow/internal/trigger"
 	"github.com/chenhg5/agentflow/internal/version"
 	"github.com/chenhg5/agentflow/internal/web"
 )
@@ -74,11 +78,106 @@ func Run(args []string) error {
 		return doctorCommand(args[1:], cwd)
 	case "web":
 		return webCommand(args[1:], root, cwd)
+	case "trigger":
+		return triggerCommand(args[1:], root, cwd)
 	case "version":
 		return versionCommand(args[1:])
 	default:
 		return usageError(fmt.Sprintf("unknown command: %s", args[0]), "Run `agentflow --help` to see the command tree.", "command")
 	}
+}
+
+func triggerCommand(args []string, root, cwd string) error {
+	if len(args) == 0 || isHelp(args[0]) {
+		printTriggerHelp()
+		return nil
+	}
+	verb := args[0]
+	parsed, err := parseArgs(args[1:])
+	if err != nil {
+		return withFormat(err, parsed.Format)
+	}
+	if parsed.Help {
+		printTriggerHelp()
+		return nil
+	}
+	config, err := trigger.LoadConfig(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return notFoundError("trigger config", filepath.Join(root, "triggers.json"), parsed.Format)
+		}
+		return internalError(err)
+	}
+	switch verb {
+	case "list":
+		return writeData(map[string]any{"ok": true, "triggers": config.Triggers}, parsed.Output())
+	case "validate":
+		return writeData(map[string]any{"ok": true, "valid": true, "count": len(config.Triggers)}, parsed.Output())
+	case "fire":
+		if len(parsed.Positionals) != 1 {
+			return usageError("trigger id is required", "Run `agentflow trigger fire <trigger-id>`.", "trigger_id")
+		}
+		definition, err := findTrigger(config, parsed.Positionals[0])
+		if err != nil {
+			return notFoundError("trigger", parsed.Positionals[0], parsed.Format)
+		}
+		runtime, err := trigger.NewRuntime(root, cwd, 1)
+		if err != nil {
+			return internalError(err)
+		}
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		runtime.StartWorkers(ctx)
+		now := time.Now().UTC()
+		if parsed.ScheduledAt != "" {
+			parsedTime, parseErr := time.Parse(time.RFC3339, parsed.ScheduledAt)
+			if parseErr != nil {
+				return usageError("--scheduled-at must be RFC3339", "Example: --scheduled-at 2026-10-13T02:00:00+08:00", "invalid_scheduled_at")
+			}
+			now = parsedTime.UTC()
+		}
+		deliveryID := parsed.DeliveryID
+		if deliveryID == "" {
+			deliveryID = definition.ID + ":" + now.Format(time.RFC3339)
+		}
+		event := trigger.Event{TriggerID: definition.ID, SourceKind: definition.Source.Kind, DeliveryID: deliveryID, ReceivedAt: time.Now().UTC(), ScheduledAt: &now, Attributes: map[string]string{}}
+		dispatcher := &trigger.Dispatcher{Root: root, Config: config, Starter: runtime}
+		result, err := dispatcher.Dispatch(ctx, event)
+		if err != nil {
+			return internalError(err)
+		}
+		payload := map[string]any{"ok": true, "trigger": result}
+		if result.Run.RunID != "" && result.Status == "queued" {
+			run, waitErr := runtime.WaitForRun(ctx, result.Run.RunID)
+			if waitErr != nil && ctx.Err() != context.Canceled {
+				return internalError(waitErr)
+			}
+			if run != nil {
+				payload["run_id"] = run.RunID
+				payload["status"] = run.State.Status
+				if run.State.Status == "failed" {
+					_ = writeData(payload, parsed.Output())
+					return &CommandError{Code: ExitGeneralError, Kind: "workflow_failed", Message: "workflow failed", Format: parsed.Format, Silent: true}
+				}
+			}
+		}
+		return writeData(payload, parsed.Output())
+	case "serve":
+		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+		defer cancel()
+		return trigger.Serve(ctx, root, cwd, trigger.ServeOptions{Host: parsed.Host, Port: parsed.Port, Workers: 1})
+	default:
+		return usageError(fmt.Sprintf("unknown trigger action: %s", verb), "Use `agentflow trigger --help` to list actions.", "trigger_action")
+	}
+}
+
+func findTrigger(config trigger.Config, id string) (trigger.Definition, error) {
+	for _, definition := range config.Triggers {
+		if definition.ID == id {
+			return definition, nil
+		}
+	}
+	return trigger.Definition{}, fmt.Errorf("trigger not found: %s", id)
 }
 
 func versionCommand(args []string) error {
@@ -448,6 +547,15 @@ func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
 	node.Result = map[string]any{"decision": verb, "message": message}
+	for _, definition := range run.Workflow.Nodes {
+		if definition.ID != parsed.Positionals[1] {
+			continue
+		}
+		if problems := schema.ValidateValue("output", node.Result, definition.OutputSchema); len(problems) > 0 {
+			return &CommandError{Code: ExitUsageError, Kind: "invalid_human_output", Message: schema.FormatContractErrors("human decision does not satisfy output schema", problems), Suggestion: "Adjust the approval message or remove the incompatible output schema.", Format: parsed.Format}
+		}
+		break
+	}
 	node.Attempts = 1
 	resultBytes, marshalErr := json.Marshal(node.Result)
 	if marshalErr != nil {
@@ -625,10 +733,14 @@ func schemaCommand(args []string, cwd string) error {
 	switch target {
 	case "--all", "all":
 		return writeData(commandSchema(), parsed.Output())
-	case "workflow":
-		data, err := os.ReadFile(filepath.Join(cwd, "workflow.schema.json"))
+	case "workflow", "trigger":
+		filename := "workflow.schema.json"
+		if target == "trigger" {
+			filename = "trigger.schema.json"
+		}
+		data, err := os.ReadFile(filepath.Join(cwd, filename))
 		if err != nil {
-			return notFoundError("workflow schema", "workflow.schema.json", parsed.Format)
+			return notFoundError(target+" schema", filename, parsed.Format)
 		}
 		var value any
 		if err := json.Unmarshal(data, &value); err != nil {
@@ -763,6 +875,13 @@ func parseArgs(args []string) (parsedArgs, error) {
 			}
 			parsed.Port = port
 			parsed.PortSet = true
+		case "--scheduled-at":
+			parsed.ScheduledAt = value
+		case "--delivery-id":
+			if !validIdempotencyKey(value) {
+				return parsed, usageError("--delivery-id must be a non-empty token without whitespace", "Use a stable delivery identifier.", "invalid_delivery_id")
+			}
+			parsed.DeliveryID = value
 		case "--idempotency-key":
 			if !validIdempotencyKey(value) {
 				return parsed, usageError("--idempotency-key must be a non-empty token without whitespace", "Use a stable UUID or request token.", "invalid_idempotency_key")
@@ -802,6 +921,8 @@ type parsedArgs struct {
 	Host           string
 	Port           int
 	PortSet        bool
+	ScheduledAt    string
+	DeliveryID     string
 	PageSize       int
 	DryRun         bool
 	NoInteractive  bool
@@ -906,6 +1027,9 @@ func runPayload(run *model.Run) map[string]any {
 	if run.State.IdempotencyKey != "" {
 		payload["idempotency_key"] = run.State.IdempotencyKey
 	}
+	if run.State.Trigger != nil {
+		payload["trigger"] = run.State.Trigger
+	}
 	return payload
 }
 
@@ -938,9 +1062,13 @@ func commandSchema() map[string]any {
 		{"name": "run reject", "description": "Reject a waiting human node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Rejection message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run resume", "description": "Resume a persisted run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview pending nodes without executing them", false), formatFlag}},
 		{"name": "run cancel", "description": "Cancel a run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
-		{"name": "schema", "description": "Inspect command metadata or the workflow schema.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
+		{"name": "schema", "description": "Inspect command metadata or workflow/trigger schemas.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "trigger", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
 		{"name": "config init", "description": "Create local provider configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
 		{"name": "doctor", "description": "Check local setup and configured providers.", "flags": []map[string]any{formatFlag}},
+		{"name": "trigger list", "description": "List configured cron and webhook triggers.", "flags": []map[string]any{formatFlag}},
+		{"name": "trigger validate", "description": "Validate .agentflow/triggers.json.", "flags": []map[string]any{formatFlag}},
+		{"name": "trigger fire", "description": "Emit one trigger event through the durable dispatcher.", "arguments": []map[string]any{{"name": "trigger-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--scheduled-at", "RFC3339", "Scheduled occurrence time", false), flag("--delivery-id", "string", "Stable event id used for idempotency", false), formatFlag}},
+		{"name": "trigger serve", "description": "Run the persistent cron scheduler, webhook server, and run worker.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 		{"name": "version", "description": "Print version, commit, build time, Go version, and platform.", "flags": []map[string]any{formatFlag}},
 	}
@@ -976,6 +1104,8 @@ func printHelp(args []string) {
 		printDoctorHelp()
 	case "web":
 		printWebHelp()
+	case "trigger":
+		printTriggerHelp()
 	case "version":
 		printVersionHelp()
 	default:
@@ -1002,6 +1132,10 @@ Commands:
   schema             Inspect commands or the workflow schema
   config init        Create provider configuration
   doctor             Check local setup
+  trigger list       List configured triggers
+  trigger validate   Validate trigger configuration
+  trigger fire       Emit one trigger event
+  trigger serve      Run cron, webhook, and queued workers
   web                Open workflow/run visualization in a browser
   version             Print version and build information
 
@@ -1057,6 +1191,7 @@ func printSchemaHelp() {
 	fmt.Println(`Usage:
   agentflow schema --all
   agentflow schema workflow
+  agentflow schema trigger
   agentflow schema run start
 
 Returns machine-readable command metadata or workflow.schema.json.`)
@@ -1088,6 +1223,19 @@ Examples:
   agentflow web workflow.json
   agentflow web --run run_20261010002357_d9293c42a2cbf87b
   agentflow web workflow.json --port 8080`)
+}
+
+func printTriggerHelp() {
+	fmt.Println(`Usage:
+  agentflow trigger list [--format json|table]
+  agentflow trigger validate [--format json|table]
+  agentflow trigger fire <trigger-id> [--scheduled-at RFC3339] [--delivery-id ID]
+  agentflow trigger serve [--host 127.0.0.1] [--port 7071]
+
+The service reads .agentflow/triggers.json. Cron occurrences and webhook
+deliveries are persisted before a queued worker executes the target workflow.
+Webhook endpoints use the path configured by each trigger, for example:
+  POST /triggers/github-pull-request`)
 }
 
 func printVersionHelp() {

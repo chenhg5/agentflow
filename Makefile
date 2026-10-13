@@ -47,7 +47,7 @@ release-all: clean check
 		echo "Building $(NAME)" && \
 		mkdir -p $(DIST)/$(NAME) && \
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
-		cp README.md INSTALL.md providers.example.json workflow.schema.json $(DIST)/$(NAME)/ && \
+		cp README.md INSTALL.md providers.example.json workflow.schema.json trigger.schema.json $(DIST)/$(NAME)/ && \
 		cp -R examples skills docs scripts $(DIST)/$(NAME)/ && \
 		$(if $(EXT),(cd $(DIST) && zip -qr $(NAME).zip $(NAME)),tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
 		rm -rf $(DIST)/$(NAME) && \
