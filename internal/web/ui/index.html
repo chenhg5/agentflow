@@ -40,7 +40,7 @@
       .title p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
       .toolbar button { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); padding: 7px 10px; cursor: pointer; }
       .toolbar button:hover { border-color: var(--accent); }
-      .content { min-height: 0; display: grid; grid-template-rows: 1fr auto; }
+      .content { min-height: 0; display: grid; grid-template-rows: 1fr auto auto; }
       .flow { min-height: 0; background: #0b1016; }
       .react-flow__node { border: 1px solid #44515f; border-radius: 10px; background: #18212b; color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,.25); padding: 0; width: 210px; overflow: hidden; }
       .react-flow__node.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 18px rgba(0,0,0,.3); }
@@ -65,12 +65,24 @@
       .legend { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }
       .legend span { color: var(--muted); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
       .legend i { width: 8px; height: 8px; display: inline-block; border-radius: 50%; }
+      .inspector { max-height: 260px; overflow: auto; border-top: 1px solid var(--border); background: #111820; padding: 14px 18px; }
+      .inspector-empty { color: var(--muted); font-size: 12px; }
+      .inspector-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+      .inspector-head strong { font-size: 14px; }
+      .inspector-head span { color: var(--muted); font-size: 11px; }
+      .inspector-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+      .inspector-section { min-width: 0; }
+      .inspector-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
+      .inspector pre { margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: #0d1117; color: #c9d1d9; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 150px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+      .edge-chip { display: inline-block; color: #9ecbff; border: 1px solid #315d85; border-radius: 999px; padding: 2px 6px; margin: 0 4px 4px 0; font-size: 10px; }
+      .graph-warning { color: #d29922; font-size: 11px; margin-top: 8px; }
       @media (max-width: 760px) {
         .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
         .sidebar { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--border); }
         .run-list { display: flex; overflow-x: auto; }
         .run-item { min-width: 190px; }
         .legend { margin-left: 0; }
+        .inspector-grid { grid-template-columns: 1fr; }
       }
     </style>
   </head>
@@ -96,7 +108,7 @@
       };
       const formatTime = (value) => value ? new Date(value).toLocaleString() : "";
 
-      function nodeLayout(workflow, state) {
+      function nodeLayout(workflow, state, description) {
         const definitions = workflow?.nodes || [];
         const levels = new Map();
         const byID = new Map(definitions.map((node) => [node.id, node]));
@@ -129,17 +141,29 @@
               position: { x: level * 280 + 50, y: row * 150 + 50 },
               sourcePosition: Position.Right,
               targetPosition: Position.Left,
-              data: { label: h(NodeCard, { definition, state: nodeState, status }), state: nodeState },
+              data: { label: h(NodeCard, { definition, state: nodeState, status }), definition, state: nodeState },
             };
           }),
-          edges: definitions.flatMap((definition) => (definition.needs || []).map((dependency) => ({
+          edges: (description?.edges || definitions.flatMap((definition) => (definition.needs || []).map((dependency) => ({
             id: dependency + "->" + definition.id,
             source: dependency,
             target: definition.id,
-            animated: (state?.nodes?.[definition.id]?.status === "running"),
-            markerEnd: { type: MarkerType.ArrowClosed },
-            style: { stroke: "#52606d", strokeWidth: 1.5 },
-          }))),
+            channels: ["control"],
+          })))).map((edge) => {
+            const channels = edge.channels || ["control"];
+            const hasData = channels.includes("data");
+            const hasCondition = channels.includes("condition");
+            return {
+              id: edge.id,
+              source: edge.source,
+              target: edge.target,
+              animated: (state?.nodes?.[edge.target]?.status === "running"),
+              label: hasCondition ? edge.condition : (hasData ? "data" : undefined),
+              labelStyle: { fill: hasCondition ? "#d29922" : "#79c0ff", fontSize: 10 },
+              markerEnd: { type: MarkerType.ArrowClosed },
+              style: { stroke: hasCondition ? "#d29922" : hasData ? "#388bfd" : "#52606d", strokeWidth: hasData ? 2 : 1.5, strokeDasharray: hasCondition ? "5 4" : undefined },
+            };
+          }),
         };
       }
 
@@ -158,10 +182,10 @@
         );
       }
 
-      function Flow({ workflow, state }) {
-        const graph = useMemo(() => nodeLayout(workflow, state), [workflow, state]);
+      function Flow({ workflow, state, description, onSelect }) {
+        const graph = useMemo(() => nodeLayout(workflow, state, description), [workflow, state, description]);
         return h("div", { className: "flow" },
-          h(ReactFlow, { nodes: graph.nodes, edges: graph.edges, fitView: true, minZoom: 0.2, maxZoom: 1.8, attributionPosition: "bottom-left" },
+          h(ReactFlow, { nodes: graph.nodes, edges: graph.edges, fitView: true, minZoom: 0.2, maxZoom: 1.8, attributionPosition: "bottom-left", onNodeClick: (_event, node) => onSelect(node.data.definition) },
             h(Background, { color: "#26313d", gap: 24, size: 1 }),
             h(Controls, null),
             h(MiniMap, { nodeColor: (node) => {
@@ -169,6 +193,31 @@
               return value === "succeeded" ? "#238636" : value === "failed" ? "#f85149" : value === "running" ? "#1f6feb" : "#8b949e";
             }}),
           ),
+        );
+      }
+
+      function JsonBlock({ label, value }) {
+        if (value === undefined || value === null || (typeof value === "object" && Object.keys(value).length === 0)) return null;
+        return h("div", { className: "inspector-section" },
+          h("div", { className: "inspector-label" }, label),
+          h("pre", null, typeof value === "string" ? value : JSON.stringify(value, null, 2)),
+        );
+      }
+
+      function Inspector({ definition, state, description }) {
+        if (!definition) return h("div", { className: "inspector" }, h("div", { className: "inspector-empty" }, "Select a node to inspect its contract, mapping, artifacts, and runtime state."));
+        const edges = (description?.edges || []).filter((edge) => edge.source === definition.id || edge.target === definition.id);
+        return h("div", { className: "inspector" },
+          h("div", { className: "inspector-head" }, h("strong", null, definition.id), h("span", null, definition.type + (state?.status ? " · " + state.status : ""))),
+          h("div", { className: "inspector-grid" },
+            h(JsonBlock, { label: "Input schema", value: definition.inputSchema || definition.inputFields }),
+            h(JsonBlock, { label: "Output schema", value: definition.outputSchema || definition.outputFields }),
+            h(JsonBlock, { label: "Input mapping", value: definition.inputMapping }),
+            h(JsonBlock, { label: "Runtime input", value: state?.input }),
+            h(JsonBlock, { label: "Runtime result", value: state?.result }),
+            h(JsonBlock, { label: "Artifacts", value: state?.artifacts }),
+          ),
+          edges.length ? h("div", { className: "graph-warning" }, "Edges: ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id }, edge.source + " → " + edge.target + " · " + (edge.channels || []).join(" + ")))) : null,
         );
       }
 
@@ -207,6 +256,7 @@
 
       function App() {
         const [view, setView] = useState(null);
+        const [selectedNode, setSelectedNode] = useState(null);
         const [error, setError] = useState("");
         const load = async () => {
           try {
@@ -214,6 +264,7 @@
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || "request failed");
             setView(data);
+            setSelectedNode((current) => current ? (data.workflow?.nodes || []).find((node) => node.id === current.id) || null : null);
             setError("");
           } catch (err) {
             setError(err.message);
@@ -238,7 +289,11 @@
               ),
               h("button", { onClick: load }, "Refresh"),
             ),
-            h("div", { className: "content" }, h(Flow, { workflow: view.workflow, state }), h(Summary, { view })),
+            h("div", { className: "content" },
+              h(Flow, { workflow: view.workflow, state, description: view.graph, onSelect: setSelectedNode }),
+              h(Summary, { view }),
+              h(Inspector, { definition: selectedNode, state: selectedNode && state?.nodes?.[selectedNode.id], description: view.graph }),
+            ),
           ),
         );
       }

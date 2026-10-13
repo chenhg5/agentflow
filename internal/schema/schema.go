@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/chenhg5/agentflow/internal/graph"
 	"github.com/chenhg5/agentflow/internal/model"
 )
 
@@ -68,9 +69,7 @@ func Validate(workflow model.Workflow) []string {
 			}
 		}
 	}
-	if len(errors) == 0 && hasCycle(workflow.Nodes) {
-		errors = append(errors, "workflow contains a dependency cycle")
-	}
+	errors = append(errors, graph.Validate(workflow)...)
 	return errors
 }
 
@@ -119,37 +118,4 @@ func validateFieldSchemaConsistency(nodeID, kind string, fields []model.FieldSpe
 		}
 	}
 	return errors
-}
-
-func hasCycle(nodes []model.Node) bool {
-	byID := map[string]model.Node{}
-	for _, node := range nodes {
-		byID[node.ID] = node
-	}
-	visiting := map[string]bool{}
-	visited := map[string]bool{}
-	var visit func(string) bool
-	visit = func(id string) bool {
-		if visiting[id] {
-			return true
-		}
-		if visited[id] {
-			return false
-		}
-		visiting[id] = true
-		for _, dependency := range byID[id].Needs {
-			if visit(dependency) {
-				return true
-			}
-		}
-		delete(visiting, id)
-		visited[id] = true
-		return false
-	}
-	for _, node := range nodes {
-		if visit(node.ID) {
-			return true
-		}
-	}
-	return false
 }

@@ -7,6 +7,7 @@ It uses a small JSON workflow definition, persists every run under `.agentflow/`
 The current release is `v0.0.1` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
 
 For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
+The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md).
 
 ## Quick start
 
@@ -137,6 +138,8 @@ agentflow web --run <run-id>
 ```
 
 The server prints a local URL and refreshes run data every two seconds. Use `--port 0` to let the operating system choose an available port, or `--host 0.0.0.0` when the UI needs to be reached from another machine on a trusted network.
+
+The UI distinguishes control, structured-data, and conditional edges. Select a node to inspect its contracts, resolved input, structured result, artifacts, and runtime state.
 
 The Runner owns all state transitions. Agent processes receive `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, `AGENTFLOW_NODE_TOKEN`, and `AGENTFLOW_RESULT_FILE`; they write the result file and exit, while the Runner validates the file and advances dependent nodes. An Agent never writes `state.json` or starts the next node directly.
 

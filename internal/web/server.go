@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chenhg5/agentflow/internal/graph"
 	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/store"
@@ -99,9 +100,11 @@ func (s *Server) handleState(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		writeJSON(w, map[string]any{
-			"mode":     "workflow",
-			"source":   s.options.WorkflowPath,
-			"workflow": workflow,
+			"mode":             "workflow",
+			"source":           s.options.WorkflowPath,
+			"workflow":         workflow,
+			"graph":            graph.Describe(workflow),
+			"graph_validation": graph.Validate(workflow),
 		})
 		return
 	}
@@ -177,9 +180,11 @@ func dashboardView(root string) map[string]any {
 
 func runView(run *model.Run, root string) map[string]any {
 	return map[string]any{
-		"mode":     "run",
-		"workflow": run.Workflow,
-		"runs":     dashboardView(root)["runs"],
+		"mode":             "run",
+		"workflow":         run.Workflow,
+		"graph":            graph.Describe(run.Workflow),
+		"graph_validation": graph.Validate(run.Workflow),
+		"runs":             dashboardView(root)["runs"],
 		"run": map[string]any{
 			"run_id":  run.RunID,
 			"status":  run.State.Status,

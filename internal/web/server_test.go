@@ -33,6 +33,13 @@ func TestWorkflowAndRunViews(t *testing.T) {
 	if workflowView["mode"] != "workflow" {
 		t.Fatalf("workflow mode = %v", workflowView["mode"])
 	}
+	graphView, ok := workflowView["graph"].(map[string]any)
+	if !ok {
+		t.Fatalf("workflow graph missing: %#v", workflowView["graph"])
+	}
+	if edges, ok := graphView["edges"].([]any); !ok || len(edges) != 0 {
+		t.Fatalf("workflow graph edges = %#v", graphView["edges"])
+	}
 
 	run, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "1", Name: "demo", Nodes: []model.Node{{ID: "build", Type: "shell", Command: []string{"true"}}}}, nil, "")
 	if err != nil {
@@ -57,5 +64,8 @@ func TestWorkflowAndRunViews(t *testing.T) {
 	runPayload, ok := runViewPayload["run"].(map[string]any)
 	if !ok || runPayload["run_id"] != run.RunID {
 		t.Fatalf("unexpected run payload: %#v", runViewPayload["run"])
+	}
+	if _, ok := runViewPayload["graph"].(map[string]any); !ok {
+		t.Fatalf("run graph missing: %#v", runViewPayload["graph"])
 	}
 }

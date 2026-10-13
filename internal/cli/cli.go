@@ -17,6 +17,7 @@ import (
 
 	"github.com/chenhg5/agentflow/internal/driver"
 	"github.com/chenhg5/agentflow/internal/engine"
+	"github.com/chenhg5/agentflow/internal/graph"
 	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/schema"
@@ -275,7 +276,13 @@ func workflowCommand(args []string) error {
 	if err := assertValid(workflow, parsed.Format); err != nil {
 		return err
 	}
-	return writeData(map[string]any{"ok": true, "valid": true, "workflow": workflow.Name, "version": workflow.Version}, parsed.Output())
+	return writeData(map[string]any{
+		"ok":       true,
+		"valid":    true,
+		"workflow": workflow.Name,
+		"version":  workflow.Version,
+		"graph":    graph.Describe(workflow),
+	}, parsed.Output())
 }
 
 func runCommand(args []string, root, cwd string) error {
