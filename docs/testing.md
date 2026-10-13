@@ -5,6 +5,16 @@ AgentFlow has two test layers:
 1. **Deterministic checks** run on every change. `make check` runs formatting, `go vet`, and all Go tests with fake drivers. It does not contact a model provider.
 2. **Real agent smoke testing** is opt-in. It runs a small two-node workflow against the locally installed Claude Code and Codex CLIs and validates their structured result files.
 
+3. **CLI end-to-end contract testing** runs without model quota. It exercises the complete JSON CLI path for field declarations, explicit and automatic handoff, persisted input artifacts, human approval, and a failing JSON Schema contract.
+
+Run it with:
+
+```bash
+make test-e2e
+```
+
+The test uses shell nodes as deterministic stand-ins for agents. This verifies the runner and persistence boundary; the real provider smoke test below verifies Claude Code and Codex command construction separately.
+
 ## Run the real smoke test
 
 Prerequisites:

@@ -20,7 +20,7 @@ PLATFORMS := \
 
 SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: build test test-real vet check release-all clean
+.PHONY: build test test-real test-e2e vet check release-all clean
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/$(APP) $(CMD)
@@ -30,6 +30,9 @@ test:
 
 test-real: build
 	./scripts/real-agent-smoke.sh
+
+test-e2e: build
+	./scripts/e2e-contract-smoke.sh
 
 vet:
 	test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
