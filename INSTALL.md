@@ -67,33 +67,33 @@ Downloads the newest release for the current OS and CPU, verifies its checksum, 
 curl -fsSL https://raw.githubusercontent.com/chenhg5/agentflow/main/scripts/install.sh | sh
 ```
 
-Set `AGENTFLOW_VERSION=v0.0.2` to pin a release and `AGENTFLOW_INSTALL_DIR=/path` to change the target directory.
+Set `AGENTFLOW_VERSION=v0.0.3` to pin a release and `AGENTFLOW_INSTALL_DIR=/path` to change the target directory.
 
 ### Option A: download a release archive
 
-The current preview is `v0.0.1`. Pick the archive matching the user's OS and CPU:
+The current preview is `v0.0.3`. Pick the archive matching the user's OS and CPU:
 
 ```text
-agentflow-v0.0.1-darwin-arm64.tar.gz
-agentflow-v0.0.1-darwin-amd64.tar.gz
-agentflow-v0.0.1-linux-arm64.tar.gz
-agentflow-v0.0.1-linux-amd64.tar.gz
-agentflow-v0.0.1-windows-arm64.zip
-agentflow-v0.0.1-windows-amd64.zip
+agentflow-v0.0.3-darwin-arm64.tar.gz
+agentflow-v0.0.3-darwin-amd64.tar.gz
+agentflow-v0.0.3-linux-arm64.tar.gz
+agentflow-v0.0.3-linux-amd64.tar.gz
+agentflow-v0.0.3-windows-arm64.zip
+agentflow-v0.0.3-windows-amd64.zip
 ```
 
 Release assets and `checksums.txt` are published at:
 
-<https://github.com/chenhg5/agentflow/releases/tag/v0.0.1>
+<https://github.com/chenhg5/agentflow/releases/tag/v0.0.3>
 
 Example for Apple Silicon macOS:
 
 ```bash
 mkdir -p "$HOME/.local/bin"
 curl -fL -o /tmp/agentflow.tar.gz \
-  https://github.com/chenhg5/agentflow/releases/download/v0.0.1/agentflow-v0.0.1-darwin-arm64.tar.gz
+  https://github.com/chenhg5/agentflow/releases/download/v0.0.3/agentflow-v0.0.3-darwin-arm64.tar.gz
 tar -xzf /tmp/agentflow.tar.gz -C /tmp
-install -m 0755 /tmp/agentflow-v0.0.1-darwin-arm64/agentflow "$HOME/.local/bin/agentflow"
+install -m 0755 /tmp/agentflow-v0.0.3-darwin-arm64/agentflow "$HOME/.local/bin/agentflow"
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
@@ -101,7 +101,7 @@ Verify the checksum before installing when the user requires supply-chain verifi
 
 ```bash
 curl -fL -o /tmp/checksums.txt \
-  https://github.com/chenhg5/agentflow/releases/download/v0.0.1/checksums.txt
+  https://github.com/chenhg5/agentflow/releases/download/v0.0.3/checksums.txt
 cd /tmp
 shasum -a 256 -c checksums.txt --ignore-missing
 ```
@@ -111,7 +111,7 @@ On Windows, extract the matching `.zip` and put `agentflow.exe` in a directory o
 ### Option B: install with Go
 
 ```bash
-go install github.com/chenhg5/agentflow/cmd/agentflow@v0.0.1
+go install github.com/chenhg5/agentflow/cmd/agentflow@v0.0.3
 ```
 
 If the command is not found afterwards, add Go's binary directory to `PATH`:

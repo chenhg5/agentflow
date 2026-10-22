@@ -1,7 +1,7 @@
 APP        := agentflow
 CMD        := ./cmd/agentflow
 DIST       := dist
-VERSION    := v0.0.2
+VERSION    := v0.0.3
 COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 

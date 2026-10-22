@@ -4,7 +4,7 @@ AgentFlow is a standalone local workflow runner for Claude Code, Codex, and othe
 
 It uses a small JSON workflow definition, persists every run under `.agentflow/`, and supports resumable human approval steps.
 
-The current release is `v0.0.1` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
+The current release is `v0.0.3` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
 
 For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
 The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md).
