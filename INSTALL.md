@@ -59,6 +59,16 @@ The web UI is served locally by the AgentFlow binary. Its current React Flow dep
 
 Choose one method. Ask the user which method they prefer before installing.
 
+### Recommended: install script (macOS and Linux)
+
+Downloads the newest release for the current OS and CPU, verifies its checksum, and installs `agentflow` into `~/.local/bin`:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chenhg5/agentflow/main/scripts/install.sh | sh
+```
+
+Set `AGENTFLOW_VERSION=v0.0.2` to pin a release and `AGENTFLOW_INSTALL_DIR=/path` to change the target directory.
+
 ### Option A: download a release archive
 
 The current preview is `v0.0.1`. Pick the archive matching the user's OS and CPU:

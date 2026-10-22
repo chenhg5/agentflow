@@ -9,6 +9,14 @@ The current release is `v0.0.1` (preview). Check the binary metadata with `agent
 For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
 The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md).
 
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/chenhg5/agentflow/main/scripts/install.sh | sh
+```
+
+Or `go install github.com/chenhg5/agentflow/cmd/agentflow@latest`, or download an archive from [Releases](https://github.com/chenhg5/agentflow/releases). See [`INSTALL.md`](INSTALL.md) for details.
+
 ## Quick start
 
 ```bash
@@ -119,6 +127,16 @@ Aggregate historical runs to find slow or failure-prone steps:
 ```bash
 agentflow run stats --format json
 agentflow run stats release-review --format json
+agentflow run stats release-review --by-version --format json
+```
+
+Every run records a `workflow_digest`, a content hash of its workflow definition, so `--by-version` (or `--digest <hash>`) compares a workflow before and after a change. Run-level durations cover finished runs only and are split into `active_ms` and human `waiting_ms`.
+
+Callers such as schedulers, watchdogs, or an agent that woke itself up query results through stable commands instead of reading `.agentflow/runs/`:
+
+```bash
+agentflow run latest release-review --status succeeded,failed --format json
+agentflow run list --workflow release-review --status waiting_human --format json
 ```
 
 The aggregate includes run counts, average/P50/P95/max durations, human waiting time, retry totals, and input/output/log byte totals. Run data is persisted under `.agentflow/runs/<run-id>/` so it can be inspected or exported by another tool.

@@ -123,5 +123,19 @@ set -e
 [[ "$INVALID_STATUS" -ne 0 ]]
 jq -e '.status == "failed" and (.nodes.bad.error | contains("output schema validation failed"))' invalid-run.json >/dev/null
 
+DIGEST=$(jq -r '.workflow_digest' succeeded.json)
+[[ "$DIGEST" =~ ^[0-9a-f]{12}$ ]]
+"$AGENTFLOW_BIN" run latest e2e-contracts --status succeeded --format json > latest.json
+jq -e --arg run "$RUN_ID" '.run_id == $run' latest.json >/dev/null
+"$AGENTFLOW_BIN" run list --workflow e2e-invalid-contract --status failed --format json > failed-list.json
+jq -e '(.runs | length) == 1 and .runs[0].status == "failed"' failed-list.json >/dev/null
+"$AGENTFLOW_BIN" run stats e2e-contracts --by-version --format json > by-version.json
+jq -e --arg digest "$DIGEST" '(.versions | length) == 1 and .versions[0].workflow_digest == $digest and .versions[0].duration_ms.count == 1 and .versions[0].waiting_ms.max_ms > 0' by-version.json >/dev/null
+set +e
+"$AGENTFLOW_BIN" run latest no-such-workflow --format json > /dev/null 2>&1
+LATEST_STATUS=$?
+set -e
+[[ "$LATEST_STATUS" -eq 3 ]]
+
 echo "e2e contract smoke passed: $RUN_ID"
 popd >/dev/null

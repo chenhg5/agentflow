@@ -9,17 +9,20 @@ import (
 
 // RunSnapshot is the observable execution summary for one workflow run.
 type RunSnapshot struct {
-	OK         bool               `json:"ok"`
-	RunID      string             `json:"run_id"`
-	Workflow   string             `json:"workflow"`
-	Status     string             `json:"status"`
-	Trigger    *model.TriggerInfo `json:"trigger,omitempty"`
-	StartedAt  string             `json:"started_at,omitempty"`
-	FinishedAt string             `json:"finished_at,omitempty"`
-	AsOf       string             `json:"as_of"`
-	DurationMs int64              `json:"duration_ms"`
-	Totals     ByteTotals         `json:"totals"`
-	Nodes      []NodeSnapshot     `json:"nodes"`
+	OK             bool               `json:"ok"`
+	RunID          string             `json:"run_id"`
+	Workflow       string             `json:"workflow"`
+	WorkflowDigest string             `json:"workflow_digest"`
+	Status         string             `json:"status"`
+	Trigger        *model.TriggerInfo `json:"trigger,omitempty"`
+	StartedAt      string             `json:"started_at,omitempty"`
+	FinishedAt     string             `json:"finished_at,omitempty"`
+	AsOf           string             `json:"as_of"`
+	DurationMs     int64              `json:"duration_ms"`
+	ActiveMs       int64              `json:"active_ms"`
+	WaitingMs      int64              `json:"waiting_ms"`
+	Totals         ByteTotals         `json:"totals"`
+	Nodes          []NodeSnapshot     `json:"nodes"`
 }
 
 type NodeSnapshot struct {
@@ -78,14 +81,39 @@ type NodeAggregate struct {
 
 // AggregateSnapshot summarizes all matching runs. It is intentionally local and
 // deterministic so it can be exported or sent to another metrics system later.
+//
+// Run-level distributions only include finished runs, so a run still waiting
+// for a human does not inflate them. Duration is wall-clock time, Waiting is
+// time spent in human nodes, and Active is the difference.
 type AggregateSnapshot struct {
-	OK         bool            `json:"ok"`
-	Workflow   string          `json:"workflow,omitempty"`
-	AsOf       string          `json:"as_of"`
-	Runs       RunCounts       `json:"runs"`
-	Duration   Distribution    `json:"duration_ms"`
-	Totals     ByteTotals      `json:"totals"`
-	NodeGroups []NodeAggregate `json:"nodes"`
+	OK             bool            `json:"ok"`
+	Workflow       string          `json:"workflow,omitempty"`
+	WorkflowDigest string          `json:"workflow_digest,omitempty"`
+	AsOf           string          `json:"as_of"`
+	FirstRunAt     string          `json:"first_run_at,omitempty"`
+	LastRunAt      string          `json:"last_run_at,omitempty"`
+	Runs           RunCounts       `json:"runs"`
+	Duration       Distribution    `json:"duration_ms"`
+	Active         Distribution    `json:"active_ms"`
+	Waiting        Distribution    `json:"waiting_ms"`
+	Totals         ByteTotals      `json:"totals"`
+	NodeGroups     []NodeAggregate `json:"nodes"`
+}
+
+// Filter selects runs for aggregation. Empty fields match everything.
+type Filter struct {
+	Workflow string
+	Digest   string
+}
+
+func (f Filter) matches(run *model.Run) bool {
+	if run == nil {
+		return false
+	}
+	if f.Workflow != "" && run.State.WorkflowName != f.Workflow {
+		return false
+	}
+	return f.Digest == "" || run.WorkflowDigest() == f.Digest
 }
 
 func Snapshot(run *model.Run, asOf time.Time) RunSnapshot {
@@ -102,16 +130,17 @@ func Snapshot(run *model.Run, asOf time.Time) RunSnapshot {
 		duration = DurationMillis(startedAt, finishedAt, asOf)
 	}
 	result := RunSnapshot{
-		OK:         run.State.Status != "failed",
-		RunID:      run.RunID,
-		Workflow:   run.State.WorkflowName,
-		Status:     run.State.Status,
-		Trigger:    run.State.Trigger,
-		StartedAt:  startedAt,
-		FinishedAt: finishedAt,
-		AsOf:       asOf.UTC().Format(time.RFC3339Nano),
-		DurationMs: duration,
-		Nodes:      make([]NodeSnapshot, 0, len(run.Workflow.Nodes)),
+		OK:             run.State.Status != "failed",
+		RunID:          run.RunID,
+		Workflow:       run.State.WorkflowName,
+		WorkflowDigest: run.WorkflowDigest(),
+		Status:         run.State.Status,
+		Trigger:        run.State.Trigger,
+		StartedAt:      startedAt,
+		FinishedAt:     finishedAt,
+		AsOf:           asOf.UTC().Format(time.RFC3339Nano),
+		DurationMs:     duration,
+		Nodes:          make([]NodeSnapshot, 0, len(run.Workflow.Nodes)),
 	}
 	for _, definition := range run.Workflow.Nodes {
 		state := run.State.Nodes[definition.ID]
@@ -141,29 +170,65 @@ func Snapshot(run *model.Run, asOf time.Time) RunSnapshot {
 			StderrBytes: state.StderrBytes,
 		}
 		result.Nodes = append(result.Nodes, node)
+		result.WaitingMs += node.WaitingMs
 		result.Totals.Attempts += node.Attempts
 		result.Totals.InputBytes += node.InputBytes
 		result.Totals.OutputBytes += node.OutputBytes
 		result.Totals.StdoutBytes += node.StdoutBytes
 		result.Totals.StderrBytes += node.StderrBytes
 	}
+	if result.WaitingMs > result.DurationMs {
+		result.WaitingMs = result.DurationMs
+	}
+	result.ActiveMs = result.DurationMs - result.WaitingMs
 	return result
 }
 
-func Aggregate(runs []*model.Run, workflow string, asOf time.Time) AggregateSnapshot {
+// AggregateByDigest returns one aggregate per workflow version, ordered by the
+// first run of each version, so a workflow change can be compared with the
+// version before it.
+func AggregateByDigest(runs []*model.Run, workflow string, asOf time.Time) []AggregateSnapshot {
+	digests := []string{}
+	seen := map[string]bool{}
+	ordered := append([]*model.Run(nil), runs...)
+	sort.SliceStable(ordered, func(i, j int) bool { return ordered[i].State.CreatedAt < ordered[j].State.CreatedAt })
+	for _, run := range ordered {
+		if !(Filter{Workflow: workflow}).matches(run) {
+			continue
+		}
+		digest := run.WorkflowDigest()
+		if !seen[digest] {
+			seen[digest] = true
+			digests = append(digests, digest)
+		}
+	}
+	result := make([]AggregateSnapshot, 0, len(digests))
+	for _, digest := range digests {
+		result = append(result, Aggregate(runs, Filter{Workflow: workflow, Digest: digest}, asOf))
+	}
+	return result
+}
+
+func Aggregate(runs []*model.Run, filter Filter, asOf time.Time) AggregateSnapshot {
 	if asOf.IsZero() {
 		asOf = time.Now().UTC()
 	}
-	result := AggregateSnapshot{OK: true, Workflow: workflow, AsOf: asOf.UTC().Format(time.RFC3339Nano), NodeGroups: []NodeAggregate{}}
-	var durations []int64
+	result := AggregateSnapshot{OK: true, Workflow: filter.Workflow, WorkflowDigest: filter.Digest, AsOf: asOf.UTC().Format(time.RFC3339Nano), NodeGroups: []NodeAggregate{}}
+	var durations, active, waiting []int64
 	var waitingDurations = map[string][]int64{}
 	var nodeDurations = map[string][]int64{}
 	groups := map[string]*NodeAggregate{}
 	for _, run := range runs {
-		if run == nil || (workflow != "" && run.State.WorkflowName != workflow) {
+		if !filter.matches(run) {
 			continue
 		}
 		snapshot := Snapshot(run, asOf)
+		if result.FirstRunAt == "" || run.State.CreatedAt < result.FirstRunAt {
+			result.FirstRunAt = run.State.CreatedAt
+		}
+		if run.State.CreatedAt > result.LastRunAt {
+			result.LastRunAt = run.State.CreatedAt
+		}
 		result.Runs.Total++
 		switch run.State.Status {
 		case "succeeded":
@@ -177,7 +242,11 @@ func Aggregate(runs []*model.Run, workflow string, asOf time.Time) AggregateSnap
 		case "cancelled":
 			result.Runs.Cancelled++
 		}
-		durations = append(durations, snapshot.DurationMs)
+		if finished(run.State.Status) {
+			durations = append(durations, snapshot.DurationMs)
+			active = append(active, snapshot.ActiveMs)
+			waiting = append(waiting, snapshot.WaitingMs)
+		}
 		result.Totals.Attempts += snapshot.Totals.Attempts
 		result.Totals.InputBytes += snapshot.Totals.InputBytes
 		result.Totals.OutputBytes += snapshot.Totals.OutputBytes
@@ -215,6 +284,8 @@ func Aggregate(runs []*model.Run, workflow string, asOf time.Time) AggregateSnap
 		}
 	}
 	result.Duration = summarize(durations)
+	result.Active = summarize(active)
+	result.Waiting = summarize(waiting)
 	ids := make([]string, 0, len(groups))
 	for id := range groups {
 		ids = append(ids, id)
@@ -227,6 +298,10 @@ func Aggregate(runs []*model.Run, workflow string, asOf time.Time) AggregateSnap
 		result.NodeGroups = append(result.NodeGroups, *group)
 	}
 	return result
+}
+
+func finished(status string) bool {
+	return status == "succeeded" || status == "failed" || status == "cancelled"
 }
 
 func MarkRunStarted(state *model.RunState, at time.Time) {

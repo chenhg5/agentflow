@@ -75,6 +75,7 @@ type NodeState struct {
 type RunState struct {
 	RunID          string                `json:"runId"`
 	WorkflowName   string                `json:"workflowName"`
+	WorkflowDigest string                `json:"workflowDigest,omitempty"`
 	Status         string                `json:"status"`
 	Inputs         map[string]string     `json:"inputs"`
 	IdempotencyKey string                `json:"idempotency_key,omitempty"`

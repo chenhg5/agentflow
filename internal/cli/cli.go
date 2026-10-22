@@ -9,6 +9,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -315,6 +316,8 @@ func runCommand(args []string, root, cwd string) error {
 		return runMetrics(parsed, root)
 	case "stats":
 		return runStats(parsed, root)
+	case "latest":
+		return runLatest(parsed, root)
 	case "approve", "reject":
 		return runDecision(verb, parsed, root, cwd)
 	case "resume":
@@ -410,29 +413,63 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 }
 
 func runList(parsed parsedArgs, root string) error {
-	entries, err := os.ReadDir(filepath.Join(root, "runs"))
-	if os.IsNotExist(err) {
-		return writeData(map[string]any{"ok": true, "runs": []any{}}, parsed.Output())
-	}
+	runs, err := selectRuns(root, parsed.Workflow, parsed.Statuses)
 	if err != nil {
-		return internalError(err)
+		return err
 	}
-	summaries := make([]map[string]any, 0, len(entries))
-	for index := len(entries) - 1; index >= 0; index-- {
-		entry := entries[index]
-		if !entry.IsDir() {
-			continue
+	summaries := make([]map[string]any, 0, len(runs))
+	for _, run := range runs {
+		summary := map[string]any{"run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+		if run.State.FinishedAt != "" {
+			summary["finished_at"] = run.State.FinishedAt
 		}
-		run, err := store.LoadRun(root, entry.Name())
-		if err != nil {
-			return internalError(err)
-		}
-		summaries = append(summaries, map[string]any{"run_id": run.RunID, "workflow": run.State.WorkflowName, "status": run.State.Status, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt})
+		summaries = append(summaries, summary)
 		if parsed.PageSize > 0 && len(summaries) >= parsed.PageSize && !parsed.PageAll {
 			break
 		}
 	}
 	return writeData(map[string]any{"ok": true, "runs": summaries}, parsed.Output())
+}
+
+// runLatest gives schedulers and watchdogs a stable way to ask "how did the
+// last run of this workflow go" without reading the run directory layout.
+func runLatest(parsed parsedArgs, root string) error {
+	if len(parsed.Positionals) != 1 {
+		return usageError("workflow name is required", "Run `agentflow run latest <workflow-name> [--status succeeded,failed]`.", "workflow_name")
+	}
+	runs, err := selectRuns(root, parsed.Positionals[0], parsed.Statuses)
+	if err != nil {
+		return err
+	}
+	if len(runs) == 0 {
+		return notFoundError("run for workflow", parsed.Positionals[0], parsed.Format)
+	}
+	return writeData(runPayload(runs[0]), parsed.Output())
+}
+
+// selectRuns returns matching runs, newest first.
+func selectRuns(root, workflow string, statuses []string) ([]*model.Run, error) {
+	runs, err := loadRuns(root)
+	if err != nil {
+		return nil, err
+	}
+	selected := make([]*model.Run, 0, len(runs))
+	for _, run := range runs {
+		if workflow != "" && run.State.WorkflowName != workflow {
+			continue
+		}
+		if len(statuses) > 0 && !slices.Contains(statuses, run.State.Status) {
+			continue
+		}
+		selected = append(selected, run)
+	}
+	sort.SliceStable(selected, func(i, j int) bool {
+		if selected[i].State.CreatedAt != selected[j].State.CreatedAt {
+			return selected[i].State.CreatedAt > selected[j].State.CreatedAt
+		}
+		return selected[i].RunID > selected[j].RunID
+	})
+	return selected, nil
 }
 
 func runGet(parsed parsedArgs, root string) error {
@@ -503,7 +540,11 @@ func runStats(parsed parsedArgs, root string) error {
 	if err != nil {
 		return err
 	}
-	return writeData(metrics.Aggregate(runs, workflowName, time.Now().UTC()), parsed.Output())
+	asOf := time.Now().UTC()
+	if parsed.ByVersion {
+		return writeData(map[string]any{"ok": true, "workflow": workflowName, "as_of": asOf.Format(time.RFC3339Nano), "versions": metrics.AggregateByDigest(runs, workflowName, asOf)}, parsed.Output())
+	}
+	return writeData(metrics.Aggregate(runs, metrics.Filter{Workflow: workflowName, Digest: parsed.Digest}, asOf), parsed.Output())
 }
 
 func loadRuns(root string) ([]*model.Run, error) {
@@ -856,6 +897,9 @@ func parseArgs(args []string) (parsedArgs, error) {
 		case "--force":
 			parsed.Force = true
 			continue
+		case "--by-version":
+			parsed.ByVersion = true
+			continue
 		}
 		key, value, inline := splitFlag(arg)
 		if !inline {
@@ -879,6 +923,16 @@ func parseArgs(args []string) (parsedArgs, error) {
 			parsed.Inputs[name] = input
 		case "--message":
 			parsed.Message = value
+		case "--workflow":
+			parsed.Workflow = value
+		case "--status":
+			for _, status := range strings.Split(value, ",") {
+				if status = strings.TrimSpace(status); status != "" {
+					parsed.Statuses = append(parsed.Statuses, status)
+				}
+			}
+		case "--digest":
+			parsed.Digest = value
 		case "--run":
 			parsed.RunID = value
 		case "--host":
@@ -931,6 +985,9 @@ type parsedArgs struct {
 	Inputs         map[string]string
 	Format         string
 	Message        string
+	Workflow       string
+	Statuses       []string
+	Digest         string
 	IdempotencyKey string
 	RunID          string
 	Host           string
@@ -944,6 +1001,7 @@ type parsedArgs struct {
 	PageAll        bool
 	All            bool
 	Force          bool
+	ByVersion      bool
 	Help           bool
 }
 
@@ -1029,7 +1087,7 @@ func stdoutTTY() bool {
 }
 
 func runPayload(run *model.Run) map[string]any {
-	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "status": run.State.Status, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
 	if run.State.StartedAt != "" {
 		payload["started_at"] = run.State.StartedAt
 	}
@@ -1068,11 +1126,12 @@ func commandSchema() map[string]any {
 	commands := []map[string]any{
 		{"name": "workflow validate", "description": "Validate a workflow JSON definition.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{formatFlag}, "examples": []string{"agentflow workflow validate workflow.json --format json"}},
 		{"name": "run start", "description": "Create and execute a workflow run.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--input", "key=value", "Workflow input; repeat for multiple inputs", false), flag("--idempotency-key", "string", "Stable request token used to safely retry a start", false), flag("--dry-run", "boolean", "Preview without creating or executing a run", false), formatFlag}, "examples": []string{"agentflow run start workflow.json --input issue=ABC-123 --idempotency-key 7f9c2b1e-4d9c-4f4e-8bb2-8b3d7d6d0a11"}},
-		{"name": "run list", "description": "List workflow runs.", "flags": []map[string]any{flag("--page-size", "integer", "Maximum number of runs to return", false), flag("--page-all", "boolean", "Return every run", false), formatFlag}},
+		{"name": "run list", "description": "List workflow runs, newest first.", "flags": []map[string]any{flag("--workflow", "string", "Only runs of this workflow name", false), flag("--status", "comma-separated", "Only runs with these statuses", false), flag("--page-size", "integer", "Maximum number of runs to return", false), flag("--page-all", "boolean", "Return every run", false), formatFlag}},
+		{"name": "run latest", "description": "Get the newest run of a workflow; exits 3 when there is none.", "arguments": []map[string]any{{"name": "workflow-name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--status", "comma-separated", "Only consider runs with these statuses", false), formatFlag}, "examples": []string{"agentflow run latest release-window --status succeeded,failed --format json"}},
 		{"name": "run get", "description": "Get one run and its node states.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run logs", "description": "Read the append-only event log.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run metrics", "description": "Get one run's timing, attempts, and byte metrics.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
-		{"name": "run stats", "description": "Aggregate metrics across runs, optionally filtered by workflow name.", "arguments": []map[string]any{{"name": "workflow-name", "required": false, "type": "string"}}, "flags": []map[string]any{formatFlag}},
+		{"name": "run stats", "description": "Aggregate metrics across runs, optionally filtered by workflow name and version. Run-level distributions cover finished runs and split wall-clock time into active and human waiting time.", "arguments": []map[string]any{{"name": "workflow-name", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--digest", "string", "Only runs of this workflow version", false), flag("--by-version", "boolean", "Return one aggregate per workflow version, oldest first", false), formatFlag}},
 		{"name": "run approve", "description": "Approve a waiting human node and continue the run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Approval message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run reject", "description": "Reject a waiting human node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Rejection message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run resume", "description": "Resume a persisted run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview pending nodes without executing them", false), formatFlag}},
@@ -1092,7 +1151,7 @@ func commandSchema() map[string]any {
 
 func isRunVerb(value string) bool {
 	switch value {
-	case "start", "list", "get", "logs", "metrics", "stats", "approve", "reject", "resume", "cancel":
+	case "start", "list", "latest", "get", "logs", "metrics", "stats", "approve", "reject", "resume", "cancel":
 		return true
 	default:
 		return false
@@ -1181,11 +1240,12 @@ func printRunHelp() {
 
 Verbs:
   start <workflow.json>   Execute a workflow
-  list                    List runs
+  list                    List runs, newest first (--workflow, --status)
+  latest <workflow-name>  Get the newest run of a workflow (--status)
   get <run-id>            Get one run
   logs <run-id>           Read events
   metrics <run-id>        Show timing and size metrics
-  stats [workflow-name]   Aggregate metrics across runs
+  stats [workflow-name]   Aggregate metrics (--digest, --by-version)
   approve <run-id> <node-id> [message]
   reject <run-id> <node-id> [message]
   resume <run-id>

@@ -30,7 +30,7 @@ func CreateRun(root string, workflow model.Workflow, inputs map[string]string, i
 	}
 	now := time.Now().UTC().Format(time.RFC3339Nano)
 	run := &model.Run{RunID: runID, RunDir: runDir, Workflow: workflow, State: model.RunState{
-		RunID: runID, WorkflowName: workflow.Name, Status: "pending", Inputs: inputs, IdempotencyKey: idempotencyKey, Nodes: nodes, CreatedAt: now, UpdatedAt: now,
+		RunID: runID, WorkflowName: workflow.Name, WorkflowDigest: model.Digest(workflow), Status: "pending", Inputs: inputs, IdempotencyKey: idempotencyKey, Nodes: nodes, CreatedAt: now, UpdatedAt: now,
 	}}
 	if err := writeJSON(filepath.Join(runDir, "workflow.json"), workflow); err != nil {
 		return nil, err

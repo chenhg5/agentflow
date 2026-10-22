@@ -259,9 +259,20 @@ agentflow run get <run-id> --format json
 ```bash
 agentflow run stats --format json
 agentflow run stats release-review --format json
+agentflow run stats release-review --by-version --format json
+agentflow run stats release-review --digest <workflow_digest> --format json
 ```
 
-聚合结果包括成功/失败/等待审批/取消数量，run 和节点耗时的平均值、P50、P95、最大值，以及输入、输出和日志字节总量。用它回答“哪个节点最慢”“审批等待占多少时间”“输出是否异常膨胀”“失败是否集中在某个节点”。
+聚合结果包括成功/失败/等待审批/取消数量，run 和节点耗时的平均值、P50、P95、最大值，以及输入、输出和日志字节总量。run 级别的 `duration_ms` 只统计已结束的 run，并拆成 `active_ms`（执行）和 `waiting_ms`（等人）两部分，所以还在等审批的 run 不会拉高平均值。
+
+每个 run 都记录 `workflow_digest`：workflow 定义内容的哈希（只改格式不变，改了节点、契约或输入就会变）。`--by-version` 按版本分组、按首次运行时间排序，用来比较改流程前后的效果。
+
+查询某个 workflow 的最新结果时用稳定命令，不要读取 `.agentflow/runs/*/state.json`：
+
+```bash
+agentflow run latest release-review --status succeeded,failed --format json   # 没有匹配时退出码 3
+agentflow run list --workflow release-review --status waiting_human --format json
+```用它回答“哪个节点最慢”“审批等待占多少时间”“输出是否异常膨胀”“失败是否集中在某个节点”。
 
 ## 8. Web 可视化
 
@@ -279,7 +290,18 @@ agentflow web --run <run-id>
 
 Web 页面会显示节点依赖、节点类型、状态、耗时、attempts 和输出大小；run 页面会每两秒刷新一次状态。CLI 会打印本地 URL。可以用 `--port 0` 选择可用端口，用 `--host 0.0.0.0` 暴露到局域网时必须确认网络访问范围。
 
-## 9. Cron 和 webhook trigger
+## 9. 谁来启动 workflow
+
+workflow 本身是完整的，谁启动它只是入口。以下方式等价，按用户已有的东西选：
+
+- Claude Code 或 Codex 自己的定时任务唤醒 agent，agent 调 `agentflow run start <workflow.json> --idempotency-key <窗口标识>`，再用 `agentflow run latest <name>` 看结果；
+- 系统 cron / launchd / CI 调 `agentflow run start` 或 `agentflow trigger fire`；
+- `agentflow trigger serve` 常驻处理 cron 和 webhook（下文）；
+- 人直接在命令行启动。
+
+幂等 key 用“这次唤醒对应的业务窗口”，例如 `release-2026-10-23-beta`，这样重复唤醒不会重复执行。
+
+### Cron 和 webhook trigger
 
 Trigger 配置放在 `.agentflow/triggers.json`，不是 workflow JSON。先检查再运行服务：
 
@@ -310,7 +332,7 @@ Webhook 默认是 `POST` 到 trigger 的 `source.path`。使用 `source.auth` �
 4. 根据字节数判断 prompt/result/log 是否过大；不要用 stdout 文本猜结构化输出。
 5. 调整 workflow：拆分过大的 prompt、增加明确的 result schema、设置合理 timeout/retry、减少不必要的人审节点。
 6. 重新 `workflow validate`、`run start --dry-run`，再用新的幂等 key 执行。
-7. 保留前后两次 `run stats`，比较 P95、失败数、attempts 和字节量是否改善。
+7. 用 `run stats <workflow-name> --by-version` 比较修改前后两个版本的 P95、`active_ms`、`waiting_ms`、失败数、attempts 和字节量是否改善。
 
 ## 10. 与用户协作的交付格式
 
