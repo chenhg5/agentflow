@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -323,7 +324,9 @@ func runCommand(args []string, root, cwd string) error {
 	case "resume":
 		return runResume(parsed, root, cwd)
 	case "cancel":
-		return runCancel(parsed, root)
+		return runCancel(parsed, root, cwd)
+	case "retry":
+		return runRetry(parsed, root, cwd)
 	default:
 		return usageError("unsupported run action", "Use `agentflow run --help` to list actions.", "run_action")
 	}
@@ -577,83 +580,71 @@ func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 	if err != nil {
 		return notFoundError("run", parsed.Positionals[0], parsed.Format)
 	}
-	node, ok := run.State.Nodes[parsed.Positionals[1]]
+	nodeID := parsed.Positionals[1]
+	node, ok := run.State.Nodes[nodeID]
 	if !ok {
-		return notFoundError("node", parsed.Positionals[1], parsed.Format)
+		return notFoundError("node", nodeID, parsed.Format)
 	}
 	if node.Status != "waiting_human" {
-		return conflictError(fmt.Sprintf("node %s is not waiting for human input", parsed.Positionals[1]), "Inspect the run before approving it.", parsed.Format)
+		return conflictError(fmt.Sprintf("node %s is not waiting for human input", nodeID), "Inspect the run before approving it.", parsed.Format)
 	}
 	message := parsed.Message
 	if message == "" && len(parsed.Positionals) > 2 {
 		message = strings.Join(parsed.Positionals[2:], " ")
 	}
 	if parsed.DryRun {
-		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run." + verb, "run_id": run.RunID, "node_id": parsed.Positionals[1], "decision": verb, "message": message}, parsed.Output()); err != nil {
+		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run." + verb, "run_id": run.RunID, "node_id": nodeID, "decision": verb, "message": message}, parsed.Output()); err != nil {
 			return err
 		}
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
-	node.Result = map[string]any{"decision": verb, "message": message}
 	for _, definition := range run.Workflow.Nodes {
-		if definition.ID != parsed.Positionals[1] {
+		if definition.ID != nodeID {
 			continue
 		}
-		if problems := schema.ValidateValue("output", node.Result, schema.EffectiveOutputSchema(definition)); len(problems) > 0 {
+		if problems := schema.ValidateValue("output", map[string]any{"decision": verb, "message": message}, schema.EffectiveOutputSchema(definition)); len(problems) > 0 {
 			return &CommandError{Code: ExitUsageError, Kind: "invalid_human_output", Message: schema.FormatContractErrors("human decision does not satisfy output schema", problems), Suggestion: "Adjust the approval message or remove the incompatible output schema.", Format: parsed.Format}
 		}
 		break
 	}
-	node.Attempts = 1
-	resultBytes, marshalErr := json.Marshal(node.Result)
-	if marshalErr != nil {
-		return internalError(marshalErr)
-	}
-	node.OutputBytes = int64(len(resultBytes))
-	resultArtifact := parsed.Positionals[1] + ".result.json"
-	if err := store.WriteArtifact(run.RunDir, resultArtifact, append(resultBytes, '\n')); err != nil {
+	return enqueueAndExecute(run, model.Control{Kind: verb, NodeID: nodeID, Message: message}, parsed, cwd)
+}
+
+// enqueueAndExecute hands a request to the run's executor. When another
+// process is executing the run, the request stays queued for it and the
+// current state is returned with queued=true.
+func enqueueAndExecute(run *model.Run, control model.Control, parsed parsedArgs, cwd string) error {
+	if err := store.EnqueueControl(run.RunDir, control); err != nil {
 		return internalError(err)
 	}
-	if node.Artifacts == nil {
-		node.Artifacts = map[string]string{}
-	}
-	node.Artifacts["result"] = "artifacts/" + filepath.ToSlash(resultArtifact)
-	node.FinishedAt = now()
-	metrics.RefreshNode(node, time.Now().UTC())
-	if verb == "approve" {
-		node.Status = "succeeded"
-	} else {
-		node.Status = "failed"
-	}
-	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "node." + verb + "d", "nodeId": parsed.Positionals[1], "message": message}); err != nil {
-		return internalError(err)
-	}
-	if verb == "reject" {
-		run.State.Status = "failed"
-		metrics.MarkRunFinished(&run.State, time.Now().UTC())
-		if err := store.SaveState(run); err != nil {
-			return internalError(err)
-		}
-		if err := writeData(runPayload(run), parsed.Output()); err != nil {
-			return err
-		}
-		return &CommandError{Code: ExitGeneralError, Kind: "workflow_rejected", Message: "workflow rejected", Retryable: false, Format: parsed.Format, Silent: true}
-	}
-	if err := store.SaveState(run); err != nil {
-		return internalError(err)
-	}
+	return executeRun(run, parsed, cwd, true)
+}
+
+func executeRun(run *model.Run, parsed parsedArgs, cwd string, queueOnBusy bool) error {
 	providers, err := driver.LoadProviders(cwd)
 	if err != nil {
 		return internalError(err)
 	}
-	if err := engine.Execute(run, providers); err != nil {
+	err = engine.Execute(run, providers)
+	if errors.Is(err, store.ErrRunBusy) {
+		if !queueOnBusy {
+			return conflictError(err.Error(), "Wait for the executing process to pause, or inspect it with `agentflow run get`.", parsed.Format)
+		}
+		if reloadErr := store.ReloadState(run); reloadErr != nil {
+			return internalError(reloadErr)
+		}
+		payload := runPayload(run)
+		payload["queued"] = true
+		return writeData(payload, parsed.Output())
+	}
+	if err != nil {
 		return internalError(err)
 	}
 	if err := writeData(runPayload(run), parsed.Output()); err != nil {
 		return err
 	}
 	if run.State.Status == "failed" {
-		return &CommandError{Code: ExitGeneralError, Kind: "workflow_failed", Message: "workflow failed", Format: parsed.Format, Silent: true}
+		return &CommandError{Code: ExitGeneralError, Kind: "workflow_failed", Message: "workflow failed", Suggestion: fmt.Sprintf("Inspect with `agentflow run get %s`, then `agentflow run retry %s` after fixing the cause.", run.RunID, run.RunID), Format: parsed.Format, Silent: true}
 	}
 	return nil
 }
@@ -669,7 +660,7 @@ func runResume(parsed parsedArgs, root, cwd string) error {
 	if parsed.DryRun {
 		pending := make([]string, 0)
 		for id, node := range run.State.Nodes {
-			if node.Status == "pending" {
+			if node.Status == "pending" || node.Status == "running" {
 				pending = append(pending, id)
 			}
 		}
@@ -679,23 +670,31 @@ func runResume(parsed parsedArgs, root, cwd string) error {
 		}
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
-	providers, err := driver.LoadProviders(cwd)
-	if err != nil {
-		return internalError(err)
-	}
-	if err := engine.Execute(run, providers); err != nil {
-		return internalError(err)
-	}
-	if err := writeData(runPayload(run), parsed.Output()); err != nil {
-		return err
-	}
-	if run.State.Status == "failed" {
-		return &CommandError{Code: ExitGeneralError, Kind: "workflow_failed", Message: "workflow failed", Format: parsed.Format, Silent: true}
-	}
-	return nil
+	return executeRun(run, parsed, cwd, false)
 }
 
-func runCancel(parsed parsedArgs, root string) error {
+func runRetry(parsed parsedArgs, root, cwd string) error {
+	if len(parsed.Positionals) != 1 {
+		return usageError("run id is required", "Run `agentflow run retry <run-id> [--from node-id]`.", "run_id")
+	}
+	run, err := store.LoadRun(root, parsed.Positionals[0])
+	if err != nil {
+		return notFoundError("run", parsed.Positionals[0], parsed.Format)
+	}
+	nodes, err := engine.RetryPlan(run, parsed.From)
+	if err != nil {
+		return conflictError(err.Error(), "Pass `--from <node-id>` to choose where to restart.", parsed.Format)
+	}
+	if parsed.DryRun {
+		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.retry", "run_id": run.RunID, "reset_nodes": nodes}, parsed.Output()); err != nil {
+			return err
+		}
+		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
+	}
+	return enqueueAndExecute(run, model.Control{Kind: engine.ControlRetry, Nodes: parsed.From}, parsed, cwd)
+}
+
+func runCancel(parsed parsedArgs, root, cwd string) error {
 	if len(parsed.Positionals) != 1 {
 		return usageError("run id is required", "Run `agentflow run cancel <run-id>`.", "run_id")
 	}
@@ -709,15 +708,7 @@ func runCancel(parsed parsedArgs, root string) error {
 		}
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
-	run.State.Status = "cancelled"
-	metrics.MarkRunFinished(&run.State, time.Now().UTC())
-	if err := store.SaveState(run); err != nil {
-		return internalError(err)
-	}
-	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "run.cancelled", "runId": run.RunID}); err != nil {
-		return internalError(err)
-	}
-	return writeData(runPayload(run), parsed.Output())
+	return enqueueAndExecute(run, model.Control{Kind: engine.ControlCancel}, parsed, cwd)
 }
 
 func configCommand(args []string, cwd string) error {
@@ -933,6 +924,12 @@ func parseArgs(args []string) (parsedArgs, error) {
 			}
 		case "--digest":
 			parsed.Digest = value
+		case "--from":
+			for _, node := range strings.Split(value, ",") {
+				if node = strings.TrimSpace(node); node != "" {
+					parsed.From = append(parsed.From, node)
+				}
+			}
 		case "--run":
 			parsed.RunID = value
 		case "--host":
@@ -988,6 +985,7 @@ type parsedArgs struct {
 	Workflow       string
 	Statuses       []string
 	Digest         string
+	From           []string
 	IdempotencyKey string
 	RunID          string
 	Host           string
@@ -1135,6 +1133,7 @@ func commandSchema() map[string]any {
 		{"name": "run approve", "description": "Approve a waiting human node and continue the run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Approval message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run reject", "description": "Reject a waiting human node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Rejection message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run resume", "description": "Resume a persisted run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview pending nodes without executing them", false), formatFlag}},
+		{"name": "run retry", "description": "Reset failed nodes (or --from nodes) and everything downstream, keep other results, and continue the run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--from", "comma-separated", "Nodes to restart from; default is every failed node", false), flag("--dry-run", "boolean", "List the nodes that would be reset", false), formatFlag}},
 		{"name": "run cancel", "description": "Cancel a run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "schema", "description": "Inspect command metadata or workflow/trigger schemas.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "trigger", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
 		{"name": "config init", "description": "Create local provider configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
@@ -1151,7 +1150,7 @@ func commandSchema() map[string]any {
 
 func isRunVerb(value string) bool {
 	switch value {
-	case "start", "list", "latest", "get", "logs", "metrics", "stats", "approve", "reject", "resume", "cancel":
+	case "start", "list", "latest", "get", "logs", "metrics", "stats", "approve", "reject", "resume", "retry", "cancel":
 		return true
 	default:
 		return false
@@ -1248,7 +1247,8 @@ Verbs:
   stats [workflow-name]   Aggregate metrics (--digest, --by-version)
   approve <run-id> <node-id> [message]
   reject <run-id> <node-id> [message]
-  resume <run-id>
+  resume <run-id>         Continue pending nodes (also recovers nodes orphaned by a crash)
+  retry <run-id>          Re-run failed nodes and everything downstream (--from a,b)
   cancel <run-id>
 
 Common flags:

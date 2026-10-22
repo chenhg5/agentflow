@@ -7,7 +7,7 @@ It uses a small JSON workflow definition, persists every run under `.agentflow/`
 The current release is `v0.0.3` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
 
 For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
-The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md).
+The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md). Scheduling, `runIf`, human waits, retry, and crash recovery are documented in [`docs/execution-semantics.md`](docs/execution-semantics.md).
 
 ## Install
 
@@ -175,10 +175,11 @@ go build -o agentflow ./cmd/agentflow
 
 - JSON workflow validation
 - shell, agent, and human nodes
-- dependency ordering and conditional `when` expressions
-- retries, timeouts, and persisted run state
+- parallel execution of independent nodes (`maxParallel`), conditional `when` expressions, and `runIf: success | failure | always`
+- failure isolation: a failed node only skips its own dependents
+- retries, timeouts, persisted run state, `run retry` from failed nodes, and crash recovery on `run resume`
 - structured JSON node results with separate stdout/stderr log artifacts
 - explicit node input/output schemas with runtime validation
-- human approve/reject/resume
+- human approve/reject/resume; waiting for a human does not block independent branches
 - built-in Claude Code and Codex providers, including workspace and existing-session resume
 - cron/webhook triggers with durable dispatch and idempotent deliveries

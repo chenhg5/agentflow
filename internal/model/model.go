@@ -1,10 +1,11 @@
 package model
 
 type Workflow struct {
-	Version string                     `json:"version"`
-	Name    string                     `json:"name"`
-	Inputs  map[string]InputDefinition `json:"inputs,omitempty"`
-	Nodes   []Node                     `json:"nodes"`
+	Version     string                     `json:"version"`
+	Name        string                     `json:"name"`
+	Inputs      map[string]InputDefinition `json:"inputs,omitempty"`
+	MaxParallel int                        `json:"maxParallel,omitempty"`
+	Nodes       []Node                     `json:"nodes"`
 }
 
 type InputDefinition struct {
@@ -45,6 +46,7 @@ type Node struct {
 	InputMapping map[string]string `json:"inputMapping,omitempty"`
 	Needs        []string          `json:"needs,omitempty"`
 	When         string            `json:"when,omitempty"`
+	RunIf        string            `json:"runIf,omitempty"`
 	TimeoutMs    int               `json:"timeoutMs,omitempty"`
 	Retry        Retry             `json:"retry,omitempty"`
 	Result       *ResultSpec       `json:"result,omitempty"`
@@ -94,6 +96,17 @@ type TriggerInfo struct {
 	DeliveryID  string `json:"deliveryId,omitempty"`
 	ScheduledAt string `json:"scheduledAt,omitempty"`
 	ReceivedAt  string `json:"receivedAt,omitempty"`
+}
+
+// Control is a request for a run's executor. Commands that change a running
+// workflow (approve, reject, cancel, retry) enqueue a control instead of
+// writing run state, so the executor stays the only writer.
+type Control struct {
+	Kind    string   `json:"kind"`
+	NodeID  string   `json:"nodeId,omitempty"`
+	Nodes   []string `json:"nodes,omitempty"`
+	Message string   `json:"message,omitempty"`
+	At      string   `json:"at"`
 }
 
 type Run struct {

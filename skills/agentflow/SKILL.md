@@ -69,8 +69,9 @@ agentflow schema workflow --format json
 
 - `shell`：使用 `command`，适合确定性的脚本和校验。
 - `agent`：使用 `provider`、`prompt`、可选的 `workspace` 和 `session`。
-- `human`：使用 `prompt`，运行后状态为 `waiting_human`，必须通过 CLI 决策才能继续。
-- `needs`：声明依赖节点 ID。
+- `human`：使用 `prompt`，运行后状态为 `waiting_human`，必须通过 CLI 决策才能继续。等待期间不阻塞其他不相关的分支。
+- `needs`：声明依赖节点 ID。没有依赖关系的节点会并行执行，workflow 顶层 `maxParallel` 控制并发上限（默认 4）。
+- `runIf`：`success`（默认，所有依赖成功才执行）、`failure`（上游有节点失败时执行，用于告警）、`always`（依赖都结束就执行，用于回执/清理）。一个节点失败只会跳过它的下游，独立分支继续跑。不要再写“脚本永远返回成功”来保证回执执行，改用 `runIf: always`。
 - `when`：根据 `inputs` 或上游 `result` 做条件跳过。
 - `retry.maxAttempts`：包含首次执行在内的最大尝试次数。
 - `timeoutMs`：单次命令超时。
@@ -208,14 +209,24 @@ agentflow run approve <run-id> <node-id> --message "approved" --format json
 agentflow run reject <run-id> <node-id> --message "需要修改" --format json
 ```
 
-审批命令由 Runner 推进下游节点。不要让 agent 直接修改 `.agentflow/runs/<run-id>/state.json`，也不要让 agent 自己启动下一个节点。
+审批命令由 Runner 推进下游节点。不要让 agent 直接修改 `.agentflow/runs/<run-id>/state.json`，也不要让 agent 自己启动下一个节点。如果 run 正在被另一个进程执行，审批/取消会排队并返回 `"queued": true`，执行中的进程会在约 500ms 内应用。拒绝会让该节点失败：下游被跳过，`runIf: failure/always` 的节点照常执行。
 
-如果进程被中断，先查看状态，再恢复：
+如果进程被中断，先查看状态，再恢复（中断时处于 running 的节点会重新执行）：
 
 ```bash
 agentflow run resume <run-id> --dry-run --format json
 agentflow run resume <run-id> --format json
 ```
+
+修复失败原因后，只重跑失败节点和它的下游，其他节点的结果保留：
+
+```bash
+agentflow run retry <run-id> --dry-run --format json   # 查看会重置哪些节点
+agentflow run retry <run-id> --format json
+agentflow run retry <run-id> --from publish --format json
+```
+
+完整规则见 `docs/execution-semantics.md`。
 
 ## 7. 观测单次执行和历史效率
 

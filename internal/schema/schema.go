@@ -10,6 +10,8 @@ import (
 
 var allowedTypes = map[string]bool{"shell": true, "agent": true, "human": true}
 
+var allowedRunIf = map[string]bool{"": true, "success": true, "failure": true, "always": true}
+
 func Validate(workflow model.Workflow) []string {
 	errors := []string{}
 	if workflow.Version != "1" {
@@ -17,6 +19,9 @@ func Validate(workflow model.Workflow) []string {
 	}
 	if workflow.Name == "" {
 		errors = append(errors, "name is required")
+	}
+	if workflow.MaxParallel < 0 {
+		errors = append(errors, "maxParallel must be a positive integer")
 	}
 	if len(workflow.Nodes) == 0 {
 		return append(errors, "nodes must be a non-empty array")
@@ -38,6 +43,12 @@ func Validate(workflow model.Workflow) []string {
 		}
 		if node.Type == "agent" && node.Provider == "" {
 			errors = append(errors, fmt.Sprintf("agent node %s needs a provider", node.ID))
+		}
+		if !allowedRunIf[node.RunIf] {
+			errors = append(errors, fmt.Sprintf(`node %s runIf must be "success", "failure", or "always"`, node.ID))
+		}
+		if node.RunIf != "" && node.RunIf != "success" && len(node.Needs) == 0 {
+			errors = append(errors, fmt.Sprintf("node %s uses runIf %s but has no needs", node.ID, node.RunIf))
 		}
 		if node.Session != "" && node.Type != "agent" {
 			errors = append(errors, fmt.Sprintf("session is only supported on agent node %s", node.ID))

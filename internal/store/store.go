@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/model"
@@ -88,7 +89,12 @@ func SaveState(run *model.Run) error {
 	return writeJSON(filepath.Join(run.RunDir, "state.json"), run.State)
 }
 
+// eventMu keeps concurrent node workers from interleaving event lines.
+var eventMu sync.Mutex
+
 func AppendEvent(runDir string, event map[string]any) error {
+	eventMu.Lock()
+	defer eventMu.Unlock()
 	event["at"] = time.Now().UTC().Format(time.RFC3339Nano)
 	data, err := json.Marshal(event)
 	if err != nil {
@@ -165,4 +171,14 @@ func randomSuffix() string {
 		return fmt.Sprintf("%x", buffer)
 	}
 	return fmt.Sprintf("%08x", time.Now().UnixNano()&0xffffffff)
+}
+
+// ReloadState replaces the in-memory run state with the persisted one.
+func ReloadState(run *model.Run) error {
+	var state model.RunState
+	if err := readJSON(filepath.Join(run.RunDir, "state.json"), &state); err != nil {
+		return err
+	}
+	run.State = state
+	return nil
 }

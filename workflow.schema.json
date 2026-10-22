@@ -8,6 +8,7 @@
     "version": { "const": "1" },
     "name": { "type": "string", "minLength": 1 },
     "inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/input" } },
+    "maxParallel": { "type": "integer", "minimum": 1, "description": "Maximum nodes running at once; default 4" },
     "nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/node" } }
   },
   "$defs": {
@@ -45,6 +46,7 @@
         },
         "needs": { "type": "array", "items": { "type": "string" } },
         "when": { "type": "string" },
+        "runIf": { "enum": ["success", "failure", "always"], "description": "success (default): all needs succeeded; failure: an upstream node failed; always: all needs finished" },
         "retry": { "type": "object", "properties": { "maxAttempts": { "type": "integer", "minimum": 1 } }, "additionalProperties": false }
       },
       "additionalProperties": false

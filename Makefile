@@ -33,6 +33,7 @@ test-real: build
 
 test-e2e: build
 	./scripts/e2e-contract-smoke.sh
+	./scripts/e2e-execution-smoke.sh
 	./scripts/e2e-trigger-smoke.sh
 
 test-e2e-triggers: build
