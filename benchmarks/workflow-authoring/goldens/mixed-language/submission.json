@@ -1,0 +1,7 @@
+{
+  "workflow": "workflow.json",
+  "roles": {
+    "collect": "collect",
+    "report": "report"
+  }
+}

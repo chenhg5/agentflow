@@ -2,8 +2,8 @@
 set -euo pipefail
 
 # Deterministic CLI-level end-to-end test for workflow contracts. It does not
-# call a model provider; shell nodes exercise runner, persistence, schema
-# validation, handoff, and human approval paths.
+# call a model executor; process invocations exercise runner, persistence, schema
+# validation, explicit data binding, and external output submission.
 ROOT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 AGENTFLOW_BIN=${AGENTFLOW_BIN:-"$ROOT_DIR/bin/agentflow"}
 KEEP_WORKSPACE=${AGENTFLOW_KEEP_WORKSPACE:-0}
@@ -26,77 +26,181 @@ trap cleanup EXIT
 
 cat > "$WORKSPACE/contracts.json" <<'JSON'
 {
-  "version": "1",
+  "version": "2",
   "name": "e2e-contracts",
+  "entry": "produce",
   "nodes": [
     {
       "id": "produce",
-      "type": "shell",
-      "command": ["sh", "-c", "printf '{\"summary\":\"fixture ok\",\"count\":2}' > \"$AGENTFLOW_RESULT_FILE\""],
-      "outputFields": [
-        {"name": "summary", "type": "string", "required": true},
-        {"name": "count", "type": "integer", "required": true}
-      ]
+      "executor": "process",
+      "input": {
+        "command": [
+          "sh",
+          "-c",
+          "printf '{\"summary\":\"fixture ok\",\"count\":2}' > \"$AGENTFLOW_RESULT_FILE\""
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "summary",
+          "count"
+        ],
+        "additionalProperties": false
+      }
     },
     {
       "id": "verify",
-      "type": "shell",
-      "needs": ["produce"],
-      "inputFields": [
-        {"name": "summary", "type": "string", "required": true},
-        {"name": "count", "type": "integer", "required": true}
-      ],
-      "inputMapping": {"count": "$node.produce.output.count"},
-      "command": ["sh", "-c", "printf '{\"verified\":true}' > \"$AGENTFLOW_RESULT_FILE\""],
-      "outputFields": [
-        {"name": "verified", "type": "boolean", "required": true}
-      ]
+      "executor": "process",
+      "input": {
+        "command": [
+          "sh",
+          "-c",
+          "printf '{\"verified\":true}' > \"$AGENTFLOW_RESULT_FILE\""
+        ],
+        "summary": "{{ nodes.produce.result.summary }}",
+        "count": "{{ nodes.produce.result.count }}"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "verified": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "verified"
+        ],
+        "additionalProperties": false
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "array"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "count": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "command",
+          "summary",
+          "count"
+        ],
+        "additionalProperties": false
+      }
     },
     {
       "id": "approval",
-      "type": "human",
-      "needs": ["verify"],
-      "prompt": "Approve the deterministic contract result.",
-      "inputFields": [
-        {"name": "verified", "type": "boolean", "required": true}
-      ],
-      "outputFields": [
-        {"name": "decision", "type": "string", "required": true},
-        {"name": "message", "type": "string", "required": true}
-      ]
+      "executor": "external",
+      "input": {
+        "verified": "{{ nodes.verify.result.verified }}"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "choice": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "choice",
+          "note"
+        ],
+        "additionalProperties": false
+      }
     },
     {
       "id": "finish",
-      "type": "shell",
-      "needs": ["approval"],
-      "inputFields": [
-        {"name": "decision", "type": "string", "required": true},
-        {"name": "message", "type": "string", "required": true}
-      ],
-      "command": ["sh", "-c", "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""],
-      "outputFields": [
-        {"name": "done", "type": "boolean", "required": true}
-      ]
+      "executor": "process",
+      "input": {
+        "command": [
+          "sh",
+          "-c",
+          "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""
+        ],
+        "choice": "{{ nodes.approval.result.choice }}",
+        "note": "{{ nodes.approval.result.note }}"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "produce",
+      "to": "verify"
+    },
+    {
+      "from": "verify",
+      "to": "approval"
+    },
+    {
+      "from": "approval",
+      "to": "finish",
+      "when": "nodes.approval.result.choice == 'happy'"
+    },
+    {
+      "from": "approval",
+      "to": "$end"
+    },
+    {
+      "from": "finish",
+      "to": "$end"
     }
   ]
 }
 JSON
-
 cat > "$WORKSPACE/invalid.json" <<'JSON'
 {
-  "version": "1",
+  "version": "2",
   "name": "e2e-invalid-contract",
-  "nodes": [{
-    "id": "bad",
-    "type": "shell",
-    "command": ["sh", "-c", "printf '{\"slug\":\"NOT-valid\"}' > \"$AGENTFLOW_RESULT_FILE\""],
-    "outputSchema": {
-      "type": "object",
-      "required": ["slug"],
-      "properties": {"slug": {"type": "string", "pattern": "^[a-z]+$"}},
-      "additionalProperties": false
+  "entry": "bad",
+  "nodes": [
+    {
+      "id": "bad",
+      "executor": "process",
+      "input": {
+        "command": [
+          "sh",
+          "-c",
+          "printf '{\"slug\":\"NOT-valid\"}' > \"$AGENTFLOW_RESULT_FILE\""
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "slug": {
+            "type": "string",
+            "pattern": "^[a-z]+$"
+          }
+        },
+        "required": [
+          "slug"
+        ],
+        "additionalProperties": false
+      }
     }
-  }]
+  ],
+  "edges": [
+    {
+      "from": "bad",
+      "to": "$end"
+    }
+  ]
 }
 JSON
 
@@ -106,15 +210,15 @@ jq -e '.valid == true' validate.json >/dev/null
 
 "$AGENTFLOW_BIN" run start contracts.json --format json > waiting.json
 RUN_ID=$(jq -r '.run_id' waiting.json)
-jq -e '.status == "waiting_human" and .nodes.produce.status == "succeeded" and .nodes.verify.status == "succeeded" and .nodes.approval.status == "waiting_human"' waiting.json >/dev/null
+jq -e '.status == "waiting_input" and .nodes.produce.status == "succeeded" and .nodes.verify.status == "succeeded" and .nodes.approval.status == "waiting_input"' waiting.json >/dev/null
 
-INPUT_ARTIFACT=".agentflow/runs/$RUN_ID/artifacts/verify.input.json"
+INPUT_ARTIFACT=".agentflow/runs/$RUN_ID/artifacts/verify.1.input.json"
 jq -e '.summary == "fixture ok" and .count == 2' "$INPUT_ARTIFACT" >/dev/null
-jq -e '.nodes.verify.artifacts.input == "artifacts/verify.input.json"' waiting.json >/dev/null
+jq -e '.nodes.verify.artifacts.input == "artifacts/verify.1.input.json"' waiting.json >/dev/null
 
-"$AGENTFLOW_BIN" run approve "$RUN_ID" approval --message "e2e approved" --format json > succeeded.json
+"$AGENTFLOW_BIN" run submit "$RUN_ID" approval --output '{"choice":"happy","note":"e2e approved"}' --format json > succeeded.json
 jq -e '.status == "succeeded" and .nodes.finish.status == "succeeded" and .nodes.finish.result.done == true' succeeded.json >/dev/null
-jq -e '.nodes.finish.input.decision == "approve" and .nodes.finish.input.message == "e2e approved"' succeeded.json >/dev/null
+jq -e '.nodes.finish.input.choice == "happy" and .nodes.finish.input.note == "e2e approved"' succeeded.json >/dev/null
 
 set +e
 "$AGENTFLOW_BIN" run start invalid.json --format json > invalid-run.json

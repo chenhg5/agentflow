@@ -1,235 +1,156 @@
 package engine
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"testing"
-	"time"
 
 	"github.com/chenhg5/agentflow/internal/driver"
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/store"
 )
 
-func shellNode(id, script string, needs ...string) model.Node {
-	return model.Node{ID: id, Type: "shell", Command: []string{"sh", "-c", script}, Needs: needs}
-}
-
-const ok = `echo '{}' > "$AGENTFLOW_RESULT_FILE"`
-
-func newRun(t *testing.T, nodes ...model.Node) *model.Run {
+func graphRun(t *testing.T, limit int) *model.Run {
 	t.Helper()
-	run, err := store.CreateRun(t.TempDir(), model.Workflow{Version: "1", Name: "test", Nodes: nodes}, nil, "")
+	workflow := model.Workflow{Version: "2", Name: "review", Entry: "draft", Nodes: []model.Node{
+		{ID: "draft", Executor: "process", Input: map[string]any{"command": []string{"sh", "-c", `printf '{"summary":"draft"}' > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "review", Input: map[string]any{"text": "Review {{ nodes.draft.result.summary }}"}, Executor: "external"},
+		{ID: "finalize", Executor: "process", Input: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
+	}, Edges: []model.Transition{
+		{From: "draft", To: "review"},
+		{From: "review", To: "finalize", When: "nodes.review.result.decision == 'happy'"},
+		{From: "review", To: "draft", When: "nodes.review.result.decision == 'again'", MaxIterations: limit},
+		{From: "review", To: "$end", When: "nodes.review.result.decision == 'sad'"},
+		{From: "finalize", To: "$end"},
+	}}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	return run
 }
 
-func mustExecute(t *testing.T, run *model.Run) {
+func executeTestRun(t *testing.T, run *model.Run) {
 	t.Helper()
-	if err := Execute(run, map[string]driver.Provider{}); err != nil {
+	if err := Execute(run, map[string]driver.Executor{}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-func statuses(run *model.Run) map[string]string {
-	result := map[string]string{}
-	for id, node := range run.State.Nodes {
-		result[id] = node.Status
+func decide(t *testing.T, run *model.Run, kind, message string) {
+	t.Helper()
+	if err := store.EnqueueControl(run.RunDir, model.Control{Kind: ControlSubmit, Output: map[string]any{"decision": kind, "message": message}, NodeID: "review"}); err != nil {
+		t.Fatal(err)
 	}
-	return result
+	executeTestRun(t, run)
 }
 
-func expect(t *testing.T, run *model.Run, runStatus string, nodes map[string]string) {
-	t.Helper()
-	if run.State.Status != runStatus {
-		t.Fatalf("run status = %s, want %s (nodes %v)", run.State.Status, runStatus, statuses(run))
+func TestApproveFollowsNamedEdge(t *testing.T) {
+	run := graphRun(t, 2)
+	executeTestRun(t, run)
+	if run.State.Status != "waiting_input" || run.State.ActiveNode != "review" {
+		t.Fatalf("unexpected wait: %+v", run.State)
 	}
-	for id, want := range nodes {
-		if got := run.State.Nodes[id].Status; got != want {
-			t.Fatalf("node %s = %s, want %s (nodes %v)", id, got, want, statuses(run))
+	decide(t, run, "happy", "go")
+	if run.State.Status != "succeeded" || run.State.Outcome != "completed" || run.State.Nodes["finalize"].Status != "succeeded" {
+		t.Fatalf("approve did not reach finalize: %+v", run.State)
+	}
+}
+
+func TestRequestChangesRevisitsDraftAndKeepsHistory(t *testing.T) {
+	run := graphRun(t, 2)
+	executeTestRun(t, run)
+	decide(t, run, "again", "please improve")
+	if run.State.Status != "waiting_input" || run.State.Visits["draft"] != 2 || run.State.Visits["review"] != 2 {
+		t.Fatalf("request changes did not return to review: %+v", run.State)
+	}
+	if len(run.State.History) != 3 || run.State.History[1].State.Result.(map[string]any)["message"] != "please improve" {
+		t.Fatalf("visit history missing review feedback: %+v", run.State.History)
+	}
+	for _, name := range []string{"draft.1.result.json", "draft.2.result.json"} {
+		if _, err := os.Stat(filepath.Join(run.RunDir, "artifacts", name)); err != nil {
+			t.Fatal(err)
 		}
 	}
-}
-
-func TestIndependentNodesRunInParallel(t *testing.T) {
-	run := newRun(t,
-		shellNode("a", "sleep 0.6; "+ok),
-		shellNode("b", "sleep 0.6; "+ok),
-		shellNode("join", ok, "a", "b"),
-	)
-	started := time.Now()
-	mustExecute(t, run)
-	expect(t, run, "succeeded", map[string]string{"a": "succeeded", "b": "succeeded", "join": "succeeded"})
-	if elapsed := time.Since(started); elapsed > 1100*time.Millisecond {
-		t.Fatalf("independent nodes ran sequentially: %s", elapsed)
+	decide(t, run, "happy", "good")
+	if run.State.Status != "succeeded" || run.State.Nodes["finalize"].Status != "succeeded" {
+		t.Fatalf("approve after rework failed: %+v", run.State)
 	}
 }
 
-func TestMaxParallelLimitsConcurrency(t *testing.T) {
-	run := newRun(t, shellNode("a", "sleep 0.4; "+ok), shellNode("b", "sleep 0.4; "+ok))
-	run.Workflow.MaxParallel = 1
-	started := time.Now()
-	mustExecute(t, run)
-	if elapsed := time.Since(started); elapsed < 800*time.Millisecond {
-		t.Fatalf("maxParallel 1 should serialize nodes, took %s", elapsed)
+func TestRejectIsBusinessOutcome(t *testing.T) {
+	run := graphRun(t, 2)
+	executeTestRun(t, run)
+	decide(t, run, "sad", "no")
+	if run.State.Status != "succeeded" || run.State.Outcome != "completed" || run.State.Nodes["finalize"].Status != "skipped" {
+		t.Fatalf("reject followed wrong edge: %+v", run.State)
 	}
 }
 
-func TestFailureOnlySkipsDependentsAndRunIfPolicies(t *testing.T) {
-	notify := shellNode("notify", ok, "publish")
-	notify.RunIf = "failure"
-	receipt := shellNode("receipt", ok, "publish", "side")
-	receipt.RunIf = "always"
-	celebrate := shellNode("celebrate", ok, "side")
-	celebrate.RunIf = "failure"
-	run := newRun(t,
-		shellNode("build", "exit 3"),
-		shellNode("publish", ok, "build"),
-		shellNode("side", ok),
-		notify, receipt, celebrate,
-	)
-	mustExecute(t, run)
-	expect(t, run, "failed", map[string]string{
-		"build": "failed", "publish": "skipped", "side": "succeeded",
-		"notify": "succeeded", "receipt": "succeeded", "celebrate": "skipped",
-	})
-	if run.State.Nodes["publish"].Reason != "dependency_failed" || run.State.Nodes["celebrate"].Reason != "no_upstream_failure" {
-		t.Fatalf("unexpected skip reasons: %#v %#v", run.State.Nodes["publish"], run.State.Nodes["celebrate"])
+func TestReworkBoundStopsRun(t *testing.T) {
+	run := graphRun(t, 1)
+	executeTestRun(t, run)
+	decide(t, run, "again", "first")
+	decide(t, run, "again", "second")
+	if run.State.Status != "failed" || run.State.Outcome != "max_iterations" || run.State.Visits["draft"] != 2 {
+		t.Fatalf("bound not enforced: %+v", run.State)
 	}
 }
 
-func TestHumanWaitDoesNotBlockIndependentNodes(t *testing.T) {
-	run := newRun(t,
-		model.Node{ID: "gate", Type: "human", Prompt: "ship?"},
-		shellNode("work", ok),
-		shellNode("ship", ok, "gate", "work"),
-	)
-	mustExecute(t, run)
-	expect(t, run, "waiting_human", map[string]string{"gate": "waiting_human", "work": "succeeded", "ship": "pending"})
-
-	if err := store.EnqueueControl(run.RunDir, model.Control{Kind: ControlApprove, NodeID: "gate", Message: "go"}); err != nil {
-		t.Fatal(err)
-	}
-	mustExecute(t, run)
-	expect(t, run, "succeeded", map[string]string{"gate": "succeeded", "ship": "succeeded"})
-	if run.State.Nodes["gate"].WaitDurationMs <= 0 {
-		t.Fatal("human wait time should be recorded")
-	}
-}
-
-func TestRejectSkipsDependentsButRunsFailureHandlers(t *testing.T) {
-	alert := shellNode("alert", ok, "ship")
-	alert.RunIf = "failure"
-	run := newRun(t,
-		model.Node{ID: "gate", Type: "human", Prompt: "ship?"},
-		shellNode("ship", ok, "gate"),
-		alert,
-	)
-	mustExecute(t, run)
-	if err := store.EnqueueControl(run.RunDir, model.Control{Kind: ControlReject, NodeID: "gate"}); err != nil {
-		t.Fatal(err)
-	}
-	mustExecute(t, run)
-	expect(t, run, "failed", map[string]string{"gate": "failed", "ship": "skipped", "alert": "succeeded"})
-}
-
-func TestApprovalIsAppliedWhileAnotherBranchIsRunning(t *testing.T) {
-	run := newRun(t,
-		model.Node{ID: "gate", Type: "human", Prompt: "ship?"},
-		shellNode("ship", ok, "gate"),
-		shellNode("slow", "sleep 1.5; "+ok),
-	)
-	done := make(chan error, 1)
-	go func() { done <- Execute(run, map[string]driver.Provider{}) }()
-	waitFor(t, func() bool { return statusOnDisk(t, run.RunDir, "gate") == "waiting_human" })
-
-	// Another process (the CLI) finds the run busy and leaves the decision queued.
-	other, err := store.LoadRun(filepath.Dir(filepath.Dir(run.RunDir)), run.RunID)
+func TestProgramResultRoutesByNumericCondition(t *testing.T) {
+	workflow := model.Workflow{Version: "2", Name: "program", Entry: "check", Nodes: []model.Node{
+		{ID: "check", Input: map[string]any{"threshold": 7, "command": []string{"sh", "-c", `test -f "$AGENTFLOW_INPUT_FILE" && printf '{"score":8}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},
+		{ID: "high", Executor: "process", Input: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
+	}, Edges: []model.Transition{
+		{From: "check", To: "high", When: "nodes.check.result.score > 7"},
+		{From: "check", To: "$end"},
+		{From: "high", To: "$end"},
+	}}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := store.EnqueueControl(other.RunDir, model.Control{Kind: ControlApprove, NodeID: "gate"}); err != nil {
-		t.Fatal(err)
-	}
-	if err := Execute(other, map[string]driver.Provider{}); !errors.Is(err, store.ErrRunBusy) {
-		t.Fatalf("expected busy executor, got %v", err)
-	}
-	waitFor(t, func() bool { return statusOnDisk(t, run.RunDir, "ship") == "succeeded" })
-	if err := <-done; err != nil {
-		t.Fatal(err)
-	}
-	expect(t, run, "succeeded", map[string]string{"gate": "succeeded", "ship": "succeeded", "slow": "succeeded"})
-}
-
-func TestRetryReRunsFailedNodesAndKeepsOthers(t *testing.T) {
-	marker := filepath.Join(t.TempDir(), "fixed")
-	run := newRun(t,
-		shellNode("prepare", `echo '{"n":1}' > "$AGENTFLOW_RESULT_FILE"`),
-		shellNode("flaky", "test -f "+marker+" && "+ok, "prepare"),
-		shellNode("after", ok, "flaky"),
-	)
-	mustExecute(t, run)
-	expect(t, run, "failed", map[string]string{"prepare": "succeeded", "flaky": "failed", "after": "skipped"})
-	preparedAt := run.State.Nodes["prepare"].FinishedAt
-
-	if plan, err := RetryPlan(run, nil); err != nil || len(plan) != 2 || plan[0] != "after" || plan[1] != "flaky" {
-		t.Fatalf("unexpected retry plan %v %v", plan, err)
-	}
-	if err := os.WriteFile(marker, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	if err := store.EnqueueControl(run.RunDir, model.Control{Kind: ControlRetry}); err != nil {
-		t.Fatal(err)
-	}
-	mustExecute(t, run)
-	expect(t, run, "succeeded", map[string]string{"prepare": "succeeded", "flaky": "succeeded", "after": "succeeded"})
-	if run.State.Nodes["prepare"].FinishedAt != preparedAt {
-		t.Fatal("retry must keep results of nodes outside the retry plan")
+	executeTestRun(t, run)
+	if run.State.Status != "succeeded" || run.State.Nodes["high"].Status != "succeeded" {
+		t.Fatalf("program did not route: %+v", run.State)
 	}
 }
 
-func TestResumeRecoversNodesOrphanedByACrash(t *testing.T) {
-	run := newRun(t, shellNode("a", ok), shellNode("b", ok, "a"))
-	run.State.Nodes["a"].Status = "running"
-	if err := store.SaveState(run); err != nil {
+func TestHumanAdapterProgramAdvancesWithoutManualControl(t *testing.T) {
+	workflow := model.Workflow{Version: "2", Name: "adapter", Entry: "review", Nodes: []model.Node{
+		{ID: "review", Input: map[string]any{"text": "choose", "command": []string{"sh", "-c", `printf '{"decision":"happy","message":"ok"}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},
+	}, Edges: []model.Transition{{From: "review", To: "$end", When: "nodes.review.result.decision == 'happy'"}}}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	mustExecute(t, run)
-	expect(t, run, "succeeded", map[string]string{"a": "succeeded", "b": "succeeded"})
+	executeTestRun(t, run)
+	if run.State.Status != "succeeded" || run.State.Nodes["review"].Status != "succeeded" {
+		t.Fatalf("adapter did not advance: %+v", run.State)
+	}
 }
 
-func TestCancelStopsScheduling(t *testing.T) {
-	run := newRun(t, shellNode("a", ok), shellNode("b", ok, "a"))
-	if err := store.EnqueueControl(run.RunDir, model.Control{Kind: ControlCancel}); err != nil {
+func TestEmptyObjectInputSurvivesExternalResume(t *testing.T) {
+	root := t.TempDir()
+	workflow := model.Workflow{Version: "2", Name: "empty-input", Entry: "wait", Nodes: []model.Node{{ID: "wait", Executor: "external", Input: map[string]any{}, InputSchema: map[string]any{"type": "object"}}}, Edges: []model.Transition{{From: "wait", To: "wait", When: "nodes.wait.result.again", MaxIterations: 1}, {From: "wait", To: "$end"}}}
+	run, err := store.CreateRun(root, workflow, nil, "")
+	if err != nil {
 		t.Fatal(err)
 	}
-	mustExecute(t, run)
-	expect(t, run, "cancelled", map[string]string{"a": "pending", "b": "pending"})
-}
-
-func waitFor(t *testing.T, condition func() bool) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for time.Now().Before(deadline) {
-		if condition() {
-			return
-		}
-		time.Sleep(20 * time.Millisecond)
+	if err = Execute(run, nil); err != nil {
+		t.Fatal(err)
 	}
-	t.Fatal("condition not reached")
-}
-
-func statusOnDisk(t *testing.T, runDir, nodeID string) string {
-	t.Helper()
-	run := &model.Run{RunDir: runDir}
-	if err := store.ReloadState(run); err != nil {
-		return ""
+	loaded, err := store.LoadRun(root, run.RunID)
+	if err != nil {
+		t.Fatal(err)
 	}
-	if node := run.State.Nodes[nodeID]; node != nil {
-		return node.Status
+	if err = store.EnqueueControl(loaded.RunDir, model.Control{Kind: ControlSubmit, NodeID: "wait", Output: map[string]any{"again": true}}); err != nil {
+		t.Fatal(err)
 	}
-	return ""
+	if err = Execute(loaded, nil); err != nil {
+		t.Fatal(err)
+	}
+	if loaded.State.Status != "waiting_input" || loaded.State.Visits["wait"] != 2 {
+		t.Fatalf("empty JSON object changed on resume: %+v", loaded.State)
+	}
 }

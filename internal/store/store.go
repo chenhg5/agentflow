@@ -16,6 +16,9 @@ import (
 func EnsureDir(directory string) error { return os.MkdirAll(directory, 0o755) }
 
 func CreateRun(root string, workflow model.Workflow, inputs map[string]string, idempotencyKey string) (*model.Run, error) {
+	if workflow.Version != "2" || workflow.Entry == "" {
+		return nil, fmt.Errorf("only version 2 edge workflows can start")
+	}
 	if err := EnsureDir(filepath.Join(root, "runs")); err != nil {
 		return nil, err
 	}
@@ -33,6 +36,9 @@ func CreateRun(root string, workflow model.Workflow, inputs map[string]string, i
 	run := &model.Run{RunID: runID, RunDir: runDir, Workflow: workflow, State: model.RunState{
 		RunID: runID, WorkflowName: workflow.Name, WorkflowDigest: model.Digest(workflow), Status: "pending", Inputs: inputs, IdempotencyKey: idempotencyKey, Nodes: nodes, CreatedAt: now, UpdatedAt: now,
 	}}
+	run.State.ActiveNode = workflow.Entry
+	run.State.Visits = map[string]int{workflow.Entry: 1}
+	run.State.Traversals = map[string]int{}
 	if err := writeJSON(filepath.Join(runDir, "workflow.json"), workflow); err != nil {
 		return nil, err
 	}

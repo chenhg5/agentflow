@@ -17,6 +17,7 @@ import (
 	"syscall"
 	"time"
 
+	schemaassets "github.com/chenhg5/agentflow"
 	"github.com/chenhg5/agentflow/internal/driver"
 	"github.com/chenhg5/agentflow/internal/engine"
 	"github.com/chenhg5/agentflow/internal/graph"
@@ -109,7 +110,7 @@ func triggerCommand(args []string, root, cwd string) error {
 		if os.IsNotExist(err) {
 			return notFoundError("trigger config", filepath.Join(root, "triggers.json"), parsed.Format)
 		}
-		return internalError(err)
+		return usageError(err.Error(), "Run `agentflow schema trigger` and correct .agentflow/triggers.json.", "invalid_trigger_config")
 	}
 	switch verb {
 	case "list":
@@ -278,6 +279,21 @@ func workflowCommand(args []string) error {
 	if err := assertValid(workflow, parsed.Format); err != nil {
 		return err
 	}
+	if parsed.CheckExecutors {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return internalError(err)
+		}
+		executors, err := driver.LoadExecutors(cwd)
+		if err != nil {
+			return usageError(err.Error(), "Correct .agentflow/executors.json.", "invalid_executor_config")
+		}
+		for _, node := range workflow.Nodes {
+			if _, ok := executors[node.Executor]; !ok {
+				return usageError(fmt.Sprintf("node %s references unregistered executor %q", node.ID, node.Executor), "Register its command in .agentflow/executors.json or choose a built-in executor.", "unregistered_executor")
+			}
+		}
+	}
 	return writeData(map[string]any{
 		"ok":       true,
 		"valid":    true,
@@ -319,8 +335,8 @@ func runCommand(args []string, root, cwd string) error {
 		return runStats(parsed, root)
 	case "latest":
 		return runLatest(parsed, root)
-	case "approve", "reject":
-		return runDecision(verb, parsed, root, cwd)
+	case "submit":
+		return runSubmit(parsed, root, cwd)
 	case "resume":
 		return runResume(parsed, root, cwd)
 	case "cancel":
@@ -354,26 +370,10 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 		runContext := map[string]any{"inputs": parsed.Inputs}
 		nodes := make([]map[string]any, 0, len(workflow.Nodes))
 		for _, node := range workflow.Nodes {
-			needs := node.Needs
-			if needs == nil {
-				needs = []string{}
-			}
-			plan := map[string]any{"id": node.ID, "type": node.Type, "needs": needs}
-			if node.Workspace != "" {
-				workspace := template.Render(node.Workspace, runContext)
-				if workspace != "" {
-					if absolute, err := filepath.Abs(workspace); err == nil {
-						workspace = absolute
-					}
-					plan["workspace"] = workspace
-				}
-			}
-			if node.Session != "" {
-				plan["session"] = template.Render(node.Session, runContext)
-			}
+			plan := map[string]any{"id": node.ID, "executor": node.Executor, "input": template.RenderValue(node.Input, runContext)}
 			nodes = append(nodes, plan)
 		}
-		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.start", "workflow": workflow.Name, "inputs": parsed.Inputs, "nodes": nodes}, parsed.Output()); err != nil {
+		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.start", "workflow": workflow.Name, "inputs": parsed.Inputs, "entry": workflow.Entry, "nodes": nodes, "edges": workflow.Edges}, parsed.Output()); err != nil {
 			return err
 		}
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
@@ -395,7 +395,7 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 			return writeData(payload, parsed.Output())
 		}
 	}
-	providers, err := driver.LoadProviders(cwd)
+	executors, err := driver.LoadExecutors(cwd)
 	if err != nil {
 		return internalError(err)
 	}
@@ -403,7 +403,7 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 	if err != nil {
 		return internalError(err)
 	}
-	if err := engine.Execute(run, providers); err != nil {
+	if err := engine.Execute(run, executors); err != nil {
 		return internalError(err)
 	}
 	if err := writeData(runPayload(run), parsed.Output()); err != nil {
@@ -572,9 +572,13 @@ func loadRuns(root string) ([]*model.Run, error) {
 	return runs, nil
 }
 
-func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
-	if len(parsed.Positionals) < 2 {
-		return usageError(fmt.Sprintf("usage: agentflow run %s <run-id> <node-id> [message]", verb), "The node must be waiting_human.", "approval_arguments")
+func runSubmit(parsed parsedArgs, root, cwd string) error {
+	if len(parsed.Positionals) != 2 || parsed.SubmittedOutput == "" {
+		return usageError("usage: agentflow run submit <run-id> <node-id> --output '{...}'", "The node must be waiting_input.", "submit_arguments")
+	}
+	var output map[string]any
+	if err := json.Unmarshal([]byte(parsed.SubmittedOutput), &output); err != nil || output == nil {
+		return usageError("--output must be a JSON object", "Supply an object matching the node outputSchema.", "invalid_output")
 	}
 	run, err := store.LoadRun(root, parsed.Positionals[0])
 	if err != nil {
@@ -585,29 +589,24 @@ func runDecision(verb string, parsed parsedArgs, root, cwd string) error {
 	if !ok {
 		return notFoundError("node", nodeID, parsed.Format)
 	}
-	if node.Status != "waiting_human" {
-		return conflictError(fmt.Sprintf("node %s is not waiting for human input", nodeID), "Inspect the run before approving it.", parsed.Format)
+	if node.Status != "waiting_input" {
+		return conflictError(fmt.Sprintf("node %s is not waiting for input", nodeID), "Inspect the run before submitting.", parsed.Format)
 	}
-	message := parsed.Message
-	if message == "" && len(parsed.Positionals) > 2 {
-		message = strings.Join(parsed.Positionals[2:], " ")
+	for _, definition := range run.Workflow.Nodes {
+		if definition.ID == nodeID {
+			if problems := schema.ValidateValue("output", output, definition.OutputSchema); len(problems) > 0 {
+				return &CommandError{Code: ExitUsageError, Kind: "invalid_output", Message: schema.FormatContractErrors("output does not satisfy outputSchema", problems), Format: parsed.Format}
+			}
+			break
+		}
 	}
 	if parsed.DryRun {
-		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run." + verb, "run_id": run.RunID, "node_id": nodeID, "decision": verb, "message": message}, parsed.Output()); err != nil {
+		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.submit", "run_id": run.RunID, "node_id": nodeID, "output": output}, parsed.Output()); err != nil {
 			return err
 		}
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
-	for _, definition := range run.Workflow.Nodes {
-		if definition.ID != nodeID {
-			continue
-		}
-		if problems := schema.ValidateValue("output", map[string]any{"decision": verb, "message": message}, schema.EffectiveOutputSchema(definition)); len(problems) > 0 {
-			return &CommandError{Code: ExitUsageError, Kind: "invalid_human_output", Message: schema.FormatContractErrors("human decision does not satisfy output schema", problems), Suggestion: "Adjust the approval message or remove the incompatible output schema.", Format: parsed.Format}
-		}
-		break
-	}
-	return enqueueAndExecute(run, model.Control{Kind: verb, NodeID: nodeID, Message: message}, parsed, cwd)
+	return enqueueAndExecute(run, model.Control{Kind: engine.ControlSubmit, NodeID: nodeID, Output: output}, parsed, cwd)
 }
 
 // enqueueAndExecute hands a request to the run's executor. When another
@@ -621,11 +620,11 @@ func enqueueAndExecute(run *model.Run, control model.Control, parsed parsedArgs,
 }
 
 func executeRun(run *model.Run, parsed parsedArgs, cwd string, queueOnBusy bool) error {
-	providers, err := driver.LoadProviders(cwd)
+	executors, err := driver.LoadExecutors(cwd)
 	if err != nil {
 		return internalError(err)
 	}
-	err = engine.Execute(run, providers)
+	err = engine.Execute(run, executors)
 	if errors.Is(err, store.ErrRunBusy) {
 		if !queueOnBusy {
 			return conflictError(err.Error(), "Wait for the executing process to pause, or inspect it with `agentflow run get`.", parsed.Format)
@@ -728,7 +727,7 @@ func configCommand(args []string, cwd string) error {
 		return usageError("unknown config action", "Use `agentflow config init`.", "config_action")
 	}
 	directory := filepath.Join(cwd, ".agentflow")
-	target := filepath.Join(directory, "providers.json")
+	target := filepath.Join(directory, "executors.json")
 	if parsed.DryRun {
 		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "config.init", "path": target}, parsed.Output()); err != nil {
 			return err
@@ -739,12 +738,12 @@ func configCommand(args []string, cwd string) error {
 		return internalError(err)
 	}
 	if _, err := os.Stat(target); err == nil {
-		return conflictError(fmt.Sprintf("provider config already exists: %s", target), "Edit the existing file or remove it intentionally.", parsed.Format)
+		return conflictError(fmt.Sprintf("executor config already exists: %s", target), "Edit the existing file or remove it intentionally.", parsed.Format)
 	} else if !os.IsNotExist(err) {
 		return internalError(err)
 	}
 	const example = `{
-  "providers": {
+  "executors": {
     "claude-code": {
       "kind": "claude-code",
       "binary": "claude"
@@ -780,14 +779,10 @@ func schemaCommand(args []string, cwd string) error {
 	switch target {
 	case "--all", "all":
 		return writeData(commandSchema(), parsed.Output())
-	case "workflow", "trigger":
-		filename := "workflow.schema.json"
-		if target == "trigger" {
-			filename = "trigger.schema.json"
-		}
-		data, err := os.ReadFile(filepath.Join(cwd, filename))
+	case "workflow", "trigger", "executors":
+		data, err := schemaassets.ReadSchema(target)
 		if err != nil {
-			return notFoundError(target+" schema", filename, parsed.Format)
+			return internalError(err)
 		}
 		var value any
 		if err := json.Unmarshal(data, &value); err != nil {
@@ -813,19 +808,19 @@ func doctorCommand(args []string, cwd string) error {
 		fmt.Println("Usage: agentflow doctor [--format json|table]")
 		return nil
 	}
-	providers, err := driver.LoadProviders(cwd)
+	executors, err := driver.LoadExecutors(cwd)
 	if err != nil {
 		return internalError(err)
 	}
-	drivers := make([]string, 0, len(providers))
-	statuses := make([]driver.Status, 0, len(providers))
-	for name := range providers {
+	drivers := make([]string, 0, len(executors))
+	statuses := make([]driver.Status, 0, len(executors))
+	for name := range executors {
 		drivers = append(drivers, name)
-		statuses = append(statuses, driver.CheckProvider(name, providers[name]))
+		statuses = append(statuses, driver.CheckExecutor(name, executors[name]))
 	}
 	sort.Strings(drivers)
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
-	return writeData(map[string]any{"ok": true, "cwd": cwd, "provider_configured": len(drivers) > 0, "providers": drivers, "drivers": drivers, "provider_status": statuses, "run_store": filepath.Join(cwd, ".agentflow", "runs")}, parsed.Output())
+	return writeData(map[string]any{"ok": true, "cwd": cwd, "executors": drivers, "executor_status": statuses, "run_store": filepath.Join(cwd, ".agentflow", "runs")}, parsed.Output())
 }
 
 func readWorkflow(file, format string) (model.Workflow, error) {
@@ -837,7 +832,9 @@ func readWorkflow(file, format string) (model.Workflow, error) {
 		return model.Workflow{}, internalError(err)
 	}
 	var workflow model.Workflow
-	if err := json.Unmarshal(data, &workflow); err != nil {
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&workflow); err != nil {
 		return workflow, &CommandError{Code: ExitUsageError, Kind: "invalid_json", Message: fmt.Sprintf("invalid workflow JSON: %v", err), Suggestion: "Fix the JSON and validate it again.", Retryable: false, Format: format}
 	}
 	return workflow, nil
@@ -871,6 +868,9 @@ func parseArgs(args []string) (parsedArgs, error) {
 			continue
 		}
 		switch arg {
+		case "--check-executors":
+			parsed.CheckExecutors = true
+			continue
 		case "--dry-run":
 			parsed.DryRun = true
 			continue
@@ -912,8 +912,8 @@ func parseArgs(args []string) (parsedArgs, error) {
 				return parsed, usageError("--input must use key=value", "Example: `--input issue=ABC-123`.", "invalid_input")
 			}
 			parsed.Inputs[name] = input
-		case "--message":
-			parsed.Message = value
+		case "--output":
+			parsed.SubmittedOutput = value
 		case "--workflow":
 			parsed.Workflow = value
 		case "--status":
@@ -978,29 +978,30 @@ func validIdempotencyKey(value string) bool {
 }
 
 type parsedArgs struct {
-	Positionals    []string
-	Inputs         map[string]string
-	Format         string
-	Message        string
-	Workflow       string
-	Statuses       []string
-	Digest         string
-	From           []string
-	IdempotencyKey string
-	RunID          string
-	Host           string
-	Port           int
-	PortSet        bool
-	ScheduledAt    string
-	DeliveryID     string
-	PageSize       int
-	DryRun         bool
-	NoInteractive  bool
-	PageAll        bool
-	All            bool
-	Force          bool
-	ByVersion      bool
-	Help           bool
+	CheckExecutors  bool
+	Positionals     []string
+	Inputs          map[string]string
+	Format          string
+	SubmittedOutput string
+	Workflow        string
+	Statuses        []string
+	Digest          string
+	From            []string
+	IdempotencyKey  string
+	RunID           string
+	Host            string
+	Port            int
+	PortSet         bool
+	ScheduledAt     string
+	DeliveryID      string
+	PageSize        int
+	DryRun          bool
+	NoInteractive   bool
+	PageAll         bool
+	All             bool
+	Force           bool
+	ByVersion       bool
+	Help            bool
 }
 
 func (p parsedArgs) Output() OutputOptions { return OutputOptions{Format: p.Format} }
@@ -1085,7 +1086,11 @@ func stdoutTTY() bool {
 }
 
 func runPayload(run *model.Run) map[string]any {
-	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+	history := run.State.History
+	if history == nil {
+		history = []model.NodeVisit{}
+	}
+	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "outcome": run.State.Outcome, "active_node": run.State.ActiveNode, "visits": run.State.Visits, "history": history, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
 	if run.State.StartedAt != "" {
 		payload["started_at"] = run.State.StartedAt
 	}
@@ -1122,22 +1127,21 @@ func commandSchema() map[string]any {
 	}
 	formatFlag := map[string]any{"name": "--format", "type": "enum", "enum": []string{"json", "table", "ndjson"}, "default": "json_when_piped_table_when_tty", "description": "Output format", "required": false}
 	commands := []map[string]any{
-		{"name": "workflow validate", "description": "Validate a workflow JSON definition.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{formatFlag}, "examples": []string{"agentflow workflow validate workflow.json --format json"}},
+		{"name": "workflow validate", "description": "Validate a workflow JSON definition.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--check-executors", "boolean", "Check named executor registrations in this working directory", false), formatFlag}, "examples": []string{"agentflow workflow validate workflow.json --check-executors --format json"}},
 		{"name": "run start", "description": "Create and execute a workflow run.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--input", "key=value", "Workflow input; repeat for multiple inputs", false), flag("--idempotency-key", "string", "Stable request token used to safely retry a start", false), flag("--dry-run", "boolean", "Preview without creating or executing a run", false), formatFlag}, "examples": []string{"agentflow run start workflow.json --input issue=ABC-123 --idempotency-key 7f9c2b1e-4d9c-4f4e-8bb2-8b3d7d6d0a11"}},
 		{"name": "run list", "description": "List workflow runs, newest first.", "flags": []map[string]any{flag("--workflow", "string", "Only runs of this workflow name", false), flag("--status", "comma-separated", "Only runs with these statuses", false), flag("--page-size", "integer", "Maximum number of runs to return", false), flag("--page-all", "boolean", "Return every run", false), formatFlag}},
 		{"name": "run latest", "description": "Get the newest run of a workflow; exits 3 when there is none.", "arguments": []map[string]any{{"name": "workflow-name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--status", "comma-separated", "Only consider runs with these statuses", false), formatFlag}, "examples": []string{"agentflow run latest release-window --status succeeded,failed --format json"}},
 		{"name": "run get", "description": "Get one run and its node states.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run logs", "description": "Read the append-only event log.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run metrics", "description": "Get one run's timing, attempts, and byte metrics.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
-		{"name": "run stats", "description": "Aggregate metrics across runs, optionally filtered by workflow name and version. Run-level distributions cover finished runs and split wall-clock time into active and human waiting time.", "arguments": []map[string]any{{"name": "workflow-name", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--digest", "string", "Only runs of this workflow version", false), flag("--by-version", "boolean", "Return one aggregate per workflow version, oldest first", false), formatFlag}},
-		{"name": "run approve", "description": "Approve a waiting human node and continue the run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Approval message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
-		{"name": "run reject", "description": "Reject a waiting human node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}, {"name": "message", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--message", "string", "Rejection message", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
+		{"name": "run stats", "description": "Aggregate metrics across runs, optionally filtered by workflow name and version. Run-level distributions cover finished runs and split wall-clock time into active and input waiting time.", "arguments": []map[string]any{{"name": "workflow-name", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--digest", "string", "Only runs of this workflow version", false), flag("--by-version", "boolean", "Return one aggregate per workflow version, oldest first", false), formatFlag}},
+		{"name": "run submit", "description": "Submit structured JSON output to a waiting node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--output", "string", "JSON output object", true), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run resume", "description": "Resume a persisted run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview pending nodes without executing them", false), formatFlag}},
 		{"name": "run retry", "description": "Reset failed nodes (or --from nodes) and everything downstream, keep other results, and continue the run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--from", "comma-separated", "Nodes to restart from; default is every failed node", false), flag("--dry-run", "boolean", "List the nodes that would be reset", false), formatFlag}},
 		{"name": "run cancel", "description": "Cancel a run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
-		{"name": "schema", "description": "Inspect command metadata or workflow/trigger schemas.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "trigger", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
-		{"name": "config init", "description": "Create local provider configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
-		{"name": "doctor", "description": "Check local setup and configured providers.", "flags": []map[string]any{formatFlag}},
+		{"name": "schema", "description": "Inspect command metadata or workflow/trigger/executor schemas.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "trigger", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
+		{"name": "config init", "description": "Create local executor configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
+		{"name": "doctor", "description": "Check local setup and configured executors.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger list", "description": "List configured cron and webhook triggers.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger validate", "description": "Validate .agentflow/triggers.json.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger fire", "description": "Emit one trigger event through the durable dispatcher.", "arguments": []map[string]any{{"name": "trigger-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--scheduled-at", "RFC3339", "Scheduled occurrence time", false), flag("--delivery-id", "string", "Stable event id used for idempotency", false), formatFlag}},
@@ -1150,7 +1154,7 @@ func commandSchema() map[string]any {
 
 func isRunVerb(value string) bool {
 	switch value {
-	case "start", "list", "latest", "get", "logs", "metrics", "stats", "approve", "reject", "resume", "retry", "cancel":
+	case "start", "list", "latest", "get", "logs", "metrics", "stats", "submit", "resume", "retry", "cancel":
 		return true
 	default:
 		return false
@@ -1198,12 +1202,11 @@ Commands:
   run list           List runs
   run get            Get one run
   run logs           Read run events
-  run approve       Approve a human node
-  run reject        Reject a human node
+  run submit        Submit JSON output to a waiting node
   run resume        Resume a persisted run
   run cancel        Cancel a run
   schema             Inspect commands or the workflow schema
-  config init        Create provider configuration
+  config init        Create executor configuration
   doctor             Check local setup
   trigger list       List configured triggers
   trigger validate   Validate trigger configuration
@@ -1225,9 +1228,9 @@ Exit codes: 0 success, 1 execution error, 2 usage error, 3 not found,
 
 func printWorkflowHelp() {
 	fmt.Println(`Usage:
-  agentflow workflow validate <workflow.json> [--format json|table]
+  agentflow workflow validate <workflow.json> [--check-executors] [--format json|table]
 
-Validates version, node types, dependencies, required fields, and cycles.
+Validates version, executor references, edges, required fields, and bounded cycles.
 
 Examples:
   agentflow workflow validate workflow.json --format json`)
@@ -1245,10 +1248,9 @@ Verbs:
   logs <run-id>           Read events
   metrics <run-id>        Show timing and size metrics
   stats [workflow-name]   Aggregate metrics (--digest, --by-version)
-  approve <run-id> <node-id> [message]
-  reject <run-id> <node-id> [message]
+  submit <run-id> <node-id> --output JSON
   resume <run-id>         Continue pending nodes (also recovers nodes orphaned by a crash)
-  retry <run-id>          Re-run failed nodes and everything downstream (--from a,b)
+  retry <run-id>          Re-run the active failed node (--from node-id)
   cancel <run-id>
 
 Common flags:
@@ -1259,7 +1261,7 @@ Common flags:
 
 Examples:
   agentflow run start workflow.json --input issue=ABC-123 --format json
-  agentflow run approve <run-id> approval --message "looks good" --format json`)
+  agentflow run submit <run-id> approval --output '{"decision":"happy"}' --format json`)
 }
 
 func printSchemaHelp() {
@@ -1267,6 +1269,7 @@ func printSchemaHelp() {
   agentflow schema --all
   agentflow schema workflow
   agentflow schema trigger
+  agentflow schema executors
   agentflow schema run start
 
 Returns machine-readable command metadata or workflow.schema.json.`)
@@ -1276,14 +1279,14 @@ func printConfigHelp() {
 	fmt.Println(`Usage:
   agentflow config init [--format json|table]
 
-Creates .agentflow/providers.json from the provider template.`)
+Creates .agentflow/executors.json from the executor template.`)
 }
 
 func printDoctorHelp() {
 	fmt.Println(`Usage:
   agentflow doctor [--format json|table]
 
-Checks provider configuration and the local run store.`)
+Checks executor configuration and the local run store.`)
 }
 
 func printWebHelp() {

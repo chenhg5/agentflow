@@ -1,0 +1,24 @@
+{
+  "triggers": [
+    {
+      "id": "daily",
+      "enabled": true,
+      "source": {
+        "kind": "cron",
+        "expression": "15 9 * * 1-5",
+        "timezone": "Asia/Shanghai"
+      },
+      "target": {
+        "workflow": "workflow.json"
+      },
+      "inputs": {
+        "topic": "proposal",
+        "reviewer": "ou_local"
+      },
+      "policy": {
+        "concurrency": "forbid",
+        "misfire": "skip"
+      }
+    }
+  ]
+}

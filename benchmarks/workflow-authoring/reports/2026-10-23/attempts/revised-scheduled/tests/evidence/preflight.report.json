@@ -1,0 +1,26 @@
+[
+  {
+    "check": "workflow-validation",
+    "exit": 0
+  },
+  {
+    "check": "trigger-validation",
+    "exit": 0
+  },
+  {
+    "check": "doctor",
+    "exit": 0
+  },
+  {
+    "check": "dry-run",
+    "exit": 10
+  },
+  {
+    "check": "missing-topic",
+    "exit": 2
+  },
+  {
+    "check": "missing-reviewer",
+    "exit": 2
+  }
+]

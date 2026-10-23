@@ -1,0 +1,269 @@
+{
+  "attempt": {
+    "case": "mixed-language",
+    "split": "holdout",
+    "binary_sha256": "8b9039882848a7cfb1791c8dd42e31276ce354073784038e0c6b5cdd4074f05d",
+    "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf",
+    "prepared_at": 1792746075.137058,
+    "agent_label": "codex-cli-default-fresh",
+    "agent_argv": [
+      "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+      "exec",
+      "--ignore-user-config",
+      "--ignore-rules",
+      "--ephemeral",
+      "--skip-git-repo-check",
+      "-s",
+      "workspace-write",
+      "--json",
+      "-C",
+      "/private/tmp/agentflow-bench-cli-holdout",
+      "-"
+    ],
+    "context_mode": "new process; task passed on stdin; no resume",
+    "agent_status": "completed",
+    "agent_exit_code": 0,
+    "agent_elapsed_seconds": 69.5027178330347
+  },
+  "evaluation_binary_sha256": "4c8dcc458b5b0555eaa4858d876ddafc299bba1efdcfebc234406d23437bfa8e",
+  "grader_sha256": "a666bbb0e1eef534e34ffd6f077447dd6f8d4ef0f68c41ac05b98a65cf13a0b7",
+  "passed": true,
+  "checks_passed": 11,
+  "checks_total": 11,
+  "checks": [
+    {
+      "name": "role_mapping",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "definition_valid",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "all_executor_references_bound",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "runbook_written",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "input_and_output_contracts",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "execution",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "calculated_result",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "both_program_entries_registered",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "program_environments",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "requested_languages",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "nested_types_preserved",
+      "passed": true,
+      "detail": ""
+    }
+  ],
+  "quality_checks": [
+    {
+      "name": "required_inputs_declared",
+      "passed": true
+    }
+  ],
+  "traces": [
+    {
+      "scenario": "typed-handoff",
+      "exit_code": 0,
+      "state": {
+        "active_node": "",
+        "created_at": "2026-10-23T09:17:45.813809Z",
+        "duration_ms": 64,
+        "finished_at": "2026-10-23T09:17:45.879723Z",
+        "history": [
+          {
+            "nodeId": "collect",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-b10r7jue",
+              "attempts": 1,
+              "durationMs": 31,
+              "inputBytes": 29,
+              "outputBytes": 93,
+              "startedAt": "2026-10-23T09:17:45.81532Z",
+              "finishedAt": "2026-10-23T09:17:45.846542Z",
+              "result": {
+                "batch": "orchard-batch-019",
+                "meta": {
+                  "unit": "kg",
+                  "valid": true
+                },
+                "readings": [
+                  3,
+                  7,
+                  11
+                ]
+              },
+              "input": {
+                "batch": "orchard-batch-019"
+              },
+              "artifacts": {
+                "input": "artifacts/collect.1.input.json",
+                "result": "artifacts/collect.1.result.json",
+                "stderrLog": "artifacts/logs/collect.1.stderr.log",
+                "stdoutLog": "artifacts/logs/collect.1.stdout.log"
+              },
+              "leaseToken": "de6ab88a466e3e78c8f735eca3879fd4"
+            }
+          },
+          {
+            "nodeId": "report",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-b10r7jue",
+              "attempts": 1,
+              "durationMs": 32,
+              "inputBytes": 83,
+              "outputBytes": 65,
+              "startedAt": "2026-10-23T09:17:45.847123Z",
+              "finishedAt": "2026-10-23T09:17:45.879417Z",
+              "result": {
+                "batch": "orchard-batch-019",
+                "total": 21,
+                "unit": "kg",
+                "valid": true
+              },
+              "input": {
+                "batch": "orchard-batch-019",
+                "meta": {
+                  "unit": "kg",
+                  "valid": true
+                },
+                "readings": [
+                  3,
+                  7,
+                  11
+                ]
+              },
+              "artifacts": {
+                "input": "artifacts/report.1.input.json",
+                "result": "artifacts/report.1.result.json",
+                "stderrLog": "artifacts/logs/report.1.stderr.log",
+                "stdoutLog": "artifacts/logs/report.1.stdout.log"
+              },
+              "leaseToken": "55af54ec453866266be6323bb6c2a515"
+            }
+          }
+        ],
+        "inputs": {
+          "batch": "orchard-batch-019"
+        },
+        "nodes": {
+          "collect": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-b10r7jue",
+            "attempts": 1,
+            "durationMs": 31,
+            "inputBytes": 29,
+            "outputBytes": 93,
+            "startedAt": "2026-10-23T09:17:45.81532Z",
+            "finishedAt": "2026-10-23T09:17:45.846542Z",
+            "result": {
+              "batch": "orchard-batch-019",
+              "meta": {
+                "unit": "kg",
+                "valid": true
+              },
+              "readings": [
+                3,
+                7,
+                11
+              ]
+            },
+            "input": {
+              "batch": "orchard-batch-019"
+            },
+            "artifacts": {
+              "input": "artifacts/collect.1.input.json",
+              "result": "artifacts/collect.1.result.json",
+              "stderrLog": "artifacts/logs/collect.1.stderr.log",
+              "stdoutLog": "artifacts/logs/collect.1.stdout.log"
+            },
+            "leaseToken": "de6ab88a466e3e78c8f735eca3879fd4"
+          },
+          "report": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-b10r7jue",
+            "attempts": 1,
+            "durationMs": 32,
+            "inputBytes": 83,
+            "outputBytes": 65,
+            "startedAt": "2026-10-23T09:17:45.847123Z",
+            "finishedAt": "2026-10-23T09:17:45.879417Z",
+            "result": {
+              "batch": "orchard-batch-019",
+              "total": 21,
+              "unit": "kg",
+              "valid": true
+            },
+            "input": {
+              "batch": "orchard-batch-019",
+              "meta": {
+                "unit": "kg",
+                "valid": true
+              },
+              "readings": [
+                3,
+                7,
+                11
+              ]
+            },
+            "artifacts": {
+              "input": "artifacts/report.1.input.json",
+              "result": "artifacts/report.1.result.json",
+              "stderrLog": "artifacts/logs/report.1.stderr.log",
+              "stdoutLog": "artifacts/logs/report.1.stdout.log"
+            },
+            "leaseToken": "55af54ec453866266be6323bb6c2a515"
+          }
+        },
+        "ok": true,
+        "outcome": "completed",
+        "run_id": "run_20261023091745_3f32f497026f1967",
+        "started_at": "2026-10-23T09:17:45.815004Z",
+        "status": "succeeded",
+        "updated_at": "2026-10-23T09:17:45.879724Z",
+        "visits": {
+          "collect": 1,
+          "report": 1
+        },
+        "workflow": "farm-local",
+        "workflow_digest": "e8f6c46cf235"
+      }
+    }
+  ]
+}

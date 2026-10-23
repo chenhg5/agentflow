@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -16,7 +17,9 @@ func LoadConfig(root string) (Config, error) {
 		return Config{}, err
 	}
 	var config Config
-	if err := json.Unmarshal(data, &config); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&config); err != nil {
 		return Config{}, fmt.Errorf("invalid triggers.json: %w", err)
 	}
 	seen := map[string]bool{}

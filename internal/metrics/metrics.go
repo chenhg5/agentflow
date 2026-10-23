@@ -27,7 +27,7 @@ type RunSnapshot struct {
 
 type NodeSnapshot struct {
 	ID          string `json:"id"`
-	Type        string `json:"type"`
+	Executor    string `json:"executor"`
 	Status      string `json:"status"`
 	Workspace   string `json:"workspace,omitempty"`
 	SessionID   string `json:"session_id,omitempty"`
@@ -62,14 +62,14 @@ type RunCounts struct {
 	Total        int `json:"total"`
 	Succeeded    int `json:"succeeded"`
 	Failed       int `json:"failed"`
-	WaitingHuman int `json:"waiting_human"`
+	WaitingInput int `json:"waiting_input"`
 	Running      int `json:"running"`
 	Cancelled    int `json:"cancelled"`
 }
 
 type NodeAggregate struct {
 	ID         string       `json:"id"`
-	Type       string       `json:"type"`
+	Executor   string       `json:"executor"`
 	Executions int          `json:"executions"`
 	Succeeded  int          `json:"succeeded"`
 	Failed     int          `json:"failed"`
@@ -152,12 +152,12 @@ func Snapshot(run *model.Run, asOf time.Time) RunSnapshot {
 			nodeDuration = DurationMillis(state.StartedAt, state.FinishedAt, asOf)
 		}
 		waiting := state.WaitDurationMs
-		if waiting == 0 && state.Status == "waiting_human" {
+		if waiting == 0 && state.Status == "waiting_input" {
 			waiting = DurationMillis(state.StartedAt, "", asOf)
 		}
 		node := NodeSnapshot{
 			ID:          definition.ID,
-			Type:        definition.Type,
+			Executor:    definition.Executor,
 			Status:      state.Status,
 			Workspace:   state.Workspace,
 			SessionID:   state.SessionID,
@@ -235,8 +235,8 @@ func Aggregate(runs []*model.Run, filter Filter, asOf time.Time) AggregateSnapsh
 			result.Runs.Succeeded++
 		case "failed":
 			result.Runs.Failed++
-		case "waiting_human":
-			result.Runs.WaitingHuman++
+		case "waiting_input":
+			result.Runs.WaitingInput++
 		case "running":
 			result.Runs.Running++
 		case "cancelled":
@@ -258,7 +258,7 @@ func Aggregate(runs []*model.Run, filter Filter, asOf time.Time) AggregateSnapsh
 			}
 			group, ok := groups[node.ID]
 			if !ok {
-				group = &NodeAggregate{ID: node.ID, Type: node.Type}
+				group = &NodeAggregate{ID: node.ID, Executor: node.Executor}
 				groups[node.ID] = group
 			}
 			if node.Status != "skipped" {
@@ -317,7 +317,7 @@ func MarkRunFinished(state *model.RunState, at time.Time) {
 
 func RefreshNode(state *model.NodeState, at time.Time) {
 	state.DurationMs = DurationMillis(state.StartedAt, state.FinishedAt, at)
-	if state.Status == "waiting_human" {
+	if state.Status == "waiting_input" {
 		state.WaitDurationMs = DurationMillis(state.StartedAt, "", at)
 	}
 }

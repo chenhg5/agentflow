@@ -1,11 +1,20 @@
 package model
 
 type Workflow struct {
-	Version     string                     `json:"version"`
-	Name        string                     `json:"name"`
-	Inputs      map[string]InputDefinition `json:"inputs,omitempty"`
-	MaxParallel int                        `json:"maxParallel,omitempty"`
-	Nodes       []Node                     `json:"nodes"`
+	Version string                     `json:"version"`
+	Name    string                     `json:"name"`
+	Inputs  map[string]InputDefinition `json:"inputs,omitempty"`
+	Nodes   []Node                     `json:"nodes"`
+	Entry   string                     `json:"entry,omitempty"`
+	Edges   []Transition               `json:"edges,omitempty"`
+}
+
+// Transition is a control-flow edge in a version 2 workflow. $end ends a run.
+type Transition struct {
+	From          string `json:"from"`
+	To            string `json:"to"`
+	When          string `json:"when,omitempty"`
+	MaxIterations int    `json:"maxIterations,omitempty"`
 }
 
 type InputDefinition struct {
@@ -17,44 +26,18 @@ type Retry struct {
 	MaxAttempts int `json:"maxAttempts,omitempty"`
 }
 
-type ResultSpec struct {
-	Path     string `json:"path,omitempty"`
-	Required bool   `json:"required,omitempty"`
-}
-
-type FieldSpec struct {
-	Name        string `json:"name"`
-	Type        string `json:"type,omitempty"`
-	Description string `json:"description,omitempty"`
-	Required    bool   `json:"required,omitempty"`
-}
-
 type Node struct {
-	ID           string            `json:"id"`
-	Type         string            `json:"type"`
-	Provider     string            `json:"provider,omitempty"`
-	Command      []string          `json:"command,omitempty"`
-	Prompt       string            `json:"prompt,omitempty"`
-	PromptMode   string            `json:"promptMode,omitempty"`
-	Workspace    string            `json:"workspace,omitempty"`
-	Session      string            `json:"session,omitempty"`
-	Input        map[string]any    `json:"input,omitempty"`
-	InputSchema  map[string]any    `json:"inputSchema,omitempty"`
-	OutputSchema map[string]any    `json:"outputSchema,omitempty"`
-	InputFields  []FieldSpec       `json:"inputFields,omitempty"`
-	OutputFields []FieldSpec       `json:"outputFields,omitempty"`
-	InputMapping map[string]string `json:"inputMapping,omitempty"`
-	Needs        []string          `json:"needs,omitempty"`
-	When         string            `json:"when,omitempty"`
-	RunIf        string            `json:"runIf,omitempty"`
-	TimeoutMs    int               `json:"timeoutMs,omitempty"`
-	Retry        Retry             `json:"retry,omitempty"`
-	Result       *ResultSpec       `json:"result,omitempty"`
+	ID           string         `json:"id"`
+	Executor     string         `json:"executor"`
+	Input        map[string]any `json:"input,omitempty"`
+	InputSchema  map[string]any `json:"inputSchema,omitempty"`
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
+	TimeoutMs    int            `json:"timeoutMs,omitempty"`
+	Retry        Retry          `json:"retry,omitempty"`
 }
 
 type NodeState struct {
 	Status         string            `json:"status"`
-	Prompt         string            `json:"prompt,omitempty"`
 	Workspace      string            `json:"workspace,omitempty"`
 	SessionID      string            `json:"sessionId,omitempty"`
 	Reason         string            `json:"reason,omitempty"`
@@ -82,12 +65,23 @@ type RunState struct {
 	Inputs         map[string]string     `json:"inputs"`
 	IdempotencyKey string                `json:"idempotency_key,omitempty"`
 	Nodes          map[string]*NodeState `json:"nodes"`
+	ActiveNode     string                `json:"activeNode,omitempty"`
+	Outcome        string                `json:"outcome,omitempty"`
+	Visits         map[string]int        `json:"visits,omitempty"`
+	Traversals     map[string]int        `json:"traversals,omitempty"`
+	History        []NodeVisit           `json:"history,omitempty"`
 	CreatedAt      string                `json:"createdAt"`
 	UpdatedAt      string                `json:"updatedAt"`
 	StartedAt      string                `json:"startedAt,omitempty"`
 	FinishedAt     string                `json:"finishedAt,omitempty"`
 	DurationMs     int64                 `json:"durationMs,omitempty"`
 	Trigger        *TriggerInfo          `json:"trigger,omitempty"`
+}
+
+type NodeVisit struct {
+	NodeID string    `json:"nodeId"`
+	Visit  int       `json:"visit"`
+	State  NodeState `json:"state"`
 }
 
 type TriggerInfo struct {
@@ -99,14 +93,14 @@ type TriggerInfo struct {
 }
 
 // Control is a request for a run's executor. Commands that change a running
-// workflow (approve, reject, cancel, retry) enqueue a control instead of
+// workflow enqueue a control instead of
 // writing run state, so the executor stays the only writer.
 type Control struct {
-	Kind    string   `json:"kind"`
-	NodeID  string   `json:"nodeId,omitempty"`
-	Nodes   []string `json:"nodes,omitempty"`
-	Message string   `json:"message,omitempty"`
-	At      string   `json:"at"`
+	Kind   string         `json:"kind"`
+	NodeID string         `json:"nodeId,omitempty"`
+	Nodes  []string       `json:"nodes,omitempty"`
+	Output map[string]any `json:"output,omitempty"`
+	At     string         `json:"at"`
 }
 
 type Run struct {

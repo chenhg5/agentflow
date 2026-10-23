@@ -1,431 +1,76 @@
-# AgentFlow Installation and Usage Guide
+# AgentFlow setup
 
-> This guide is written for AI coding agents (Claude Code, Codex, Cursor, and similar tools) helping a user install and configure AgentFlow. Ask the user for choices that affect their files, sessions, credentials, or network exposure. Do not guess those values.
+AgentFlow is a local binary. Each workflow defines explicit edges and references named executors. Programs can be written in any language and communicate through JSON files.
 
-## What AgentFlow does
-
-AgentFlow is a standalone local workflow runner. A workflow is a JSON file containing shell, agent, and human approval nodes. The runner starts eligible nodes, persists every state transition, validates structured results, resumes after approval or interruption, and stores run artifacts under `.agentflow/`.
-
-```text
-workflow.json  ->  agentflow run start  ->  .agentflow/runs/<run-id>/
-                         |
-                         +--> shell commands
-                         +--> Claude Code / Codex sessions
-                         +--> human approval
-```
-
-The workflow source belongs to the user or project. AgentFlow keeps a copy in each run directory as an immutable execution snapshot.
-
-Trigger definitions are also project configuration. Keep them in `.agentflow/triggers.json`; AgentFlow stores delivery receipts and queued dispatch jobs beside the run store:
-
-```text
-.agentflow/
-├── providers.json
-├── triggers.json
-├── trigger-deliveries/<delivery-hash>.json
-├── dispatch/<run-id>.json
-└── runs/<run-id>/
-```
-
-## Guidance for the installing agent
-
-- **Ask before changing scope.** Confirm the user's OS, preferred install method, project directory, agent CLI, provider sessions, and whether the local web UI should be reachable outside localhost.
-- **Keep secrets out of workflow files.** Do not put API keys, login cookies, or tokens in `workflow.json`, command arguments, chat messages, or commits. AgentFlow invokes the user's already-authenticated Claude Code or Codex CLI.
-- **Use JSON output for automation.** Piped output is JSON by default. Prefer `--format json`; use `--format ndjson` for event streams and `--format table` for a human terminal.
-- **Verify each step.** Run the check shown below before moving to the next step. If a command fails, inspect its machine-readable error and follow its suggestion.
-- **Do not edit runtime state.** Agents write the structured result file and exit. The runner alone updates `state.json` and advances dependent nodes.
-
-## Prerequisites
-
-For a released binary, no Go toolchain is required. For source builds or `go install`, use Go 1.22 or newer.
+This workflow schema is in the current source checkout. Published binaries may precede it; build this checkout when testing these examples.
 
 ```bash
-go version       # only needed for source builds or go install
-git --version
-claude --version # needed for Claude Code agent nodes
-codex --version  # needed for Codex agent nodes
+make build
+bin/agentflow version --format json
+bin/agentflow config init --format json
+bin/agentflow doctor --format json
 ```
 
-Claude Code and Codex are optional. Install and authenticate at least one of them before running a workflow with an `agent` node:
-
-```bash
-claude            # complete the Claude login flow if needed
-codex login       # complete the Codex login flow if needed
-```
-
-The web UI is served locally by the AgentFlow binary. Its current React Flow dependencies are loaded by the browser from public CDNs, so the browser needs network access to `esm.sh` and `unpkg.com` to render the graph.
-
-## Install AgentFlow
-
-Choose one method. Ask the user which method they prefer before installing.
-
-### Recommended: install script (macOS and Linux)
-
-Downloads the newest release for the current OS and CPU, verifies its checksum, and installs `agentflow` into `~/.local/bin`:
+For released binaries, use the installation script or release archives:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chenhg5/agentflow/main/scripts/install.sh | sh
 ```
 
-Set `AGENTFLOW_VERSION=v0.0.3` to pin a release and `AGENTFLOW_INSTALL_DIR=/path` to change the target directory.
+Source builds need the Go version specified in `go.mod`. A registered program needs its own runtime installed. Codex and Claude Code executors use their already-authenticated CLIs.
 
-### Option A: download a release archive
+## Executor configuration
 
-The current preview is `v0.0.3`. Pick the archive matching the user's OS and CPU:
-
-```text
-agentflow-v0.0.3-darwin-arm64.tar.gz
-agentflow-v0.0.3-darwin-amd64.tar.gz
-agentflow-v0.0.3-linux-arm64.tar.gz
-agentflow-v0.0.3-linux-amd64.tar.gz
-agentflow-v0.0.3-windows-arm64.zip
-agentflow-v0.0.3-windows-amd64.zip
-```
-
-Release assets and `checksums.txt` are published at:
-
-<https://github.com/chenhg5/agentflow/releases/tag/v0.0.3>
-
-Example for Apple Silicon macOS:
-
-```bash
-mkdir -p "$HOME/.local/bin"
-curl -fL -o /tmp/agentflow.tar.gz \
-  https://github.com/chenhg5/agentflow/releases/download/v0.0.3/agentflow-v0.0.3-darwin-arm64.tar.gz
-tar -xzf /tmp/agentflow.tar.gz -C /tmp
-install -m 0755 /tmp/agentflow-v0.0.3-darwin-arm64/agentflow "$HOME/.local/bin/agentflow"
-export PATH="$HOME/.local/bin:$PATH"
-```
-
-Verify the checksum before installing when the user requires supply-chain verification:
-
-```bash
-curl -fL -o /tmp/checksums.txt \
-  https://github.com/chenhg5/agentflow/releases/download/v0.0.3/checksums.txt
-cd /tmp
-shasum -a 256 -c checksums.txt --ignore-missing
-```
-
-On Windows, extract the matching `.zip` and put `agentflow.exe` in a directory on `PATH`.
-
-### Option B: install with Go
-
-```bash
-go install github.com/chenhg5/agentflow/cmd/agentflow@v0.0.3
-```
-
-If the command is not found afterwards, add Go's binary directory to `PATH`:
-
-```bash
-export PATH="$(go env GOPATH)/bin:$PATH"
-```
-
-### Option C: build from source
-
-```bash
-git clone https://github.com/chenhg5/agentflow.git
-cd agentflow
-make build
-./bin/agentflow version --format json
-```
-
-The release build command is documented in [`docs/releasing.md`](docs/releasing.md).
-
-## Verify the installation
-
-Run these commands from the user's project directory:
-
-```bash
-agentflow version --format json
-agentflow --help
-agentflow schema --all --format json
-agentflow doctor --format json
-```
-
-Expected version output contains `version`, `commit`, `built`, `go`, and `platform`. `doctor` reports the current directory, available providers, executable availability, and the local run store path.
-
-## Configure agent providers
-
-Provider configuration is separate from workflow definitions. Initialize a project-local file:
-
-```bash
-agentflow config init
-```
-
-This creates `.agentflow/providers.json`. If a project-local file is absent, AgentFlow also checks `~/.agentflow/providers.json`. Claude Code and Codex are built in; edit their binary and runtime settings for the installed CLI versions:
+`config init` creates `.agentflow/executors.json`. Custom programs need a command entry:
 
 ```json
 {
-  "providers": {
-    "claude-code": {
-      "kind": "claude-code",
-      "binary": "claude"
+  "executors": {
+    "my-program": {
+      "command": ["python3", "./executors/program.py"],
+      "workspace": ".",
+      "env": {"APP_PROFILE": "local"}
     },
     "codex": {
       "kind": "codex",
       "binary": "codex",
-      "model": "gpt-5.6-sol",
       "sandbox": "workspace-write"
     }
   }
 }
 ```
 
-Rules:
+The registry is read from the current working directory, then the home directory if no local file exists. Node `executor` values reference these names. A custom command can contain `{{ input.field }}` templates. An argument array runs directly; include a shell explicitly when a shell is required.
 
-- `claude-code` and `codex` are built-in providers. AgentFlow generates their start and resume commands.
-- `binary`, `model`, `sandbox`, `ephemeral`, and provider-specific flags belong in provider configuration.
-- Use `kind: "command"` with `command` and `resumeCommand` when integrating another CLI.
-- `resumeCommand` is required for a custom command provider when an agent node specifies `session`.
-- `workspace` becomes the child process working directory.
-- AgentFlow sets `AGENTFLOW_WORKSPACE`, `AGENTFLOW_SESSION_ID`, `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, and `AGENTFLOW_RESULT_FILE` for the process.
-- Command templates support `{{ prompt }}`, `{{ workspace }}`, `{{ session_id }}`, `{{ result_file }}`, `{{ run_id }}`, and `{{ node_id }}`.
+Generic programs read `AGENTFLOW_INPUT_FILE`, write JSON to `AGENTFLOW_RESULT_FILE`, and exit with code zero. Logs belong on stdout/stderr. AgentFlow supplies run, node, and invocation identifiers in environment variables; reserved contract variables cannot be overridden with executor `env`.
 
-Never silently replace a missing resume capability with a new session. If a workflow names a session, the run should fail clearly until the provider can resume it.
+The built-in `process` executor reads an argument array from `input.command`. The built-in `external` executor waits for `run submit --output JSON`. Codex/Claude Code adapters read `input.prompt`, optional `input.workspace`, and optional `input.session`. Business fields remain inside input/output contracts.
 
-## Create and execute a workflow
+## First workflow
 
-Start with the bundled example:
+Run [examples/smoke.json](examples/smoke.json), which uses built-in executors and requires no custom registration:
 
 ```bash
 agentflow workflow validate examples/smoke.json --format json
-agentflow run start examples/smoke.json --input name=AgentFlow --format json
-```
-
-The example pauses at a human node. Approve it and inspect the final run:
-
-```bash
-agentflow run approve <run-id> approve --message "approved" --format json
+agentflow run start examples/smoke.json --input name=Codex --format json
+agentflow run submit <run-id> approve --output '{"decision":"happy"}' --format json
 agentflow run get <run-id> --format json
 ```
 
-A minimal agent workflow looks like this:
+The sample's `decision` is an ordinary output property used by its edge expression. Other flows can choose any names and schema. The graph advances automatically after accepted output.
 
-```json
-{
-  "version": "1",
-  "name": "review-and-approve",
-  "inputs": {
-    "workspace": { "type": "path", "required": true },
-    "session_id": { "type": "string", "required": false }
-  },
-  "nodes": [
-    {
-      "id": "review",
-      "type": "agent",
-      "provider": "claude-code",
-      "workspace": "{{ inputs.workspace }}",
-      "session": "{{ inputs.session_id }}",
-      "prompt": "Review the current changes. Write a JSON object with summary and decision to AGENTFLOW_RESULT_FILE."
-    },
-    {
-      "id": "approve",
-      "type": "human",
-      "needs": ["review"],
-      "prompt": "Approve the review result before continuing."
-    }
-  ]
-}
-```
-
-### Node input and output contracts
-
-Each node can declare a structured `input`, `inputSchema`, and `outputSchema`. Contracts use JSON Schema draft 2020-12 and are checked when the workflow is loaded and when the node runs. Exact placeholders keep their JSON type, so a number from an earlier result remains a number in the next node's input. Agent and shell stdout/stderr are stored as logs only; the node result is read from `AGENTFLOW_RESULT_FILE` and checked against `outputSchema`.
-
-```json
-{
-  "id": "verify",
-  "type": "agent",
-  "provider": "codex",
-  "needs": ["inspect"],
-  "input": {
-    "summary": "{{ nodes.inspect.result.summary }}",
-    "line_count": "{{ nodes.inspect.result.line_count }}"
-  },
-  "inputSchema": {
-    "type": "object",
-    "required": ["summary", "line_count"],
-    "properties": {
-      "summary": { "type": "string" },
-      "line_count": { "type": "integer", "minimum": 1 }
-    },
-    "additionalProperties": false
-  },
-  "outputSchema": {
-    "type": "object",
-    "required": ["verified"],
-    "properties": { "verified": { "type": "boolean" } },
-    "additionalProperties": false
-  },
-  "prompt": "Verify the structured input and write one JSON object to AGENTFLOW_RESULT_FILE."
-}
-```
-
-For Multigent-style field handoff, use `inputFields` and `outputFields` with `name`, `type`, `description`, and `required`. `outputFields` derive a strict object schema when `outputSchema` is omitted. A downstream node can map values explicitly with `inputMapping`, for example `{ "summary": "$node.inspect.output.summary" }`. Without an explicit mapping, matching field names from direct dependencies are copied automatically; an explicit `input` template wins over both. Each rendered input is persisted at `.agentflow/runs/<run-id>/artifacts/<node>.input.json`. A contract failure marks the node failed and is visible through `run get`, `run metrics`, and the web view.
-
-## Scheduled and webhook triggers
-
-Create `.agentflow/triggers.json` from [`examples/triggers.json`](examples/triggers.json), then validate it:
+## Recovery and inspection
 
 ```bash
-agentflow trigger validate --format json
-agentflow trigger list --format json
-```
-
-Run the persistent service when you want AgentFlow to own the scheduler and webhook listener:
-
-```bash
-agentflow trigger serve --host 127.0.0.1 --port 7071
-```
-
-The service uses five-field cron expressions and the configured timezone. Each cron occurrence and webhook delivery is written to `trigger-deliveries/`, then creates a `dispatch/<run-id>.json` queue record before a worker starts the run. A restart recovers queued jobs. Webhooks use `POST /triggers/<id>` by default; configure HMAC SHA-256 or bearer authentication and never put secrets in JSON.
-
-For system cron, launchd, or Kubernetes CronJob, use the same dispatcher without running a long-lived HTTP process:
-
-```bash
-agentflow trigger fire nightly-review \
-  --scheduled-at 2026-10-13T02:00:00+08:00 \
-  --delivery-id nightly-review-20261013 \
-  --format json
-```
-
-`delivery-id` is the idempotency boundary. Repeating a delivery returns the original run reference and does not execute the workflow twice. `policy.concurrency: "forbid"` records a skipped delivery while another run from the same trigger is active.
-
-Triggered runs expose `trigger.id`, `trigger.kind`, `trigger.deliveryId`, `trigger.scheduledAt`, and `trigger.receivedAt` in `run get` and `run metrics`.
-
-Validate before executing:
-
-```bash
-agentflow workflow validate review-and-approve.json --format json
-agentflow run start review-and-approve.json \
-  --input workspace=/absolute/path/to/repo \
-  --input session_id=<optional-session-id> \
-  --dry-run --format json
-```
-
-Dry-run exits with code `10` and does not create a run. If the plan is correct, execute it with a stable idempotency key when the request may be retried:
-
-```bash
-agentflow run start review-and-approve.json \
-  --input workspace=/absolute/path/to/repo \
-  --idempotency-key review-2026-10-10-001 \
-  --format json
-```
-
-The same workflow, inputs, and idempotency key reuse the existing run. A different request using that key returns a conflict instead of creating a duplicate.
-
-## Structured results and artifacts
-
-Agent nodes must write one JSON object to `AGENTFLOW_RESULT_FILE` before exiting with code `0`. The runner also prints the exact absolute result path and workspace in the execution contract appended to the prompt. This matters for non-interactive agent sessions where reading process environment variables may be restricted:
-
-```json
-{
-  "decision": "pass",
-  "summary": "All checks passed",
-  "session_id": "optional-session-id"
-}
-```
-
-The runner stores this object as the node result. stdout and stderr are logs only; they are never treated as structured node output. Downstream nodes can read fields with expressions such as `{{ nodes.review.result.summary }}`.
-
-Do not write `.agentflow/runs/<run-id>/state.json` from an agent. Do not start the next node from an agent. Exit after writing the result file and let the runner advance the workflow.
-
-## Human approval and recovery
-
-When a run returns `waiting_human`, inspect the pending node and decide explicitly:
-
-```bash
-agentflow run get <run-id> --format json
-agentflow run approve <run-id> <node-id> --message "approved" --format json
-# or
-agentflow run reject <run-id> <node-id> --message "needs changes" --format json
-```
-
-Approval resumes dependent nodes. Rejection marks the run failed. If the process was interrupted, inspect the run first, then resume it:
-
-```bash
-agentflow run resume <run-id> --dry-run --format json
-agentflow run resume <run-id> --format json
-```
-
-Cancel a run when the user explicitly asks for cancellation:
-
-```bash
-agentflow run cancel <run-id> --format json
-```
-
-## Observe a run and the workflow history
-
-For a single run:
-
-```bash
-agentflow run metrics <run-id> --format json
 agentflow run logs <run-id> --format ndjson
-agentflow run get <run-id> --format json
+agentflow run metrics <run-id> --format json
+agentflow run retry <run-id> --format json
+agentflow run resume <run-id> --format json
+agentflow web --host 127.0.0.1 --port 7070
 ```
 
-Metrics include run and node duration, human waiting time, attempts, rendered prompt bytes, structured result bytes, stdout/stderr bytes, workspace, and session ID. Historical aggregation is available with:
+The UI displays the explicit edges, selected node states, and visit artifacts. It loads React Flow browser dependencies from public CDNs. A failed program stops the run until retry. A crashed running node is retried on resume; external side effects should be idempotent. Only one node is active in a run.
 
-```bash
-agentflow run stats --format json
-agentflow run stats review-and-approve --format json
-```
+Use `.agentflow/triggers.json` for cron/webhook definitions and keep `agentflow trigger serve` running to deliver scheduled events. Run files live under `.agentflow/runs/`; delivery receipts and dispatch jobs live beside them. Persist the workflow, executor configuration, program sources, and trigger definitions to move a flow to another environment.
 
-Open the visual graph in a browser:
-
-```bash
-agentflow web review-and-approve.json
-agentflow web --run <run-id>
-```
-
-The command prints a local URL. The run page refreshes state and metrics every two seconds. Use `--port 0` for an available port. Only use `--host 0.0.0.0` when the user understands that the local UI will be reachable from the network.
-
-## Runtime data and cleanup
-
-AgentFlow keeps runtime data in the current project directory:
-
-```text
-.agentflow/
-├── providers.json
-└── runs/
-    └── <run-id>/
-        ├── workflow.json
-        ├── state.json
-        ├── events.jsonl
-        └── artifacts/
-            ├── *.result.json
-            └── logs/*.stdout.log
-            └── logs/*.stderr.log
-```
-
-The original workflow file can live anywhere. The copy under a run directory is the definition snapshot used by that run. `.agentflow/` is ignored by the repository's `.gitignore` and may contain prompts, inputs, session IDs, and work results; do not commit it unless the user explicitly wants to archive it.
-
-To remove local runtime data after confirming it is no longer needed:
-
-```bash
-rm -rf .agentflow
-```
-
-## Exit codes and troubleshooting
-
-| Code | Meaning | What to do |
-|---:|---|---|
-| 0 | Success | Continue or inspect the returned JSON. |
-| 1 | Execution failure | Run `run get` and `run logs`; check the failed node's error and artifacts. |
-| 2 | Invalid arguments or workflow | Run `--help`, `schema workflow`, and `workflow validate`. |
-| 3 | Resource not found | Check the workflow path or run ID. |
-| 4 | Permission error | Check workspace and artifact directory permissions. |
-| 5 | Conflict | Check idempotency keys or an already-decided human node. |
-| 10 | Dry-run passed | This is a successful preview, not an executed run. |
-
-Common fixes:
-
-- **Provider executable is unavailable:** run `agentflow doctor --format json`, install the missing CLI, or set the provider `binary` path in `.agentflow/providers.json`.
-- **Existing session cannot resume:** check the provider-specific session ID and CLI login; custom `kind: "command"` providers also need a `resumeCommand`. Do not remove `session` unless starting a new session is intentional.
-- **Structured result is missing or invalid:** make the agent write a JSON object to `AGENTFLOW_RESULT_FILE`; stdout text does not count as the node result.
-- **Workflow validation fails:** fix the reported node ID, dependency, type, required field, or cycle before running again.
-- **Web UI is blank:** check browser access to `esm.sh` and `unpkg.com`, or use `run get`/`run metrics` as the CLI fallback.
-
-## Uninstall
-
-If installed with Go, remove the binary from `$(go env GOPATH)/bin`. If installed from an archive, remove the copied `agentflow` binary. Runtime data is project-local under `.agentflow/` and can be removed separately after review.
+See [README](README.md), [execution semantics](docs/execution-semantics.md), and [the agent skill](skills/agentflow/SKILL.md).

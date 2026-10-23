@@ -30,10 +30,10 @@ trap cleanup EXIT
 
 mkdir -p "$WORKSPACE/.agentflow"
 cat > "$WORKSPACE/webhook-workflow.json" <<'JSON'
-{"version":"1","name":"webhook-e2e","inputs":{"name":{"type":"string","required":true}},"nodes":[{"id":"work","type":"shell","inputFields":[{"name":"name","type":"string","required":true}],"inputMapping":{"name":"$input.name"},"outputFields":[{"name":"done","type":"boolean","required":true}],"command":["sh","-c","printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""]}]}
+{"version": "2", "name": "webhook-e2e", "entry": "work", "nodes": [{"id": "work", "executor": "process", "input": {"command": ["sh", "-c", "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""], "name": "{{ inputs.name }}"}}], "edges": [{"from": "work", "to": "$end"}], "inputs": {"name": {"type": "string", "required": true}}}
 JSON
 cat > "$WORKSPACE/cron-workflow.json" <<'JSON'
-{"version":"1","name":"cron-e2e","nodes":[{"id":"work","type":"shell","command":["sh","-c","printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""]}]}
+{"version": "2", "name": "cron-e2e", "entry": "work", "nodes": [{"id": "work", "executor": "process", "input": {"command": ["sh", "-c", "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""]}}], "edges": [{"from": "work", "to": "$end"}]}
 JSON
 cat > "$WORKSPACE/.agentflow/triggers.json" <<'JSON'
 {"triggers":[{"id":"webhook-e2e","enabled":true,"source":{"kind":"webhook","path":"/hooks/e2e","method":"POST","deliveryIDHeader":"X-Delivery-ID"},"target":{"workflow":"webhook-workflow.json"},"bindings":{"name":{"from":"json","path":"$.name"}}},{"id":"cron-e2e","enabled":true,"source":{"kind":"cron","expression":"* * * * *"},"target":{"workflow":"cron-workflow.json"},"inputs":{"name":"cron"}}]}

@@ -1,360 +1,77 @@
 ---
 name: agentflow
-version: 1.0.0
-description: "使用 AgentFlow 与用户共同设计、校验、执行和观测 JSON workflow；当用户想把多个 Claude Code、Codex、shell 或人工审批步骤编排成可恢复流程时使用。"
+metadata:
+  version: "2.1.0"
+description: "使用 AgentFlow 设计、执行和检查由 JSON 输入输出与显式条件边组成的本地工作流。"
 ---
 
-# AgentFlow Workflow Orchestration
+# AgentFlow workflow
 
-你负责把用户的目标落成一个可验证、可恢复、可观测的 AgentFlow workflow。先和用户确认流程边界，再生成或修改 workflow JSON；不要猜测 provider、workspace、session 或审批规则。
+先查 `agentflow schema --all --format json` 和 `agentflow schema workflow --format json`。需要自定义程序时查 `schema executors`，需要定时/webhook 时查 `schema trigger`；这些 schema 随二进制提供，在空目录也可读取。根据用户已有信息确定输入、输出和完成标准，在已有授权内推进。
 
-## 1. 先向用户确认
+## 图结构
 
-至少确认这些信息：
-
-1. **目标**：流程最终要产出什么，成功标准是什么。
-2. **输入**：运行时需要哪些值，哪些是必填；敏感值不要写入 workflow 文件。
-3. **节点**：哪些步骤由 shell 执行，哪些步骤由 agent 执行，哪些步骤必须人工审批。
-4. **依赖**：节点之间的先后关系；没有依赖的节点可以并行执行，但当前 MVP 的 Runner 会按定义顺序推进可执行节点。
-5. **工作目录**：每个 agent 使用哪个绝对或相对 workspace。
-6. **会话**：是启动新 session，还是继续已有 session；已有 session 的 ID 从哪里来。
-7. **失败策略**：超时、重试次数、失败后是否跳过下游节点。
-8. **输出**：每个节点要写入哪些结构化 JSON 字段，哪些文件需要作为 artifact 保留。
-
-如果用户还没有提供 session ID，应明确让该值成为 workflow input，或先使用 provider 的新 session command；不要把“当前目录最近的会话”当成确定绑定。
-
-## 2. 先查 CLI 契约
-
-在编排前查询当前版本的命令和 workflow schema：
-
-```bash
-agentflow --help
-agentflow run --help
-agentflow schema --all --format json
-agentflow schema workflow --format json
-```
-
-优先使用长命令和 JSON 输出。通过管道调用时 CLI 默认返回 JSON；stdout 是数据，stderr 是诊断。
-
-## 3. Workflow 最小结构
+只使用 version `2`，通过 `entry`、`nodes`、`edges` 定义图。节点字段为 `id`、`executor`、`input`、`inputSchema`、`outputSchema`、`timeoutMs`、`retry.maxAttempts`。节点数组顺序不决定执行顺序。
 
 ```json
 {
-  "version": "1",
-  "name": "release-review",
-  "inputs": {
-    "workspace": { "type": "path", "required": true },
-    "session_id": { "type": "string", "required": false }
-  },
-  "nodes": [
-    {
-      "id": "inspect",
-      "type": "agent",
-      "provider": "claude-code",
-      "workspace": "{{ inputs.workspace }}",
-      "session": "{{ inputs.session_id }}",
-      "prompt": "检查当前变更，并把结论写入 AGENTFLOW_RESULT_FILE。"
-    },
-    {
-      "id": "approve",
-      "type": "human",
-      "needs": ["inspect"],
-      "prompt": "请审批检查结论。"
-    }
-  ]
+  "version": "2", "name": "example", "entry": "step",
+  "nodes": [{"id": "step", "executor": "codex", "input": {"prompt": "完成用户指定任务并输出 JSON。"}}],
+  "edges": [{"from": "step", "to": "$end"}]
 }
 ```
 
-### 节点约定
+工作流运行输入声明在顶层 `inputs`；顶层没有 `inputSchema`。节点的输入输出约束声明在各节点 `inputSchema` / `outputSchema`。需要结构化交接时，用 schema 明确字段和 JSON 类型。
 
-- `shell`：使用 `command`，适合确定性的脚本和校验。
-- `agent`：使用 `provider`、`prompt`、可选的 `workspace` 和 `session`。
-- `human`：使用 `prompt`，运行后状态为 `waiting_human`，必须通过 CLI 决策才能继续。等待期间不阻塞其他不相关的分支。
-- `needs`：声明依赖节点 ID。没有依赖关系的节点会并行执行，workflow 顶层 `maxParallel` 控制并发上限（默认 4）。
-- `runIf`：`success`（默认，所有依赖成功才执行）、`failure`（上游有节点失败时执行，用于告警）、`always`（依赖都结束就执行，用于回执/清理）。一个节点失败只会跳过它的下游，独立分支继续跑。不要再写“脚本永远返回成功”来保证回执执行，改用 `runIf: always`。
-- `when`：根据 `inputs` 或上游 `result` 做条件跳过。
-- `retry.maxAttempts`：包含首次执行在内的最大尝试次数。
-- `timeoutMs`：单次命令超时。
+三个位置的引用上下文不同：
 
-## 4. Provider、workspace 和 session
+| 位置 | 写法 | 用途 |
+| --- | --- | --- |
+| 节点 input 内 | `{{ inputs.sample }}` | 运行时 `--input sample=...` |
+| 节点 input 内 | `{{ nodes.inspect.result.score }}` | 指定节点的 JSON 输出 |
+| executor 配置 command/env 内 | `{{ input.sample }}` | 当前节点渲染后的输入 |
+| 边 when | `nodes.inspect.result.score > 80` | Expr 表达式，不加模板大括号 |
 
-Provider 配置在 `.agentflow/providers.json` 或 `~/.agentflow/providers.json`，不放进 workflow：
+精确模板会保留数字、数组、对象和布尔类型；把它拼进句子后会变成字符串。循环第一次进入时，后面节点还没有结果：精确引用会得到 null，要使用允许 null 的 schema，或将可选反馈嵌入带前缀的提示文字；不支持在模板里写 JS/Expr 的 `??` 等运算。
+
+节点完成后按定义顺序计算出边，选择第一条为真的边。没有 `when` 的边是默认边，必须放最后。条件使用 Expr，支持大小比较、算术、逻辑组合、集合、字符串、正则等操作。循环必须包含设置 `maxIterations` 的边。当前每个 run 同时只有一个 active node。节点重新进入时，其本轮状态会重置；上一轮的正文若仍需使用，应由其他节点的 input/result 显式携带，不能依赖正在重新执行节点的旧 result。
+
+`maxIterations` 限制的是这条边的穿越次数，超过限制会以 `max_iterations` 结束为失败。优先用图的边界限制完成用户要求；若用户另有“次数耗尽必须正常结束”的要求，才设计对应计数和终止条件，不要把技术计数程序无理由放到 Agent 起草之前。
+
+业务字段只能位于 `input`/结果及其 schema 中。不要创建特殊审核节点或为 approve/reject/happy 等值赋予引擎含义。
+
+## 注册程序入口
+
+`.agentflow/executors.json` 关联名字与程序入口：
 
 ```json
-{
-  "providers": {
-    "claude-code": {
-      "kind": "claude-code",
-      "binary": "claude"
-    },
-    "codex": {
-      "kind": "codex",
-      "binary": "codex",
-      "model": "gpt-5.6-sol",
-      "sandbox": "workspace-write"
-    }
-  }
-}
+{"executors":{"my-interaction":{"command":["python3","./executors/interaction.py"],"workspace":".","env":{"APP_PROFILE":"local"}}}}
 ```
 
-规则：
+节点写 `"executor":"my-interaction"`，运行到此节点就会自动启动入口。名字任意，语言任意。程序从 `AGENTFLOW_INPUT_FILE` 读取 JSON，对用户交互完成后把 JSON 写进 `AGENTFLOW_RESULT_FILE` 并正常退出。stdout/stderr 仅是日志，程序不修改 run state。`command` 与 `env` 支持 `{{ input.field }}`；相对 workspace 按调用目录解析，相对命令路径在该 workspace 下解析。
 
-- `claude-code` 和 `codex` 是内置 provider，provider 负责拼接各自 CLI 的启动和 resume 参数。
-- `binary`、`model`、`sandbox` 等运行参数放在 provider 配置，不要写进 workflow。
-- 自定义 agent 使用 `kind: "command"`，并提供 `command` 与 `resumeCommand` 模板。
-- 有 `session` 时，内置 provider 会调用对应 CLI 的 resume 子命令；自定义 command provider 必须提供 `resumeCommand`。
-- 有 session 但无法 resume 时，节点应失败并修复 provider 配置；不要静默启动新 session。
-- Runner 使用节点的 workspace 作为进程工作目录，并设置 `AGENTFLOW_WORKSPACE`、`AGENTFLOW_SESSION_ID`。
-- provider command 可以使用 `{{ prompt }}`、`{{ workspace }}`、`{{ session_id }}`、`{{ result_file }}`、`{{ run_id }}` 和 `{{ node_id }}`。
-- Agent 也可以在结构化结果中返回 `session_id`，后续节点用 `{{ nodes.<id>.result.session_id }}` 继续该会话。
+内置执行器：`codex`、`claude-code`、`process`、`external`。前两个适配器读取 `input.prompt`、可选 `input.workspace` 和 `input.session`；`process` 读取 `input.command` 数组；`external` 等待任意符合 outputSchema 的 JSON 提交。自定义程序与这些执行器使用相同的节点引用方式。
 
-## 5. 结构化结果契约
+飞书、钉钉、终端或其他交互由自定义执行器负责。图无需识别这些产品。将收件人、卡片内容和操作返回值写进该程序的 input，明确 executor 注册项，避免程序扫描特定 workflow 名称或节点 ID。
 
-Agent 成功退出前必须向 `AGENTFLOW_RESULT_FILE` 写入一个 JSON object：
-
-```json
-{
-  "decision": "pass",
-  "summary": "测试通过",
-  "session_id": "optional-session-id"
-}
-```
-
-不要把 stdout 或 stderr 当作节点输出。Runner 会把它们保存成日志 artifact，并只把结果文件解析为 `node.result`。下游节点通过 `{{ nodes.inspect.result.summary }}` 读取结果。
-
-节点可以把上下游边界写成显式契约：
-
-```json
-{
-  "input": { "summary": "{{ nodes.inspect.result.summary }}" },
-  "inputSchema": {
-    "type": "object",
-    "required": ["summary"],
-    "properties": { "summary": { "type": "string" } },
-    "additionalProperties": false
-  },
-  "outputSchema": {
-    "type": "object",
-    "required": ["decision"],
-    "properties": { "decision": { "type": "string" } }
-  }
-}
-```
-
-`input` 在节点启动前渲染并校验，`outputSchema` 在结果文件解析后校验。契约使用 JSON Schema draft 2020-12；不要只依赖 prompt 描述字段。精确占位符会保留源值类型；不要通过 stdout/stderr 传递业务数据。
-
-对于字段较多的流程，使用 Multigent 风格的字段声明：
-
-```json
-{
-  "id": "verify",
-  "type": "agent",
-  "needs": ["inspect"],
-  "inputFields": [
-    { "name": "summary", "type": "string", "description": "检查摘要", "required": true }
-  ],
-  "outputFields": [
-    { "name": "verified", "type": "boolean", "description": "是否通过", "required": true }
-  ],
-  "inputMapping": { "summary": "$node.inspect.output.summary" }
-}
-```
-
-`outputFields` 在没有 `outputSchema` 时会生成严格 object schema，缺少必填字段或返回未知字段都会失败。`inputMapping` 支持 `$node.<id>.output.<field>`、`$output.<field>` 和 `$input.<field>`；没有显式 mapping 时，直接依赖节点之间同名字段会自动传递，显式 `input` 模板优先级最高。每个节点的渲染后输入会保存为 `.agentflow/runs/<run-id>/artifacts/<node-id>.input.json`，便于审计和重放。
-
-## 6. 校验和执行流程
-
-### 6.1 校验
+## 执行和恢复
 
 ```bash
-agentflow workflow validate workflow.json --format json
-```
-
-校验失败时，根据 JSON 错误里的 `code`、`message`、`suggestion` 修复后再试。不要跳过校验直接执行。
-
-### 6.2 预演
-
-```bash
-agentflow run start workflow.json \
-  --input workspace=/absolute/repo \
-  --input session_id=<session-id> \
-  --dry-run \
-  --format json
-```
-
-退出码 `10` 表示 dry-run 成功；它不会创建或执行 run。检查预演中的节点顺序、workspace、session 和输入。
-
-### 6.3 正式执行
-
-为可重试的启动使用稳定的幂等 key：
-
-```bash
-agentflow run start workflow.json \
-  --input workspace=/absolute/repo \
-  --input session_id=<session-id> \
-  --idempotency-key <stable-request-key> \
-  --format json
-```
-
-同一 workflow、输入和幂等 key 会复用已有 run；同 key 对应不同请求时退出码为 `5`。
-
-### 6.4 人工审批和恢复
-
-当 run 返回 `waiting_human`：
-
-```bash
+agentflow workflow validate workflow.json --check-executors --format json
+agentflow run start workflow.json --input key=value --format json
+agentflow run submit <run-id> <node-id> --output '{"customField":8}' --format json
 agentflow run get <run-id> --format json
-agentflow run approve <run-id> <node-id> --message "approved" --format json
-# 或
-agentflow run reject <run-id> <node-id> --message "需要修改" --format json
-```
-
-审批命令由 Runner 推进下游节点。不要让 agent 直接修改 `.agentflow/runs/<run-id>/state.json`，也不要让 agent 自己启动下一个节点。如果 run 正在被另一个进程执行，审批/取消会排队并返回 `"queued": true`，执行中的进程会在约 500ms 内应用。拒绝会让该节点失败：下游被跳过，`runIf: failure/always` 的节点照常执行。
-
-如果进程被中断，先查看状态，再恢复（中断时处于 running 的节点会重新执行）：
-
-```bash
-agentflow run resume <run-id> --dry-run --format json
+agentflow run logs <run-id> --format ndjson
+agentflow run retry <run-id> --format json
 agentflow run resume <run-id> --format json
 ```
 
-修复失败原因后，只重跑失败节点和它的下游，其他节点的结果保留：
+submit 用于 external 执行器；启动的交互程序通常直接写结果文件，退出后自动推进。输入输出使用 JSON Schema draft 2020-12 校验；精确模板 `{{ nodes.step.result.value }}` 保留 JSON 类型，不要自动猜测同名字段传递。每次节点访问都有编号 input/result/log artifacts。
 
-```bash
-agentflow run retry <run-id> --dry-run --format json   # 查看会重置哪些节点
-agentflow run retry <run-id> --format json
-agentflow run retry <run-id> --from publish --format json
-```
+交付前校验实际工作流和注册项，存在触发器时也运行 `trigger validate`。`run start --dry-run` 的成功退出码是 10。CLI 错误 JSON 可能在 stderr，不能只看 stdout。不要把 dry-run 或 schema 通过描述为整条流程已经实跑。
 
-完整规则见 `docs/execution-semantics.md`。
+涉及分支/返工时，用本地替身验证各条路：进入后续节点、直接结束、回到前面节点、次数耗尽及无效输出。不要为验证而调用真实模型或给真实收件人发消息，除非已有相应授权。模型步骤可在测试副本中替换成遵循相同输出契约的程序，交付配置仍保留用户选择的执行器。
 
-## 7. 观测单次执行和历史效率
+使用 `doctor` 检查执行器，`web` 查看图，`run metrics/stats` 查看观测数据。失败后只重试当前失败节点；resume 恢复中断执行。执行器当前配置会影响后续 retry/resume。外部副作用应支持幂等。
 
-### 单次 run
-
-```bash
-agentflow run metrics <run-id> --format json
-```
-
-返回：
-
-- run 总耗时和状态；
-- 每个节点的 `duration_ms`、`waiting_ms`、`attempts`；
-- `input_bytes`：发送给节点的渲染后 prompt 加结构化 input 字节数；
-- `output_bytes`：结构化 result 文件字节数；
-- `stdout_bytes` / `stderr_bytes`：日志字节数；
-- agent 的 workspace 和 session ID。
-
-事件时间线和原始日志：
-
-```bash
-agentflow run logs <run-id> --format ndjson
-agentflow run get <run-id> --format json
-```
-
-运行数据默认保存在：
-
-```text
-.agentflow/runs/<run-id>/
-├── workflow.json
-├── state.json
-├── events.jsonl
-└── artifacts/
-    ├── <node>.result.json
-    └── logs/<node>.stdout.log
-    └── logs/<node>.stderr.log
-```
-
-### 历史聚合
-
-```bash
-agentflow run stats --format json
-agentflow run stats release-review --format json
-agentflow run stats release-review --by-version --format json
-agentflow run stats release-review --digest <workflow_digest> --format json
-```
-
-聚合结果包括成功/失败/等待审批/取消数量，run 和节点耗时的平均值、P50、P95、最大值，以及输入、输出和日志字节总量。run 级别的 `duration_ms` 只统计已结束的 run，并拆成 `active_ms`（执行）和 `waiting_ms`（等人）两部分，所以还在等审批的 run 不会拉高平均值。
-
-每个 run 都记录 `workflow_digest`：workflow 定义内容的哈希（只改格式不变，改了节点、契约或输入就会变）。`--by-version` 按版本分组、按首次运行时间排序，用来比较改流程前后的效果。
-
-查询某个 workflow 的最新结果时用稳定命令，不要读取 `.agentflow/runs/*/state.json`：
-
-```bash
-agentflow run latest release-review --status succeeded,failed --format json   # 没有匹配时退出码 3
-agentflow run list --workflow release-review --status waiting_human --format json
-```用它回答“哪个节点最慢”“审批等待占多少时间”“输出是否异常膨胀”“失败是否集中在某个节点”。
-
-## 8. Web 可视化
-
-需要和用户一起检查流程结构时，打开 workflow 图：
-
-```bash
-agentflow web workflow.json
-```
-
-需要检查一次实际执行时，打开 run 图：
-
-```bash
-agentflow web --run <run-id>
-```
-
-Web 页面会显示节点依赖、节点类型、状态、耗时、attempts 和输出大小；run 页面会每两秒刷新一次状态。CLI 会打印本地 URL。可以用 `--port 0` 选择可用端口，用 `--host 0.0.0.0` 暴露到局域网时必须确认网络访问范围。
-
-## 9. 谁来启动 workflow
-
-workflow 本身是完整的，谁启动它只是入口。以下方式等价，按用户已有的东西选：
-
-- Claude Code 或 Codex 自己的定时任务唤醒 agent，agent 调 `agentflow run start <workflow.json> --idempotency-key <窗口标识>`，再用 `agentflow run latest <name>` 看结果；
-- 系统 cron / launchd / CI 调 `agentflow run start` 或 `agentflow trigger fire`；
-- `agentflow trigger serve` 常驻处理 cron 和 webhook（下文）；
-- 人直接在命令行启动。
-
-幂等 key 用“这次唤醒对应的业务窗口”，例如 `release-2026-10-23-beta`，这样重复唤醒不会重复执行。
-
-### Cron 和 webhook trigger
-
-Trigger 配置放在 `.agentflow/triggers.json`，不是 workflow JSON。先检查再运行服务：
-
-```bash
-agentflow trigger validate --format json
-agentflow trigger list --format json
-agentflow trigger serve --host 127.0.0.1 --port 7071
-```
-
-`trigger serve` 内置 cron scheduler、webhook HTTP server 和持久化 run worker。每个事件先写入 `trigger-deliveries/`，再写入 `dispatch/<run-id>.json`，随后异步执行目标 workflow。进程重启会恢复仍处于 queued 的 dispatch。
-
-如果使用系统 cron/launchd/Kubernetes CronJob，只调用一次 dispatcher：
-
-```bash
-agentflow trigger fire nightly-review \
-  --scheduled-at 2026-10-13T02:00:00+08:00 \
-  --delivery-id nightly-review-20261013 \
-  --format json
-```
-
-Webhook 默认是 `POST` 到 trigger 的 `source.path`。使用 `source.auth` 配置 HMAC SHA-256 或 bearer token；签名 secret 只能来自环境变量。`delivery-id` 是幂等边界，重复投递会复用原 run。`policy.concurrency: "forbid"` 会在同一 trigger 有活动 run 时记录 skipped。
-
-## 10. 效率优化闭环
-
-1. 先看 `run stats <workflow-name>`，定位 P95 高或失败率高的节点。
-2. 再看对应 run 的 `run metrics`，区分 agent 执行时间、人工等待时间和重试时间。
-3. 用 `run logs --format ndjson` 对照 `node.started`、`node.retrying`、`node.failed` 事件。
-4. 根据字节数判断 prompt/result/log 是否过大；不要用 stdout 文本猜结构化输出。
-5. 调整 workflow：拆分过大的 prompt、增加明确的 result schema、设置合理 timeout/retry、减少不必要的人审节点。
-6. 重新 `workflow validate`、`run start --dry-run`，再用新的幂等 key 执行。
-7. 用 `run stats <workflow-name> --by-version` 比较修改前后两个版本的 P95、`active_ms`、`waiting_ms`、失败数、attempts 和字节量是否改善。
-
-## 10. 与用户协作的交付格式
-
-在提交 workflow 前，向用户说明：
-
-- workflow 的目标、输入和最终输出；
-- 每个节点做什么以及依赖关系；
-- 哪些节点会调用真实 agent、使用哪个 workspace/session；
-- 哪些节点需要人工审批；
-- 失败、重试、超时和取消如何处理；
-- 如何执行、如何审批、如何查看 metrics/stats；
-- 内置 provider 使用哪个 binary、model、sandbox 或 permission 设置；自定义 command provider 的命令模板是否需要按本机 CLI 版本调整。
-
-执行后报告 run ID、最终状态、失败节点、耗时、attempts、输入/输出字节数，以及需要用户处理的审批节点。
+定时与 webhook 由 `.agentflow/triggers.json` 定义。先 validate，再 fire 验证，最后持续运行 `trigger serve`。这些触发器负责创建 run，图负责 run 内节点推进。

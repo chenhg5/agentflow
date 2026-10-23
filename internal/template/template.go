@@ -81,28 +81,26 @@ func Lookup(context map[string]any, expression string) (any, bool) {
 	return current, true
 }
 
-func EvaluateWhen(expression string, context map[string]any) bool {
-	if strings.TrimSpace(expression) == "" {
-		return true
+// References lists substitutions in nested JSON input, without evaluating them.
+func References(value any) []string {
+	var refs []string
+	switch current := value.(type) {
+	case string:
+		for _, match := range placeholder.FindAllStringSubmatch(current, -1) {
+			refs = append(refs, strings.TrimSpace(match[1]))
+		}
+	case map[string]any:
+		for _, item := range current {
+			refs = append(refs, References(item)...)
+		}
+	case []any:
+		for _, item := range current {
+			refs = append(refs, References(item)...)
+		}
+	case []string:
+		for _, item := range current {
+			refs = append(refs, References(item)...)
+		}
 	}
-	for _, operator := range []string{"==", "!=", "contains"} {
-		parts := strings.SplitN(expression, operator, 2)
-		if len(parts) != 2 {
-			continue
-		}
-		left, _ := Lookup(context, strings.TrimSpace(parts[0]))
-		right := strings.TrimSpace(parts[1])
-		if len(right) >= 2 && ((right[0] == '"' && right[len(right)-1] == '"') || (right[0] == '\'' && right[len(right)-1] == '\'')) {
-			right = right[1 : len(right)-1]
-		}
-		if operator == "==" {
-			return fmt.Sprint(left) == right
-		}
-		if operator == "!=" {
-			return fmt.Sprint(left) != right
-		}
-		return strings.Contains(fmt.Sprint(left), right)
-	}
-	value, ok := Lookup(context, strings.TrimSpace(expression))
-	return ok && fmt.Sprint(value) != "" && fmt.Sprint(value) != "false"
+	return refs
 }

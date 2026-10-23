@@ -1,0 +1,21 @@
+{
+  "executors": {
+    "measure": {
+      "command": [
+        "python3",
+        "fixtures/measure.py"
+      ],
+      "workspace": "."
+    },
+    "finish": {
+      "command": [
+        "python3",
+        "fixtures/finish.py"
+      ],
+      "workspace": ".",
+      "env": {
+        "QUALITY_SITE": "plant-7"
+      }
+    }
+  }
+}

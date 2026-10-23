@@ -1,0 +1,245 @@
+{
+  "passed": true,
+  "start": {
+    "active_node": "review",
+    "created_at": "2026-10-23T09:00:07.043108Z",
+    "history": [
+      {
+        "nodeId": "draft",
+        "visit": 1,
+        "state": {
+          "status": "succeeded",
+          "workspace": "/private/tmp/agentflow-bench-revised-external",
+          "attempts": 1,
+          "durationMs": 18,
+          "inputBytes": 335,
+          "outputBytes": 104,
+          "startedAt": "2026-10-23T09:00:07.043847Z",
+          "finishedAt": "2026-10-23T09:00:07.062562Z",
+          "result": {
+            "check": "已检查主题与本轮反馈。",
+            "summary": "文案：independent-helper；反馈：None"
+          },
+          "input": {
+            "feedback": null,
+            "prompt": "请根据主题撰写可直接使用的完整文案。输出严格 JSON，仅包含字符串 summary（完整文案）和 check（自检说明）。主题：independent-helper。本轮返工反馈（首次为空）：。返工时请落实反馈，并重新输出完整文案。",
+            "topic": "independent-helper"
+          },
+          "artifacts": {
+            "input": "artifacts/draft.1.input.json",
+            "result": "artifacts/draft.1.result.json",
+            "stderrLog": "artifacts/logs/draft.1.stderr.log",
+            "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+          },
+          "leaseToken": "08f34474f189f87fd75a092281e14c82"
+        }
+      }
+    ],
+    "inputs": {
+      "topic": "independent-helper"
+    },
+    "nodes": {
+      "draft": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-external",
+        "attempts": 1,
+        "durationMs": 18,
+        "inputBytes": 335,
+        "outputBytes": 104,
+        "startedAt": "2026-10-23T09:00:07.043847Z",
+        "finishedAt": "2026-10-23T09:00:07.062562Z",
+        "result": {
+          "check": "已检查主题与本轮反馈。",
+          "summary": "文案：independent-helper；反馈：None"
+        },
+        "input": {
+          "feedback": null,
+          "prompt": "请根据主题撰写可直接使用的完整文案。输出严格 JSON，仅包含字符串 summary（完整文案）和 check（自检说明）。主题：independent-helper。本轮返工反馈（首次为空）：。返工时请落实反馈，并重新输出完整文案。",
+          "topic": "independent-helper"
+        },
+        "artifacts": {
+          "input": "artifacts/draft.1.input.json",
+          "result": "artifacts/draft.1.result.json",
+          "stderrLog": "artifacts/logs/draft.1.stderr.log",
+          "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+        },
+        "leaseToken": "08f34474f189f87fd75a092281e14c82"
+      },
+      "finalize": {
+        "status": "pending"
+      },
+      "review": {
+        "status": "waiting_input",
+        "inputBytes": 130,
+        "startedAt": "2026-10-23T09:00:07.063723Z",
+        "input": {
+          "check": "已检查主题与本轮反馈。",
+          "summary": "文案：independent-helper；反馈：None",
+          "topic": "independent-helper"
+        },
+        "artifacts": {
+          "input": "artifacts/review.1.input.json"
+        },
+        "leaseToken": "457901eaab0a3c9af24f00780728a5b1"
+      }
+    },
+    "ok": true,
+    "outcome": "",
+    "run_id": "run_20261023090007_922d94acf5907f2f",
+    "started_at": "2026-10-23T09:00:07.043719Z",
+    "status": "waiting_input",
+    "updated_at": "2026-10-23T09:00:07.064594Z",
+    "visits": {
+      "draft": 1,
+      "review": 1
+    },
+    "workflow": "durable-copy-review-local-test",
+    "workflow_digest": "ce400ee41399"
+  },
+  "submit": {
+    "active_node": "",
+    "created_at": "2026-10-23T09:00:07.043108Z",
+    "duration_ms": 69,
+    "finished_at": "2026-10-23T09:00:07.112841Z",
+    "history": [
+      {
+        "nodeId": "draft",
+        "visit": 1,
+        "state": {
+          "status": "succeeded",
+          "workspace": "/private/tmp/agentflow-bench-revised-external",
+          "attempts": 1,
+          "durationMs": 18,
+          "inputBytes": 335,
+          "outputBytes": 104,
+          "startedAt": "2026-10-23T09:00:07.043847Z",
+          "finishedAt": "2026-10-23T09:00:07.062562Z",
+          "result": {
+            "check": "已检查主题与本轮反馈。",
+            "summary": "文案：independent-helper；反馈：None"
+          },
+          "input": {
+            "feedback": null,
+            "prompt": "请根据主题撰写可直接使用的完整文案。输出严格 JSON，仅包含字符串 summary（完整文案）和 check（自检说明）。主题：independent-helper。本轮返工反馈（首次为空）：。返工时请落实反馈，并重新输出完整文案。",
+            "topic": "independent-helper"
+          },
+          "artifacts": {
+            "input": "artifacts/draft.1.input.json",
+            "result": "artifacts/draft.1.result.json",
+            "stderrLog": "artifacts/logs/draft.1.stderr.log",
+            "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+          },
+          "leaseToken": "08f34474f189f87fd75a092281e14c82"
+        }
+      },
+      {
+        "nodeId": "review",
+        "visit": 1,
+        "state": {
+          "status": "succeeded",
+          "attempts": 1,
+          "durationMs": 48,
+          "waitDurationMs": 48,
+          "inputBytes": 130,
+          "outputBytes": 68,
+          "startedAt": "2026-10-23T09:00:07.063723Z",
+          "finishedAt": "2026-10-23T09:00:07.112458Z",
+          "result": {
+            "confidence": 0,
+            "feedback": "本次需求已取消。",
+            "mood": "stop"
+          },
+          "input": {
+            "check": "已检查主题与本轮反馈。",
+            "summary": "文案：independent-helper；反馈：None",
+            "topic": "independent-helper"
+          },
+          "artifacts": {
+            "input": "artifacts/review.1.input.json",
+            "result": "artifacts/review.1.result.json"
+          },
+          "leaseToken": "457901eaab0a3c9af24f00780728a5b1"
+        }
+      }
+    ],
+    "inputs": {
+      "topic": "independent-helper"
+    },
+    "nodes": {
+      "draft": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-external",
+        "attempts": 1,
+        "durationMs": 18,
+        "inputBytes": 335,
+        "outputBytes": 104,
+        "startedAt": "2026-10-23T09:00:07.043847Z",
+        "finishedAt": "2026-10-23T09:00:07.062562Z",
+        "result": {
+          "check": "已检查主题与本轮反馈。",
+          "summary": "文案：independent-helper；反馈：None"
+        },
+        "input": {
+          "feedback": null,
+          "prompt": "请根据主题撰写可直接使用的完整文案。输出严格 JSON，仅包含字符串 summary（完整文案）和 check（自检说明）。主题：independent-helper。本轮返工反馈（首次为空）：。返工时请落实反馈，并重新输出完整文案。",
+          "topic": "independent-helper"
+        },
+        "artifacts": {
+          "input": "artifacts/draft.1.input.json",
+          "result": "artifacts/draft.1.result.json",
+          "stderrLog": "artifacts/logs/draft.1.stderr.log",
+          "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+        },
+        "leaseToken": "08f34474f189f87fd75a092281e14c82"
+      },
+      "finalize": {
+        "status": "skipped",
+        "reason": "not_selected"
+      },
+      "review": {
+        "status": "succeeded",
+        "attempts": 1,
+        "durationMs": 48,
+        "waitDurationMs": 48,
+        "inputBytes": 130,
+        "outputBytes": 68,
+        "startedAt": "2026-10-23T09:00:07.063723Z",
+        "finishedAt": "2026-10-23T09:00:07.112458Z",
+        "result": {
+          "confidence": 0,
+          "feedback": "本次需求已取消。",
+          "mood": "stop"
+        },
+        "input": {
+          "check": "已检查主题与本轮反馈。",
+          "summary": "文案：independent-helper；反馈：None",
+          "topic": "independent-helper"
+        },
+        "artifacts": {
+          "input": "artifacts/review.1.input.json",
+          "result": "artifacts/review.1.result.json"
+        },
+        "leaseToken": "457901eaab0a3c9af24f00780728a5b1"
+      }
+    },
+    "ok": true,
+    "outcome": "completed",
+    "run_id": "run_20261023090007_922d94acf5907f2f",
+    "started_at": "2026-10-23T09:00:07.043719Z",
+    "status": "succeeded",
+    "updated_at": "2026-10-23T09:00:07.112841Z",
+    "visits": {
+      "draft": 1,
+      "review": 1
+    },
+    "workflow": "durable-copy-review-local-test",
+    "workflow_digest": "ce400ee41399"
+  },
+  "command": [
+    "python3",
+    "submit_review.py",
+    "run_20261023090007_922d94acf5907f2f",
+    "examples/review-stop.json"
+  ],
+  "stderr": ""
+}

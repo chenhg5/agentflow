@@ -1,7 +1,7 @@
 APP        := agentflow
 CMD        := ./cmd/agentflow
 DIST       := dist
-VERSION    := v0.0.3
+VERSION    := v0.0.4
 COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
@@ -20,7 +20,7 @@ PLATFORMS := \
 
 SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: build test test-real test-e2e test-e2e-triggers vet check release-all clean
+.PHONY: build test test-real test-e2e test-e2e-triggers test-benchmark vet check release-all clean
 
 build:
 	go build -ldflags "$(LDFLAGS)" -o bin/$(APP) $(CMD)
@@ -39,6 +39,9 @@ test-e2e: build
 test-e2e-triggers: build
 	./scripts/e2e-trigger-smoke.sh
 
+test-benchmark: build
+	python3 benchmarks/workflow-authoring/selftest.py
+
 vet:
 	test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
 	go vet ./...
@@ -55,7 +58,7 @@ release-all: clean check
 		echo "Building $(NAME)" && \
 		mkdir -p $(DIST)/$(NAME) && \
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
-		cp README.md INSTALL.md providers.example.json workflow.schema.json trigger.schema.json $(DIST)/$(NAME)/ && \
+		cp README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json $(DIST)/$(NAME)/ && \
 		cp -R examples skills docs scripts $(DIST)/$(NAME)/ && \
 		$(if $(EXT),(cd $(DIST) && zip -qr $(NAME).zip $(NAME)),tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
 		rm -rf $(DIST)/$(NAME) && \

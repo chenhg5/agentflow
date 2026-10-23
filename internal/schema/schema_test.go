@@ -7,25 +7,25 @@ import (
 )
 
 func TestValidateWorkflowAndCycle(t *testing.T) {
-	valid := model.Workflow{Version: "1", Name: "test", Nodes: []model.Node{
-		{ID: "a", Type: "shell", Command: []string{"echo", "a"}},
-		{ID: "b", Type: "human", Prompt: "approve", Needs: []string{"a"}},
-	}}
+	valid := model.Workflow{Version: "2", Name: "test", Entry: "a", Nodes: []model.Node{
+		{ID: "a", Executor: "process", Input: map[string]any{"command": []string{"echo", "a"}}},
+		{ID: "b", Input: map[string]any{"text": "approve"}, Executor: "external"},
+	}, Edges: []model.Transition{{From: "a", To: "b"}, {From: "b", To: "$end"}}}
 	if errors := Validate(valid); len(errors) != 0 {
 		t.Fatalf("valid workflow errors: %v", errors)
 	}
 	cycle := valid
-	cycle.Nodes[0].Needs = []string{"b"}
+	cycle.Edges[1] = model.Transition{From: "b", To: "a"}
 	if errors := Validate(cycle); len(errors) == 0 {
 		t.Fatal("expected cycle validation error")
 	}
 }
 
-func TestSessionIsOnlyValidOnAgentNodes(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "session", Nodes: []model.Node{{ID: "shell", Type: "shell", Session: "session-123", Command: []string{"true"}}}}
-	errors := Validate(workflow)
-	if len(errors) != 1 || errors[0] != "session is only supported on agent node shell" {
-		t.Fatalf("unexpected validation errors: %v", errors)
+func TestExecutorReferenceIsRequired(t *testing.T) {
+	workflow := model.Workflow{Version: "2", Name: "executor", Entry: "step", Nodes: []model.Node{{ID: "step"}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
+	problems := Validate(workflow)
+	if len(problems) != 1 || problems[0] != "node step needs an executor" {
+		t.Fatalf("unexpected errors: %v", problems)
 	}
 }
 
@@ -70,12 +70,21 @@ func TestFullJSONSchemaKeywords(t *testing.T) {
 	}
 }
 
-func TestFieldSchemaRequiresDeclaredFields(t *testing.T) {
-	node := model.Node{InputFields: []model.FieldSpec{{Name: "summary", Type: "string", Required: true}}}
-	if errors := ValidateValue("input", map[string]any{"summary": "ok"}, EffectiveInputSchema(node)); len(errors) != 0 {
-		t.Fatalf("valid field schema errors: %v", errors)
+func TestInputReferenceNamespaces(t *testing.T) {
+	workflow := model.Workflow{Version: "2", Name: "refs", Entry: "step", Inputs: map[string]model.InputDefinition{"sample": {}}, Nodes: []model.Node{{ID: "step", Executor: "process", Input: map[string]any{"sample": "{{ input.sample }}"}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("executor input namespace must not silently resolve to null inside a workflow")
 	}
-	if errors := ValidateValue("input", map[string]any{"other": "bad"}, EffectiveInputSchema(node)); len(errors) == 0 {
-		t.Fatal("expected missing and unknown field errors")
+	workflow.Nodes[0].Input["sample"] = "{{ inputs.sample }}"
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatal(problems)
+	}
+	workflow.Nodes[0].Input["sample"] = "{{ nodes.missing.result.score }}"
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("unknown node reference must be rejected")
+	}
+	workflow.Nodes[0].Input["sample"] = "{{ nodes }}"
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatal(problems)
 	}
 }

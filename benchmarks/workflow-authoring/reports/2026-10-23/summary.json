@@ -1,0 +1,170 @@
+{
+  "date": "2026-10-23",
+  "attempts": [
+    {
+      "attempt": "baseline-scheduled",
+      "passed": true,
+      "checks_passed": 34,
+      "checks_total": 34,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+      "evaluation_binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+      "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d"
+    },
+    {
+      "attempt": "baseline-numeric",
+      "passed": true,
+      "checks_passed": 19,
+      "checks_total": 19,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+      "evaluation_binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+      "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d"
+    },
+    {
+      "attempt": "baseline-external",
+      "passed": true,
+      "checks_passed": 37,
+      "checks_total": 37,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": false
+        }
+      ],
+      "author_binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+      "evaluation_binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+      "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d"
+    },
+    {
+      "attempt": "revised-scheduled",
+      "passed": true,
+      "checks_passed": 34,
+      "checks_total": 34,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "evaluation_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    },
+    {
+      "attempt": "revised-numeric",
+      "passed": true,
+      "checks_passed": 19,
+      "checks_total": 19,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "evaluation_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    },
+    {
+      "attempt": "revised-external",
+      "passed": true,
+      "checks_passed": 37,
+      "checks_total": 37,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "evaluation_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    },
+    {
+      "attempt": "cli-holdout",
+      "passed": true,
+      "checks_passed": 11,
+      "checks_total": 11,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "8b9039882848a7cfb1791c8dd42e31276ce354073784038e0c6b5cdd4074f05d",
+      "evaluation_binary_sha256": "8b9039882848a7cfb1791c8dd42e31276ce354073784038e0c6b5cdd4074f05d",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    },
+    {
+      "attempt": "revised-scheduled-final-replay",
+      "passed": true,
+      "checks_passed": 34,
+      "checks_total": 34,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "evaluation_binary_sha256": "4c8dcc458b5b0555eaa4858d876ddafc299bba1efdcfebc234406d23437bfa8e",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    },
+    {
+      "attempt": "revised-numeric-final-replay",
+      "passed": true,
+      "checks_passed": 19,
+      "checks_total": 19,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "evaluation_binary_sha256": "4c8dcc458b5b0555eaa4858d876ddafc299bba1efdcfebc234406d23437bfa8e",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    },
+    {
+      "attempt": "revised-external-final-replay",
+      "passed": true,
+      "checks_passed": 37,
+      "checks_total": 37,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+      "evaluation_binary_sha256": "4c8dcc458b5b0555eaa4858d876ddafc299bba1efdcfebc234406d23437bfa8e",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    },
+    {
+      "attempt": "cli-holdout-final-replay",
+      "passed": true,
+      "checks_passed": 11,
+      "checks_total": 11,
+      "quality_checks": [
+        {
+          "name": "required_inputs_declared",
+          "passed": true
+        }
+      ],
+      "author_binary_sha256": "8b9039882848a7cfb1791c8dd42e31276ce354073784038e0c6b5cdd4074f05d",
+      "evaluation_binary_sha256": "4c8dcc458b5b0555eaa4858d876ddafc299bba1efdcfebc234406d23437bfa8e",
+      "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+    }
+  ]
+}

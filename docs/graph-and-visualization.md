@@ -1,57 +1,28 @@
 # Workflow graph and visualization
 
-AgentFlow keeps workflow JSON compact, then derives a richer graph view for
-validation and visualization. This lets the runner remain deterministic while
-the UI can explain how a node is connected.
-
-## Edge channels
-
-The Web API exposes a `graph.edges` array from `/api/state`:
+Workflow version `2` uses `entry`, `nodes`, and `edges`. The edge list is the sole source of control flow. A node's position in the JSON array does not determine execution order.
 
 ```json
 {
-  "id": "inspect->review",
-  "source": "inspect",
-  "target": "review",
-  "channels": ["condition", "control", "data"],
-  "condition": "nodes.inspect.result.ready == true",
-  "mapping": {
-    "summary": "$node.inspect.output.summary"
-  }
+  "version": "2",
+  "name": "review-demo",
+  "entry": "draft",
+  "nodes": [
+    { "id": "draft", "executor": "codex", "input": { "prompt": "Draft a proposal" } },
+    { "id": "review", "executor": "external", "input": { "text": "Review the proposal" } }
+  ],
+  "edges": [
+    { "from": "draft", "to": "review" },
+    { "from": "review", "to": "draft", "when": "nodes.review.result.decision == 'again'", "maxIterations": 2 },
+    { "from": "review", "to": "$end" }
+  ]
 }
 ```
 
-- `control` comes from `needs` and determines execution order.
-- `data` comes from structured `inputMapping` (and is shown as a handoff in the UI).
-- `condition` is present when the target node has a `when` expression.
+After a node succeeds, the runner evaluates its outgoing edges in JSON order and follows the first whose `when` is true. An edge without `when` is the default and must be last. `$end` completes the run. Conditions use [Expr](https://expr-lang.org/docs/v1.15/language-definition): comparisons, arithmetic, logical operators, membership, string and regex operations, and collection functions. They read `inputs` and `nodes.<id>.result/status/input`. A condition must return a boolean. Validation checks syntax; runtime errors fail the active node.
 
-The normalized graph is a view of the workflow. It does not create a second
-execution engine or allow an agent process to advance a run.
+Cycles must contain a bounded edge. `maxIterations` limits how many times that edge can be traversed in one run; every visit is recorded in `run.state.history`, and its input, result, and logs have visit-numbered artifacts.
 
-## Validation rules
+The Web API exposes the same edges in `graph.edges`, including `condition` and `maxIterations`. The Web UI draws these edges, including the return path and `$end`. The graph view does not add routing rules of its own.
 
-`agentflow workflow validate` now also checks graph-specific invariants:
-
-- duplicate and self dependencies;
-- dependency cycles;
-- `$node.<id>.output.<field>` references to missing nodes;
-- data references whose source node is absent from `needs`.
-
-The last rule is deliberate: the runner only waits for declared dependencies.
-An undeclared data dependency would make execution order accidental and would
-make a run difficult to reproduce.
-
-## Web inspection
-
-Run:
-
-```bash
-agentflow web workflow.json
-agentflow web --run <run-id>
-```
-
-The graph view uses different colors for control, data, and conditional edges.
-Clicking a node opens its input/output contract, input mapping, resolved input,
-structured result, artifacts, and runtime status. A run view refreshes every two
-seconds and keeps the existing metrics and log links available through the CLI.
-
+Nodes reference a named executor. Registration lives in `.agentflow/executors.json`; command programs may be written in any language. The graph only validates JSON input/output and follows its edges. Removed workflow fields are rejected.

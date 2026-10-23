@@ -1,0 +1,147 @@
+{
+  "version": "2",
+  "name": "mixed-language",
+  "entry": "collect",
+  "inputs": {
+    "batch": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "collect",
+      "executor": "collect",
+      "input": {
+        "batch": "{{ inputs.batch }}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "batch"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "string"
+          },
+          "readings": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "unit": {
+                "type": "string"
+              },
+              "valid": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "unit",
+              "valid"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "batch",
+          "readings",
+          "meta"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "report",
+      "executor": "report",
+      "input": {
+        "batch": "{{ nodes.collect.result.batch }}",
+        "readings": "{{ nodes.collect.result.readings }}",
+        "meta": "{{ nodes.collect.result.meta }}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "string"
+          },
+          "readings": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "unit": {
+                "type": "string"
+              },
+              "valid": {
+                "type": "boolean"
+              }
+            },
+            "required": [
+              "unit",
+              "valid"
+            ],
+            "additionalProperties": false
+          }
+        },
+        "required": [
+          "batch",
+          "readings",
+          "meta"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "batch": {
+            "type": "string"
+          },
+          "total": {
+            "type": "number"
+          },
+          "unit": {
+            "type": "string"
+          },
+          "valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "batch",
+          "total",
+          "unit",
+          "valid"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "collect",
+      "to": "report"
+    },
+    {
+      "from": "report",
+      "to": "$end"
+    }
+  ]
+}

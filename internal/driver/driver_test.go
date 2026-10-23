@@ -1,6 +1,8 @@
 package driver
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 )
@@ -19,7 +21,7 @@ func TestExpandCommandIncludesSessionAndWorkspace(t *testing.T) {
 }
 
 func TestBuildClaudeCommand(t *testing.T) {
-	got, err := BuildCommand("claude-code", Provider{Kind: "claude-code", Binary: "claude", ExtraArgs: []string{"--permission-mode", "acceptEdits"}}, Request{Prompt: "inspect", SessionID: "session-1"})
+	got, err := BuildCommand("claude-code", Executor{Kind: "claude-code", Binary: "claude", ExtraArgs: []string{"--permission-mode", "acceptEdits"}}, Request{Prompt: "inspect", SessionID: "session-1"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -30,8 +32,8 @@ func TestBuildClaudeCommand(t *testing.T) {
 }
 
 func TestBuildCodexCommand(t *testing.T) {
-	provider := Provider{Kind: "codex", Binary: "codex", Model: "gpt-5.6-sol", Sandbox: "workspace-write", SkipGitRepoCheck: true, Ephemeral: true}
-	got, err := BuildCommand("codex", provider, Request{Prompt: "verify", SessionID: "session-2"})
+	executor := Executor{Kind: "codex", Binary: "codex", Model: "gpt-5.6-sol", Sandbox: "workspace-write", SkipGitRepoCheck: true, Ephemeral: true}
+	got, err := BuildCommand("codex", executor, Request{Prompt: "verify", SessionID: "session-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -42,8 +44,8 @@ func TestBuildCodexCommand(t *testing.T) {
 }
 
 func TestBuildCodexStartCommandIncludesSandbox(t *testing.T) {
-	provider := Provider{Kind: "codex", Binary: "codex", Model: "gpt-5.6-sol", Sandbox: "workspace-write", SkipGitRepoCheck: true, Ephemeral: true}
-	got, err := BuildCommand("codex", provider, Request{Prompt: "inspect"})
+	executor := Executor{Kind: "codex", Binary: "codex", Model: "gpt-5.6-sol", Sandbox: "workspace-write", SkipGitRepoCheck: true, Ephemeral: true}
+	got, err := BuildCommand("codex", executor, Request{Prompt: "inspect"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -53,27 +55,52 @@ func TestBuildCodexStartCommandIncludesSandbox(t *testing.T) {
 	}
 }
 
-func TestBuiltInProviders(t *testing.T) {
-	providers := BuiltInProviders()
-	if providers["claude-code"].Kind != "claude-code" || providers["codex"].Kind != "codex" {
-		t.Fatalf("built-in providers = %#v", providers)
+func TestBuiltInExecutors(t *testing.T) {
+	executors := BuiltInExecutors()
+	if executors["claude-code"].Kind != "claude-code" || executors["codex"].Kind != "codex" {
+		t.Fatalf("built-in executors = %#v", executors)
 	}
 }
 
-func TestCheckProvider(t *testing.T) {
-	available := CheckProvider("shell", Provider{Kind: "command", Command: []string{"sh"}})
+func TestCheckExecutor(t *testing.T) {
+	available := CheckExecutor("shell", Executor{Kind: "command", Command: []string{"sh"}})
 	if !available.Available || available.Binary != "sh" {
-		t.Fatalf("available provider = %#v", available)
+		t.Fatalf("available executor = %#v", available)
 	}
-	missing := CheckProvider("missing", Provider{Kind: "command", Command: []string{"agentflow-command-that-does-not-exist"}})
+	missing := CheckExecutor("missing", Executor{Kind: "command", Command: []string{"agentflow-command-that-does-not-exist"}})
 	if missing.Available || missing.Error == "" {
-		t.Fatalf("missing provider = %#v", missing)
+		t.Fatalf("missing executor = %#v", missing)
 	}
 }
 
-func TestBuildCommandProviderRequiresResumeTemplate(t *testing.T) {
-	_, err := BuildCommand("custom", Provider{Kind: "command", Command: []string{"agent", "{{ prompt }}"}}, Request{Prompt: "continue", SessionID: "session-3"})
+func TestBuildCommandExecutorRequiresResumeTemplate(t *testing.T) {
+	_, err := BuildCommand("custom", Executor{Kind: "command", Command: []string{"agent", "{{ prompt }}"}}, Request{Prompt: "continue", SessionID: "session-3"})
 	if err == nil {
 		t.Fatal("expected missing resume command error")
+	}
+}
+
+func TestCustomExecutorEntryDoesNotInferBehaviorFromItsName(t *testing.T) {
+	directory := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(directory, ".agentflow"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	config := `{"executors":{"codex":{"command":["echo","{{ input.label }}"],"workspace":"{{ input.directory }}","env":{"CHANNEL":"{{ input.channel }}"}}}}`
+	if err := os.WriteFile(filepath.Join(directory, ".agentflow", "executors.json"), []byte(config), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	executors, err := LoadExecutors(directory)
+	if err != nil {
+		t.Fatal(err)
+	}
+	prepared, err := Prepare("codex", executors["codex"], Invocation{Input: map[string]any{"label": "custom", "channel": "terminal", "directory": directory}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(prepared.Command, []string{"echo", "custom"}) || prepared.Env["CHANNEL"] != "terminal" || prepared.Workspace != directory {
+		t.Fatalf("incorrect entry binding: %+v", prepared)
+	}
+	if _, present := prepared.Env["AGENTFLOW_PROMPT"]; present {
+		t.Fatal("generic program unexpectedly required agent prompt semantics")
 	}
 }

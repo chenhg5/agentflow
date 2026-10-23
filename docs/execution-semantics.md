@@ -1,48 +1,27 @@
 # Execution semantics
 
-How the runner decides what runs, when a run ends, and how other commands change a run that is executing.
+Version `2` executes one active node at a time, starting at `entry`. After success, outgoing edges are evaluated in definition order and the first matching target is activated. `$end` completes the run. A missing matching edge or invalid expression fails the active node. Cycles require a bounded edge; its `maxIterations` limits traversals per run.
 
-## Scheduling
+## Executor contract
 
-- Every pending node whose dependencies have finished is ready. Ready nodes run in parallel, up to the workflow's `maxParallel` (default `4`).
-- Nodes start in definition order when slots are limited.
-- `when` is evaluated after the dependency rule below; a false `when` skips the node with reason `when_false`.
+Each node references an executor registered in `.agentflow/executors.json` or a built-in executor. The registry defines the program entry point, working directory, and environment. Custom names have no graph meaning.
 
-## Dependency rule: `runIf`
+Omitted node input is an empty JSON object, including after save/reload. Programs read a JSON object from `AGENTFLOW_INPUT_FILE`, write a JSON object to `AGENTFLOW_RESULT_FILE`, and exit with zero status. The runner validates `inputSchema` and `outputSchema` using JSON Schema draft 2020-12. stdout/stderr are logs. The runner alone advances the graph.
 
-| `runIf` | Runs when | Otherwise |
-| --- | --- | --- |
-| `success` (default) | every node in `needs` succeeded | skipped: `dependency_failed` or `dependency_skipped` |
-| `failure` | any upstream node (direct or indirect) failed | skipped: `no_upstream_failure` |
-| `always` | every node in `needs` finished, whatever the outcome | — |
+The built-in Codex/Claude Code adapters interpret `input.prompt`, optional workspace and session. The generic process adapter interprets `input.command`. These conventions live in adapters; the graph does not require prompt, decision, or any other business field.
 
-A failed node only affects nodes downstream of it. Independent branches keep running. Typical uses:
+An interaction program can send a message and wait for its callback before writing output. Its process remains running during the interaction and occupies the run's single active node. The demo binds its review node directly to such an executor. No workflow-name scanner is needed.
 
-```json
-{ "id": "alert",   "type": "shell", "needs": ["publish"], "runIf": "failure", "command": ["lark-cli", "..."] },
-{ "id": "receipt", "type": "shell", "needs": ["publish"], "runIf": "always",  "command": ["./write-receipt.sh"] }
+The built-in `external` executor instead persists `waiting_input` and releases the run lock. An independent application can supply output with:
+
+```bash
+agentflow run submit <run-id> <node-id> --output '{"score":8}'
 ```
 
-## Human nodes
+Accepted output succeeds the node, then edge evaluation continues automatically. The fields and values are defined by the workflow's schema, without built-in business outcomes.
 
-A human node waits without blocking other branches. The run reports `waiting_human` once nothing else can progress. `run approve` marks the node succeeded and continues the run. `run reject` marks it failed: dependents are skipped, and `runIf: failure` / `always` nodes run.
+## Persistence and recovery
 
-## Run status
+Every completed visit is appended to `history`. The latest state remains under `nodes.<id>` for expressions and display. Input/result/log artifacts have visit numbers. Executor registrations are environment configuration, resolved when executing; a later retry or resume uses current registrations.
 
-When nothing is running:
-
-- `waiting_human` if any node is waiting for a decision;
-- `failed` if any node failed (even when a failure handler succeeded);
-- `succeeded` otherwise.
-
-A `cancelled` run schedules nothing new. Commands already running finish, but their results do not change the status.
-
-## One executor per run
-
-Only one process executes a run at a time. It holds `executor.lock` in the run directory, which records its PID. A lock left by a process that no longer exists is taken over, and nodes it left `running` go back to `pending` and run again (event `node.orphaned`). `run resume` uses this to recover from a crash.
-
-`run approve`, `run reject`, `run cancel`, and `run retry` never write run state directly. They write a request under `control/`. The executor applies requests while it runs, checking about every 500 ms. If the run is idle, the command becomes the executor itself. When another process is executing, the command returns the current state with `"queued": true`.
-
-## Retry
-
-`run retry <run-id>` resets every failed node and everything downstream of it, keeps all other results, and continues the run. `--from a,b` restarts from chosen nodes instead. `--dry-run` lists the nodes it would reset. Nodes downstream of a reset node run again, including human approvals.
+`run retry` resets the active failed node. `run resume` resets a node left running by a crashed process; an interaction program may therefore be started again. Programs with external side effects should support idempotency. Controls are queued when the run is locked. Cancellation is processed at executor boundaries; stopping a currently running child immediately is not implemented.

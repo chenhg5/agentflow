@@ -1,0 +1,157 @@
+{
+  "active_node": "",
+  "created_at": "2026-10-23T08:44:53.189447Z",
+  "duration_ms": 35,
+  "finished_at": "2026-10-23T08:44:53.225167Z",
+  "history": [
+    {
+      "nodeId": "measure",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+        "attempts": 1,
+        "durationMs": 17,
+        "inputBytes": 18,
+        "outputBytes": 54,
+        "startedAt": "2026-10-23T08:44:53.190054Z",
+        "finishedAt": "2026-10-23T08:44:53.207139Z",
+        "result": {
+          "defects": [
+            "scratch"
+          ],
+          "score": 50,
+          "urgent": false
+        },
+        "input": {
+          "sample": "at-50"
+        },
+        "artifacts": {
+          "input": "artifacts/measure.1.input.json",
+          "result": "artifacts/measure.1.result.json",
+          "stderrLog": "artifacts/logs/measure.1.stderr.log",
+          "stdoutLog": "artifacts/logs/measure.1.stdout.log"
+        },
+        "leaseToken": "fbfb5c1451f20d273c868e094edcd036"
+      }
+    },
+    {
+      "nodeId": "recheck",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+        "attempts": 1,
+        "durationMs": 17,
+        "inputBytes": 68,
+        "outputBytes": 75,
+        "startedAt": "2026-10-23T08:44:53.207592Z",
+        "finishedAt": "2026-10-23T08:44:53.224784Z",
+        "result": {
+          "branch": "recheck",
+          "defects": [
+            "scratch"
+          ],
+          "score": 50,
+          "urgent": false
+        },
+        "input": {
+          "branch": "recheck",
+          "defects": [
+            "scratch"
+          ],
+          "score": 50,
+          "urgent": false
+        },
+        "artifacts": {
+          "input": "artifacts/recheck.1.input.json",
+          "result": "artifacts/recheck.1.result.json",
+          "stderrLog": "artifacts/logs/recheck.1.stderr.log",
+          "stdoutLog": "artifacts/logs/recheck.1.stdout.log"
+        },
+        "leaseToken": "4d6427e5028ca19f899eead7c21c5471"
+      }
+    }
+  ],
+  "inputs": {
+    "sample": "at-50"
+  },
+  "nodes": {
+    "accept": {
+      "status": "skipped",
+      "reason": "not_selected"
+    },
+    "measure": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+      "attempts": 1,
+      "durationMs": 17,
+      "inputBytes": 18,
+      "outputBytes": 54,
+      "startedAt": "2026-10-23T08:44:53.190054Z",
+      "finishedAt": "2026-10-23T08:44:53.207139Z",
+      "result": {
+        "defects": [
+          "scratch"
+        ],
+        "score": 50,
+        "urgent": false
+      },
+      "input": {
+        "sample": "at-50"
+      },
+      "artifacts": {
+        "input": "artifacts/measure.1.input.json",
+        "result": "artifacts/measure.1.result.json",
+        "stderrLog": "artifacts/logs/measure.1.stderr.log",
+        "stdoutLog": "artifacts/logs/measure.1.stdout.log"
+      },
+      "leaseToken": "fbfb5c1451f20d273c868e094edcd036"
+    },
+    "recheck": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+      "attempts": 1,
+      "durationMs": 17,
+      "inputBytes": 68,
+      "outputBytes": 75,
+      "startedAt": "2026-10-23T08:44:53.207592Z",
+      "finishedAt": "2026-10-23T08:44:53.224784Z",
+      "result": {
+        "branch": "recheck",
+        "defects": [
+          "scratch"
+        ],
+        "score": 50,
+        "urgent": false
+      },
+      "input": {
+        "branch": "recheck",
+        "defects": [
+          "scratch"
+        ],
+        "score": 50,
+        "urgent": false
+      },
+      "artifacts": {
+        "input": "artifacts/recheck.1.input.json",
+        "result": "artifacts/recheck.1.result.json",
+        "stderrLog": "artifacts/logs/recheck.1.stderr.log",
+        "stdoutLog": "artifacts/logs/recheck.1.stdout.log"
+      },
+      "leaseToken": "4d6427e5028ca19f899eead7c21c5471"
+    }
+  },
+  "ok": true,
+  "outcome": "completed",
+  "run_id": "run_20261023084453_5479876a55ab3e9b",
+  "started_at": "2026-10-23T08:44:53.189926Z",
+  "status": "succeeded",
+  "updated_at": "2026-10-23T08:44:53.225168Z",
+  "visits": {
+    "measure": 1,
+    "recheck": 1
+  },
+  "workflow": "factory-quality",
+  "workflow_digest": "8ee05b750c11"
+}

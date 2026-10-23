@@ -1,0 +1,145 @@
+{
+  "version": "2",
+  "name": "external-loop",
+  "entry": "draft",
+  "inputs": {
+    "topic": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "draft",
+      "executor": "codex",
+      "input": {
+        "prompt": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.feedback }}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "check"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "review",
+      "executor": "external",
+      "input": {},
+      "inputSchema": {
+        "type": "object",
+        "properties": {},
+        "required": [],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "mood": {
+            "enum": [
+              "go",
+              "back",
+              "stop"
+            ]
+          },
+          "feedback": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        },
+        "required": [
+          "mood",
+          "feedback",
+          "confidence"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "finalize",
+      "executor": "codex",
+      "input": {
+        "prompt": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.feedback }}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "next_step": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "next_step",
+          "verification"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "draft",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "finalize",
+      "when": "nodes.review.result.mood == 'go' && nodes.review.result.confidence >= 0.8"
+    },
+    {
+      "from": "review",
+      "to": "draft",
+      "when": "nodes.review.result.mood == 'back' || (nodes.review.result.mood == 'go' && nodes.review.result.confidence < 0.8)",
+      "maxIterations": 2
+    },
+    {
+      "from": "review",
+      "to": "$end"
+    },
+    {
+      "from": "finalize",
+      "to": "$end"
+    }
+  ]
+}

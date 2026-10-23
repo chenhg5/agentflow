@@ -1,0 +1,1 @@
+const fs=require('node:fs');if(process.env.FARM_SITE!=='orchard-2')throw Error('site');const x=JSON.parse(fs.readFileSync(process.env.AGENTFLOW_INPUT_FILE,'utf8'));fs.writeFileSync(process.env.AGENTFLOW_RESULT_FILE,JSON.stringify({batch:x.batch,total:x.readings.reduce((a,b)=>a+b,0),unit:x.meta.unit,valid:x.meta.valid}));

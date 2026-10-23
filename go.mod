@@ -3,6 +3,7 @@ module github.com/chenhg5/agentflow
 go 1.22
 
 require (
+	github.com/expr-lang/expr v1.17.8
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1
 )

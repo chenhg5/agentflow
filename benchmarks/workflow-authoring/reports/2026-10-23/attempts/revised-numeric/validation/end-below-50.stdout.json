@@ -1,0 +1,86 @@
+{
+  "active_node": "",
+  "created_at": "2026-10-23T08:57:29.930451Z",
+  "duration_ms": 19,
+  "finished_at": "2026-10-23T08:57:29.95059Z",
+  "history": [
+    {
+      "nodeId": "measure",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-numeric",
+        "attempts": 1,
+        "durationMs": 18,
+        "inputBytes": 36,
+        "outputBytes": 47,
+        "startedAt": "2026-10-23T08:57:29.931295Z",
+        "finishedAt": "2026-10-23T08:57:29.950275Z",
+        "result": {
+          "defects": [],
+          "score": 49.9,
+          "urgent": false
+        },
+        "input": {
+          "sample": "样本 A / end-below-50"
+        },
+        "artifacts": {
+          "input": "artifacts/measure.1.input.json",
+          "result": "artifacts/measure.1.result.json",
+          "stderrLog": "artifacts/logs/measure.1.stderr.log",
+          "stdoutLog": "artifacts/logs/measure.1.stdout.log"
+        },
+        "leaseToken": "4f78d99c2443d254bf6cff3f558bdf43"
+      }
+    }
+  ],
+  "inputs": {
+    "sample": "样本 A / end-below-50"
+  },
+  "nodes": {
+    "accept": {
+      "status": "skipped",
+      "reason": "not_selected"
+    },
+    "measure": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-revised-numeric",
+      "attempts": 1,
+      "durationMs": 18,
+      "inputBytes": 36,
+      "outputBytes": 47,
+      "startedAt": "2026-10-23T08:57:29.931295Z",
+      "finishedAt": "2026-10-23T08:57:29.950275Z",
+      "result": {
+        "defects": [],
+        "score": 49.9,
+        "urgent": false
+      },
+      "input": {
+        "sample": "样本 A / end-below-50"
+      },
+      "artifacts": {
+        "input": "artifacts/measure.1.input.json",
+        "result": "artifacts/measure.1.result.json",
+        "stderrLog": "artifacts/logs/measure.1.stderr.log",
+        "stdoutLog": "artifacts/logs/measure.1.stdout.log"
+      },
+      "leaseToken": "4f78d99c2443d254bf6cff3f558bdf43"
+    },
+    "recheck": {
+      "status": "skipped",
+      "reason": "not_selected"
+    }
+  },
+  "ok": true,
+  "outcome": "completed",
+  "run_id": "run_20261023085729_cade978926d28f98",
+  "started_at": "2026-10-23T08:57:29.931092Z",
+  "status": "succeeded",
+  "updated_at": "2026-10-23T08:57:29.95059Z",
+  "visits": {
+    "measure": 1
+  },
+  "workflow": "plant-7-quality-inspection",
+  "workflow_digest": "9fb5ae782508"
+}

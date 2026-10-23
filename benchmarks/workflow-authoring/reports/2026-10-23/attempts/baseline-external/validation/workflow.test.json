@@ -1,0 +1,234 @@
+{
+  "version": "2",
+  "name": "durable-copy-review-local-test",
+  "entry": "revision",
+  "nodes": [
+    {
+      "id": "revision",
+      "executor": "process",
+      "input": {
+        "command": [
+          "python3",
+          "executors/revision.py"
+        ],
+        "previous_reworks": "{{ nodes.review.input.reworks }}",
+        "topic": "{{ inputs.topic }}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "command",
+          "previous_reworks",
+          "topic"
+        ],
+        "properties": {
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "previous_reworks": {
+            "type": [
+              "integer",
+              "null"
+            ],
+            "minimum": 0,
+            "maximum": 2
+          },
+          "topic": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "reworks"
+        ],
+        "properties": {
+          "reworks": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 2
+          }
+        }
+      }
+    },
+    {
+      "id": "draft",
+      "executor": "process",
+      "input": {
+        "topic": "{{ inputs.topic }}",
+        "feedback": "{{ nodes.review.result.feedback }}",
+        "prompt": "围绕主题「{{ inputs.topic }}」写文案。上一轮文案：{{ nodes.review.input.summary }}。上一轮审核反馈：{{ nodes.review.result.feedback }}。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+        "previous_summary": "{{ nodes.review.input.summary }}",
+        "command": [
+          "python3",
+          "validation/model_stub.py",
+          "draft"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "summary",
+          "check"
+        ],
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          }
+        }
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "topic",
+          "feedback",
+          "prompt",
+          "previous_summary"
+        ],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "minLength": 1
+          },
+          "feedback": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prompt": {
+            "type": "string"
+          },
+          "previous_summary": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "command": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "review",
+      "executor": "external",
+      "input": {
+        "topic": "{{ inputs.topic }}",
+        "summary": "{{ nodes.draft.result.summary }}",
+        "check": "{{ nodes.draft.result.check }}",
+        "reworks": "{{ nodes.revision.result.reworks }}"
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "mood",
+          "feedback",
+          "confidence"
+        ],
+        "properties": {
+          "mood": {
+            "type": "string",
+            "enum": [
+              "go",
+              "back",
+              "stop"
+            ]
+          },
+          "feedback": {
+            "type": "string"
+          },
+          "confidence": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 1
+          }
+        }
+      }
+    },
+    {
+      "id": "finalize",
+      "executor": "process",
+      "input": {
+        "topic": "{{ inputs.topic }}",
+        "summary": "{{ nodes.draft.result.summary }}",
+        "check": "{{ nodes.draft.result.check }}",
+        "feedback": "{{ nodes.review.result.feedback }}",
+        "confidence": "{{ nodes.review.result.confidence }}",
+        "prompt": "整理主题「{{ inputs.topic }}」的已审核文案：{{ nodes.draft.result.summary }}。自查：{{ nodes.draft.result.check }}。审核反馈：{{ nodes.review.result.feedback }}。只输出 JSON 对象，next_step 为后续行动字符串，verification 为核验说明字符串。",
+        "command": [
+          "python3",
+          "validation/model_stub.py",
+          "finalize"
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "next_step",
+          "verification"
+        ],
+        "properties": {
+          "next_step": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "revision",
+      "to": "draft"
+    },
+    {
+      "from": "draft",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "finalize",
+      "when": "nodes.review.result.mood == \"go\" && nodes.review.result.confidence >= 0.8"
+    },
+    {
+      "from": "review",
+      "to": "$end",
+      "when": "nodes.review.result.mood == \"stop\""
+    },
+    {
+      "from": "review",
+      "to": "revision",
+      "when": "(nodes.review.result.mood == \"back\" || (nodes.review.result.mood == \"go\" && nodes.review.result.confidence < 0.8)) && nodes.revision.result.reworks < 2",
+      "maxIterations": 2
+    },
+    {
+      "from": "review",
+      "to": "$end"
+    },
+    {
+      "from": "finalize",
+      "to": "$end"
+    }
+  ]
+}

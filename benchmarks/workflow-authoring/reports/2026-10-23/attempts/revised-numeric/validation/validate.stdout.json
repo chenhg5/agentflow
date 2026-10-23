@@ -1,0 +1,54 @@
+{
+  "graph": {
+    "edges": [
+      {
+        "id": "edge-0",
+        "source": "measure",
+        "target": "accept",
+        "channels": [
+          "control",
+          "condition"
+        ],
+        "condition": "nodes.measure.result.score > 80 && len(nodes.measure.result.defects) == 0"
+      },
+      {
+        "id": "edge-1",
+        "source": "measure",
+        "target": "recheck",
+        "channels": [
+          "control",
+          "condition"
+        ],
+        "condition": "nodes.measure.result.urgent == true || nodes.measure.result.score >= 50"
+      },
+      {
+        "id": "edge-2",
+        "source": "measure",
+        "target": "$end",
+        "channels": [
+          "control"
+        ]
+      },
+      {
+        "id": "edge-3",
+        "source": "accept",
+        "target": "$end",
+        "channels": [
+          "control"
+        ]
+      },
+      {
+        "id": "edge-4",
+        "source": "recheck",
+        "target": "$end",
+        "channels": [
+          "control"
+        ]
+      }
+    ]
+  },
+  "ok": true,
+  "valid": true,
+  "version": "2",
+  "workflow": "plant-7-quality-inspection"
+}

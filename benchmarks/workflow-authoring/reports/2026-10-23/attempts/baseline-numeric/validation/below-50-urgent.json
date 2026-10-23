@@ -1,0 +1,163 @@
+{
+  "active_node": "",
+  "created_at": "2026-10-23T08:44:53.279887Z",
+  "duration_ms": 34,
+  "finished_at": "2026-10-23T08:44:53.315042Z",
+  "history": [
+    {
+      "nodeId": "measure",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+        "attempts": 1,
+        "durationMs": 16,
+        "inputBytes": 28,
+        "outputBytes": 61,
+        "startedAt": "2026-10-23T08:44:53.280568Z",
+        "finishedAt": "2026-10-23T08:44:53.297453Z",
+        "result": {
+          "defects": [
+            "scratch",
+            "dent"
+          ],
+          "score": 20,
+          "urgent": true
+        },
+        "input": {
+          "sample": "below-50-urgent"
+        },
+        "artifacts": {
+          "input": "artifacts/measure.1.input.json",
+          "result": "artifacts/measure.1.result.json",
+          "stderrLog": "artifacts/logs/measure.1.stderr.log",
+          "stdoutLog": "artifacts/logs/measure.1.stdout.log"
+        },
+        "leaseToken": "548763587bbea2ae9e14db8cce9986ad"
+      }
+    },
+    {
+      "nodeId": "recheck",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+        "attempts": 1,
+        "durationMs": 16,
+        "inputBytes": 74,
+        "outputBytes": 82,
+        "startedAt": "2026-10-23T08:44:53.297883Z",
+        "finishedAt": "2026-10-23T08:44:53.314759Z",
+        "result": {
+          "branch": "recheck",
+          "defects": [
+            "scratch",
+            "dent"
+          ],
+          "score": 20,
+          "urgent": true
+        },
+        "input": {
+          "branch": "recheck",
+          "defects": [
+            "scratch",
+            "dent"
+          ],
+          "score": 20,
+          "urgent": true
+        },
+        "artifacts": {
+          "input": "artifacts/recheck.1.input.json",
+          "result": "artifacts/recheck.1.result.json",
+          "stderrLog": "artifacts/logs/recheck.1.stderr.log",
+          "stdoutLog": "artifacts/logs/recheck.1.stdout.log"
+        },
+        "leaseToken": "65b4595a1b9d614ef996a833d30fd073"
+      }
+    }
+  ],
+  "inputs": {
+    "sample": "below-50-urgent"
+  },
+  "nodes": {
+    "accept": {
+      "status": "skipped",
+      "reason": "not_selected"
+    },
+    "measure": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+      "attempts": 1,
+      "durationMs": 16,
+      "inputBytes": 28,
+      "outputBytes": 61,
+      "startedAt": "2026-10-23T08:44:53.280568Z",
+      "finishedAt": "2026-10-23T08:44:53.297453Z",
+      "result": {
+        "defects": [
+          "scratch",
+          "dent"
+        ],
+        "score": 20,
+        "urgent": true
+      },
+      "input": {
+        "sample": "below-50-urgent"
+      },
+      "artifacts": {
+        "input": "artifacts/measure.1.input.json",
+        "result": "artifacts/measure.1.result.json",
+        "stderrLog": "artifacts/logs/measure.1.stderr.log",
+        "stdoutLog": "artifacts/logs/measure.1.stdout.log"
+      },
+      "leaseToken": "548763587bbea2ae9e14db8cce9986ad"
+    },
+    "recheck": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-baseline-numeric",
+      "attempts": 1,
+      "durationMs": 16,
+      "inputBytes": 74,
+      "outputBytes": 82,
+      "startedAt": "2026-10-23T08:44:53.297883Z",
+      "finishedAt": "2026-10-23T08:44:53.314759Z",
+      "result": {
+        "branch": "recheck",
+        "defects": [
+          "scratch",
+          "dent"
+        ],
+        "score": 20,
+        "urgent": true
+      },
+      "input": {
+        "branch": "recheck",
+        "defects": [
+          "scratch",
+          "dent"
+        ],
+        "score": 20,
+        "urgent": true
+      },
+      "artifacts": {
+        "input": "artifacts/recheck.1.input.json",
+        "result": "artifacts/recheck.1.result.json",
+        "stderrLog": "artifacts/logs/recheck.1.stderr.log",
+        "stdoutLog": "artifacts/logs/recheck.1.stdout.log"
+      },
+      "leaseToken": "65b4595a1b9d614ef996a833d30fd073"
+    }
+  },
+  "ok": true,
+  "outcome": "completed",
+  "run_id": "run_20261023084453_596eaa5fab1a8bad",
+  "started_at": "2026-10-23T08:44:53.280431Z",
+  "status": "succeeded",
+  "updated_at": "2026-10-23T08:44:53.315042Z",
+  "visits": {
+    "measure": 1,
+    "recheck": 1
+  },
+  "workflow": "factory-quality",
+  "workflow_digest": "8ee05b750c11"
+}

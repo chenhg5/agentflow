@@ -30,9 +30,9 @@ trap cleanup EXIT
 printf 'AgentFlow real integration fixture\n' > "$WORKSPACE/input.txt"
 mkdir -p "$WORKSPACE/.agentflow"
 cp "$ROOT_DIR/examples/real-agent-pipeline.json" "$WORKSPACE/workflow.json"
-cat > "$WORKSPACE/.agentflow/providers.json" <<JSON
+cat > "$WORKSPACE/.agentflow/executors.json" <<JSON
 {
-  "providers": {
+  "executors": {
     "claude-code": {
       "kind": "claude-code",
       "binary": "claude",

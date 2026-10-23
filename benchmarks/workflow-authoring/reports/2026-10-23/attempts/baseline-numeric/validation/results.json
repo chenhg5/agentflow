@@ -1,0 +1,133 @@
+[
+  {
+    "case": "required-sample",
+    "expected": "missing_input",
+    "passed": true
+  },
+  {
+    "case": "above-80-clean",
+    "measurement": {
+      "score": 81,
+      "defects": [],
+      "urgent": false
+    },
+    "expected_branch": "accept",
+    "run_id": "run_20261023084453_bedc30c53c225df1",
+    "passed": true
+  },
+  {
+    "case": "fraction-above-80-clean",
+    "measurement": {
+      "score": 80.5,
+      "defects": [],
+      "urgent": false
+    },
+    "expected_branch": "accept",
+    "run_id": "run_20261023084453_e96051c24c546505",
+    "passed": true
+  },
+  {
+    "case": "at-80-clean",
+    "measurement": {
+      "score": 80,
+      "defects": [],
+      "urgent": false
+    },
+    "expected_branch": "recheck",
+    "run_id": "run_20261023084453_97f9d16e8b12c916",
+    "passed": true
+  },
+  {
+    "case": "above-80-defect",
+    "measurement": {
+      "score": 90,
+      "defects": [
+        "scratch"
+      ],
+      "urgent": false
+    },
+    "expected_branch": "recheck",
+    "run_id": "run_20261023084453_c94b210fdd40661d",
+    "passed": true
+  },
+  {
+    "case": "at-50",
+    "measurement": {
+      "score": 50,
+      "defects": [
+        "scratch"
+      ],
+      "urgent": false
+    },
+    "expected_branch": "recheck",
+    "run_id": "run_20261023084453_5479876a55ab3e9b",
+    "passed": true
+  },
+  {
+    "case": "below-50",
+    "measurement": {
+      "score": 49.9,
+      "defects": [],
+      "urgent": false
+    },
+    "expected_branch": null,
+    "run_id": "run_20261023084453_f4726f84e8480e75",
+    "passed": true
+  },
+  {
+    "case": "below-50-defect",
+    "measurement": {
+      "score": 49,
+      "defects": [
+        "scratch"
+      ],
+      "urgent": false
+    },
+    "expected_branch": null,
+    "run_id": "run_20261023084453_d6dbf2b7edd2f092",
+    "passed": true
+  },
+  {
+    "case": "below-50-urgent",
+    "measurement": {
+      "score": 20,
+      "defects": [
+        "scratch",
+        "dent"
+      ],
+      "urgent": true
+    },
+    "expected_branch": "recheck",
+    "run_id": "run_20261023084453_596eaa5fab1a8bad",
+    "passed": true
+  },
+  {
+    "case": "accept-priority-over-urgent",
+    "measurement": {
+      "score": 81,
+      "defects": [],
+      "urgent": true
+    },
+    "expected_branch": "accept",
+    "run_id": "run_20261023084453_2d3953a6ab26eb27",
+    "passed": true
+  },
+  {
+    "case": "score-string",
+    "expected": "output schema validation failed",
+    "run_id": "run_20261023084453_d27ad9957c761b5d",
+    "passed": true
+  },
+  {
+    "case": "defect-item-number",
+    "expected": "output schema validation failed",
+    "run_id": "run_20261023084453_22fc2f3d4068c014",
+    "passed": true
+  },
+  {
+    "case": "urgent-string",
+    "expected": "output schema validation failed",
+    "run_id": "run_20261023084453_2c0cd6df04c1b0ab",
+    "passed": true
+  }
+]

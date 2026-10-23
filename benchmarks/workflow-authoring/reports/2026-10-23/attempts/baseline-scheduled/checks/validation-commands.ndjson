@@ -1,0 +1,34 @@
+{"command": ["./agentflow", "workflow", "validate", "workflow.json", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "trigger", "validate", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "trigger", "list", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "start", "workflow.json", "--input", "topic=onboarding", "--input", "reviewer=local-reviewer", "--dry-run", "--format", "json"], "exit_code": 10}
+{"command": ["./agentflow", "run", "start", "workflow.json", "--dry-run", "--format", "json"], "exit_code": 2}
+{"command": ["./agentflow", "run", "start", "workflow.json", "--input", "topic=onboarding", "--dry-run", "--format", "json"], "exit_code": 2}
+{"command": ["./agentflow", "run", "start", "workflow.json", "--input", "reviewer=local-reviewer", "--dry-run", "--format", "json"], "exit_code": 2}
+{"command": ["./agentflow", "workflow", "validate", "checks/workflow-external.json", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "start", "checks/workflow-external.json", "--input", "topic=onboarding", "--input", "reviewer=reviewer-42", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085121_6ee2fddd50bee8b6", "draft", "--output", "{\"summary\": \"proposal-v1\", \"check\": \"self-check-v1\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085121_6ee2fddd50bee8b6", "finalize", "--output", "{\"next_step\": \"test the change\", \"verification\": \"measure activation\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "start", "checks/workflow-external.json", "--input", "topic=onboarding", "--input", "reviewer=reviewer-42", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085121_4989adbad184368c", "draft", "--output", "{\"summary\": \"proposal-v1\", \"check\": \"self-check-v1\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "start", "checks/workflow-external.json", "--input", "topic=onboarding", "--input", "reviewer=reviewer-42", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085121_66dc1bf99fc8cc9f", "draft", "--output", "{\"summary\": \"proposal-v1\", \"check\": \"self-check-v1\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085121_66dc1bf99fc8cc9f", "draft", "--output", "{\"summary\": \"proposal-v2\", \"check\": \"self-check-v2\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085121_66dc1bf99fc8cc9f", "finalize", "--output", "{\"next_step\": \"test the change\", \"verification\": \"measure activation\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "start", "checks/workflow-external.json", "--input", "topic=onboarding", "--input", "reviewer=reviewer-42", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_e8b7ce166af972fe", "draft", "--output", "{\"summary\": \"proposal-v1\", \"check\": \"self-check-v1\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_e8b7ce166af972fe", "draft", "--output", "{\"summary\": \"proposal-v2\", \"check\": \"self-check-v2\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_e8b7ce166af972fe", "draft", "--output", "{\"summary\": \"proposal-v3\", \"check\": \"self-check-v3\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_e8b7ce166af972fe", "finalize", "--output", "{\"next_step\": \"test the change\", \"verification\": \"measure activation\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "start", "checks/workflow-external.json", "--input", "topic=onboarding", "--input", "reviewer=reviewer-42", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_703fa53b8d1e70a9", "draft", "--output", "{\"summary\": \"proposal-v1\", \"check\": \"self-check-v1\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_703fa53b8d1e70a9", "draft", "--output", "{\"summary\": \"proposal-v2\", \"check\": \"self-check-v2\"}", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_703fa53b8d1e70a9", "draft", "--output", "{\"summary\": \"proposal-v3\", \"check\": \"self-check-v3\"}", "--format", "json"], "exit_code": 1}
+{"command": ["./agentflow", "run", "start", "checks/workflow-external.json", "--input", "topic=onboarding", "--input", "reviewer=reviewer-42", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "submit", "run_20261023085122_9e5f5b830757373f", "draft", "--output", "{\"summary\": \"proposal-v1\", \"check\": \"self-check-v1\"}", "--format", "json"], "exit_code": 1}
+{"command": ["./agentflow", "trigger", "validate", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "trigger", "fire", "weekday-research-review", "--scheduled-at", "2026-10-23T09:15:00+08:00", "--delivery-id", "local-cron-validation-12d43ecad271451ca99e1ab3964f7696", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "get", "run_20261023085122_58b27666e2bf8e73", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "trigger", "fire", "weekday-research-review", "--scheduled-at", "2026-10-23T09:15:00+08:00", "--delivery-id", "local-cron-validation-12d43ecad271451ca99e1ab3964f7696", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "run", "cancel", "run_20261023085122_58b27666e2bf8e73", "--format", "json"], "exit_code": 0}
+{"command": ["./agentflow", "trigger", "validate", "--format", "json"], "exit_code": 0}

@@ -1,0 +1,15 @@
+{
+  "executors": {
+    "codex": {
+      "kind": "codex",
+      "binary": "codex"
+    },
+    "local-review-channel": {
+      "command": [
+        "python3",
+        "./fixtures/channel.py"
+      ],
+      "workspace": "."
+    }
+  }
+}

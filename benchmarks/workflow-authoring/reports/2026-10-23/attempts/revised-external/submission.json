@@ -1,0 +1,8 @@
+{
+  "workflow": "workflow.json",
+  "roles": {
+    "draft": "draft",
+    "review": "review",
+    "finalize": "finalize"
+  }
+}

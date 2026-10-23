@@ -15,7 +15,7 @@ import (
 func TestWorkflowAndRunViews(t *testing.T) {
 	root := t.TempDir()
 	workflowPath := filepath.Join(root, "workflow.json")
-	workflowData := []byte(`{"version":"1","name":"demo","nodes":[{"id":"build","type":"shell","command":["true"]}]}`)
+	workflowData := []byte(`{"version":"2","name":"demo","entry":"build","nodes":[{"id":"build","type":"program","command":["true"]}],"edges":[{"from":"build","to":"$end"}]}`)
 	if err := os.WriteFile(workflowPath, workflowData, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -37,11 +37,11 @@ func TestWorkflowAndRunViews(t *testing.T) {
 	if !ok {
 		t.Fatalf("workflow graph missing: %#v", workflowView["graph"])
 	}
-	if edges, ok := graphView["edges"].([]any); !ok || len(edges) != 0 {
+	if edges, ok := graphView["edges"].([]any); !ok || len(edges) != 1 {
 		t.Fatalf("workflow graph edges = %#v", graphView["edges"])
 	}
 
-	run, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "1", Name: "demo", Nodes: []model.Node{{ID: "build", Type: "shell", Command: []string{"true"}}}}, nil, "")
+	run, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "2", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Input: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

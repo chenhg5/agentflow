@@ -1,0 +1,84 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentFlow executor registrations",
+  "type": "object",
+  "required": [
+    "executors"
+  ],
+  "properties": {
+    "executors": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "workspace": {
+            "type": "string"
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "enum": [
+              "command",
+              "codex",
+              "claude-code",
+              "external"
+            ]
+          },
+          "binary": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "sandbox": {
+            "type": "string"
+          },
+          "promptMode": {
+            "enum": [
+              "arg",
+              "stdin"
+            ]
+          },
+          "dangerouslyBypassApprovalsAndSandbox": {
+            "type": "boolean"
+          },
+          "skipGitRepoCheck": {
+            "type": "boolean"
+          },
+          "ephemeral": {
+            "type": "boolean"
+          },
+          "extraArgs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resumeCommand": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

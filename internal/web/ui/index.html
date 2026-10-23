@@ -52,7 +52,7 @@
       .node-stats { display: flex; gap: 8px; color: var(--muted); font-size: 10px; margin-top: 10px; }
       .status-succeeded { background: #238636; }
       .status-running { background: #1f6feb; }
-      .status-waiting_human { background: #d29922; }
+      .status-waiting_input { background: #d29922; }
       .status-failed { background: #f85149; }
       .status-skipped { background: #8b949e; }
       .status-pending { background: #484f58; }
@@ -109,20 +109,22 @@
       const formatTime = (value) => value ? new Date(value).toLocaleString() : "";
 
       function nodeLayout(workflow, state, description) {
-        const definitions = workflow?.nodes || [];
+        const graphEdges = description?.edges || [];
+        const definitions = [...(workflow?.nodes || [])];
+        if (graphEdges.some((edge) => edge.target === "$end")) definitions.push({ id: "$end", executor: "end" });
         const levels = new Map();
         const byID = new Map(definitions.map((node) => [node.id, node]));
         const levelOf = (id, trail = new Set()) => {
           if (levels.has(id)) return levels.get(id);
           if (trail.has(id)) return 0;
-          const node = byID.get(id);
-          if (!node || !node.needs || node.needs.length === 0) {
+          const incoming = graphEdges.filter((edge) => edge.target === id && !edge.maxIterations);
+          if (id === workflow?.entry || incoming.length === 0) {
             levels.set(id, 0);
             return 0;
           }
           const nextTrail = new Set(trail);
           nextTrail.add(id);
-          const level = Math.max(...node.needs.map((dep) => levelOf(dep, nextTrail))) + 1;
+          const level = Math.max(...incoming.map((edge) => levelOf(edge.source, nextTrail))) + 1;
           levels.set(id, level);
           return level;
         };
@@ -130,7 +132,7 @@
         const rows = new Map();
         return {
           nodes: definitions.map((definition) => {
-            const nodeState = state?.nodes?.[definition.id] || {};
+            const nodeState = definition.id === "$end" ? { status: state?.status === "succeeded" ? "succeeded" : "pending" } : (state?.nodes?.[definition.id] || {});
             const level = levels.get(definition.id) || 0;
             const row = rows.get(level) || 0;
             rows.set(level, row + 1);
@@ -144,24 +146,19 @@
               data: { label: h(NodeCard, { definition, state: nodeState, status }), definition, state: nodeState },
             };
           }),
-          edges: (description?.edges || definitions.flatMap((definition) => (definition.needs || []).map((dependency) => ({
-            id: dependency + "->" + definition.id,
-            source: dependency,
-            target: definition.id,
-            channels: ["control"],
-          })))).map((edge) => {
+          edges: graphEdges.map((edge) => {
             const channels = edge.channels || ["control"];
-            const hasData = channels.includes("data");
+
             const hasCondition = channels.includes("condition");
             return {
               id: edge.id,
               source: edge.source,
               target: edge.target,
               animated: (state?.nodes?.[edge.target]?.status === "running"),
-              label: hasCondition ? edge.condition : (hasData ? "data" : undefined),
+              label: hasCondition ? edge.condition : (edge.maxIterations ? "loop ≤ " + edge.maxIterations : undefined),
               labelStyle: { fill: hasCondition ? "#d29922" : "#79c0ff", fontSize: 10 },
               markerEnd: { type: MarkerType.ArrowClosed },
-              style: { stroke: hasCondition ? "#d29922" : hasData ? "#388bfd" : "#52606d", strokeWidth: hasData ? 2 : 1.5, strokeDasharray: hasCondition ? "5 4" : undefined },
+              style: { stroke: hasCondition ? "#d29922" : "#52606d", strokeWidth: 1.5, strokeDasharray: hasCondition ? "5 4" : undefined },
             };
           }),
         };
@@ -173,7 +170,7 @@
             h("i", { className: "node-dot " + statusClass(status) }),
             h("span", { className: "node-name", title: definition.id }, definition.id),
           ),
-          h("div", { className: "node-type" }, definition.type + " · " + status),
+          h("div", { className: "node-type" }, definition.executor + " · " + status),
           state && (state.durationMs || state.attempts || state.outputBytes) ? h("div", { className: "node-stats" },
             h("span", null, formatMs(state.durationMs)),
             h("span", null, (state.attempts || 0) + " attempts"),
@@ -205,19 +202,19 @@
       }
 
       function Inspector({ definition, state, description }) {
-        if (!definition) return h("div", { className: "inspector" }, h("div", { className: "inspector-empty" }, "Select a node to inspect its contract, mapping, artifacts, and runtime state."));
+        if (!definition) return h("div", { className: "inspector" }, h("div", { className: "inspector-empty" }, "Select a node to inspect its executor, contract, artifacts, and runtime state."));
         const edges = (description?.edges || []).filter((edge) => edge.source === definition.id || edge.target === definition.id);
         return h("div", { className: "inspector" },
-          h("div", { className: "inspector-head" }, h("strong", null, definition.id), h("span", null, definition.type + (state?.status ? " · " + state.status : ""))),
+          h("div", { className: "inspector-head" }, h("strong", null, definition.id), h("span", null, definition.executor + (state?.status ? " · " + state.status : ""))),
           h("div", { className: "inspector-grid" },
-            h(JsonBlock, { label: "Input schema", value: definition.inputSchema || definition.inputFields }),
-            h(JsonBlock, { label: "Output schema", value: definition.outputSchema || definition.outputFields }),
-            h(JsonBlock, { label: "Input mapping", value: definition.inputMapping }),
+            h(JsonBlock, { label: "Input schema", value: definition.inputSchema }),
+            h(JsonBlock, { label: "Output schema", value: definition.outputSchema }),
+            h(JsonBlock, { label: "Input template", value: definition.input }),
             h(JsonBlock, { label: "Runtime input", value: state?.input }),
             h(JsonBlock, { label: "Runtime result", value: state?.result }),
             h(JsonBlock, { label: "Artifacts", value: state?.artifacts }),
           ),
-          edges.length ? h("div", { className: "graph-warning" }, "Edges: ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id }, edge.source + " → " + edge.target + " · " + (edge.channels || []).join(" + ")))) : null,
+          edges.length ? h("div", { className: "graph-warning" }, "Edges: ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id }, edge.source + " → " + edge.target + (edge.condition ? " · " + edge.condition : "") + (edge.maxIterations ? " · max " + edge.maxIterations : "")))) : null,
         );
       }
 
@@ -237,7 +234,7 @@
           h(Metric, { label: "Output", value: formatBytes(snapshot.totals?.output_bytes || 0) }),
           h(Metric, { label: "Logs", value: formatBytes((snapshot.totals?.stdout_bytes || 0) + (snapshot.totals?.stderr_bytes || 0)) }),
           h("div", { className: "legend" },
-            ["succeeded", "running", "waiting_human", "failed", "pending"].map((status) => h("span", { key: status }, h("i", { className: statusClass(status) }), status)),
+            ["succeeded", "running", "waiting_input", "failed", "pending"].map((status) => h("span", { key: status }, h("i", { className: statusClass(status) }), status)),
           ),
         );
       }

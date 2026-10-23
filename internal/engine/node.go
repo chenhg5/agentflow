@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/driver"
@@ -17,125 +16,77 @@ import (
 	"github.com/chenhg5/agentflow/internal/template"
 )
 
-// nodeTask is everything a worker needs to run one node. It is built on the
-// scheduler goroutine from the current run state and shares nothing with it,
-// so several tasks can run at once.
+// nodeTask invokes one executor using the same file contract for every node.
 type nodeTask struct {
 	runDir             string
 	node               model.Node
+	executor           driver.Executor
 	state              model.NodeState
 	command            []string
 	options            driver.CommandOptions
 	resultFile         string
 	resultRelativePath string
+	visit              int
 }
 
-// prepareNode renders a node's input, prompt, workspace, session, and command.
-// When the node already reaches a final or waiting state here (human nodes,
-// input contract or provider errors), the task is nil and the returned state
-// is the outcome.
-func prepareNode(run *model.Run, node model.Node, providers map[string]driver.Provider) (*nodeTask, model.NodeState, error) {
+func prepareNode(run *model.Run, node model.Node, executors map[string]driver.Executor) (*nodeTask, model.NodeState, error) {
 	state := cloneState(run.State.Nodes[node.ID])
 	state.Status = "running"
 	state.StartedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	state.LeaseToken = store.NewToken()
-	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "node.started", "nodeId": node.ID, "nodeType": node.Type}); err != nil {
+	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "node.started", "nodeId": node.ID, "executor": node.Executor}); err != nil {
 		return nil, state, err
 	}
-	runContext := context(run.State)
-	if node.Type == "human" {
-		state.Status = "waiting_human"
-		state.Input = resolveInput(run, node, runContext)
-		inputArtifact := node.ID + ".input.json"
-		if err := writeJSONArtifact(run.RunDir, inputArtifact, state.Input); err != nil {
-			return nil, state, err
-		}
-		state.Artifacts["input"] = "artifacts/" + filepath.ToSlash(inputArtifact)
-		if problems := schema.ValidateValue("input", state.Input, schema.EffectiveInputSchema(node)); len(problems) > 0 {
-			return nil, fail(state, schema.FormatContractErrors("input schema validation failed", problems)), nil
-		}
-		state.Prompt = template.Render(node.Prompt, runContext)
-		inputJSON, _ := json.Marshal(state.Input)
-		state.InputBytes = int64(len([]byte(state.Prompt)) + len(inputJSON))
-		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.waiting_human", "nodeId": node.ID, "prompt": state.Prompt})
-		return nil, state, nil
-	}
-	workspace := template.Render(node.Workspace, runContext)
-	if workspace == "" {
-		workspace = "."
-	}
-	workspace, err := filepath.Abs(workspace)
-	if err != nil {
-		return nil, state, err
-	}
-	state.Workspace = workspace
-	state.Input = resolveInput(run, node, runContext)
-	inputArtifact := node.ID + ".input.json"
+	state.Input = resolveInput(run, node, context(run.State))
+	inputArtifact := visitArtifact(run, node.ID, "input.json")
 	if err := writeJSONArtifact(run.RunDir, inputArtifact, state.Input); err != nil {
 		return nil, state, err
 	}
 	state.Artifacts["input"] = "artifacts/" + filepath.ToSlash(inputArtifact)
-	if problems := schema.ValidateValue("input", state.Input, schema.EffectiveInputSchema(node)); len(problems) > 0 {
-		return nil, fail(state, schema.FormatContractErrors("input schema validation failed", problems)), nil
-	}
-	sessionID := template.Render(node.Session, runContext)
-	state.SessionID = sessionID
-	prompt := template.Render(node.Prompt, runContext)
-	inputJSON, err := json.Marshal(state.Input)
+	inputFile, err := store.ArtifactPath(run.RunDir, inputArtifact)
 	if err != nil {
 		return nil, state, err
 	}
-	state.InputBytes = int64(len([]byte(prompt)) + len(inputJSON))
-	resultRelativePath := node.ID + ".result.json"
-	if node.Result != nil && node.Result.Path != "" {
-		resultRelativePath = node.Result.Path
+	if problems := schema.ValidateValue("input", state.Input, node.InputSchema); len(problems) > 0 {
+		return nil, fail(state, schema.FormatContractErrors("input schema validation failed", problems)), nil
 	}
+	inputJSON, _ := json.Marshal(state.Input)
+	state.InputBytes = int64(len(inputJSON))
+	executor, ok := executors[node.Executor]
+	if !ok {
+		return nil, fail(state, fmt.Sprintf("executor %s is not configured; add .agentflow/executors.json", node.Executor)), nil
+	}
+	resultRelativePath := visitArtifact(run, node.ID, "result.json")
 	resultFile, err := store.ArtifactPath(run.RunDir, resultRelativePath)
 	if err != nil {
 		return nil, state, err
 	}
-	if node.Type == "agent" {
-		prompt += fmt.Sprintf("\n\nExecution contract: when the task is complete, write one JSON object to AGENTFLOW_RESULT_FILE before exiting successfully. The exact result path for this node is %s. The workspace is %s. Structured node input is %s. Expected input fields are %s. Required output fields are %s. You may use the environment variable AGENTFLOW_RESULT_FILE as well. stdout and stderr are logs only.", resultFile, workspace, string(inputJSON), fieldSummary(node.InputFields), fieldSummary(node.OutputFields))
-		state.InputBytes = int64(len([]byte(prompt)) + len(inputJSON))
+	input, _ := state.Input.(map[string]any)
+	prepared, err := driver.Prepare(node.Executor, executor, driver.Invocation{Input: input, InputSchema: node.InputSchema, OutputSchema: node.OutputSchema, ResultFile: resultFile, RunID: run.RunID, NodeID: node.ID})
+	if err != nil {
+		return nil, fail(state, err.Error()), nil
 	}
+	if prepared.Waiting {
+		state.Status = "waiting_input"
+		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.waiting_input", "nodeId": node.ID})
+		return nil, state, nil
+	}
+	state.Workspace, state.SessionID = prepared.Workspace, prepared.SessionID
 	env := map[string]string{
 		"AGENTFLOW_RUN_ID":      run.RunID,
 		"AGENTFLOW_NODE_ID":     node.ID,
 		"AGENTFLOW_NODE_TOKEN":  state.LeaseToken,
-		"AGENTFLOW_WORKSPACE":   workspace,
-		"AGENTFLOW_SESSION_ID":  sessionID,
-		"AGENTFLOW_PROMPT":      prompt,
+		"AGENTFLOW_WORKSPACE":   prepared.Workspace,
+		"AGENTFLOW_SESSION_ID":  prepared.SessionID,
 		"AGENTFLOW_RESULT_FILE": resultFile,
+		"AGENTFLOW_INPUT_FILE":  inputFile,
 	}
-	command := node.Command
-	if node.Type == "agent" {
-		provider, ok := providers[node.Provider]
-		if !ok {
-			return nil, fail(state, fmt.Sprintf("provider %s is not configured; add .agentflow/providers.json", node.Provider)), nil
+	for key, value := range prepared.Env {
+		if _, reserved := env[key]; !reserved {
+			env[key] = value
 		}
-		command, err = driver.BuildCommand(node.Provider, provider, driver.Request{
-			Prompt: prompt, Workspace: workspace, SessionID: sessionID,
-			ResultFile: resultFile, RunID: run.RunID, NodeID: node.ID,
-		})
-		if err != nil {
-			return nil, fail(state, err.Error()), nil
-		}
-	} else {
-		command = template.RenderArray(command, runContext)
 	}
-	stdin := ""
-	if node.PromptMode == "stdin" {
-		stdin = prompt
-	}
-	return &nodeTask{
-		runDir:             run.RunDir,
-		node:               node,
-		state:              cloneState(&state),
-		command:            command,
-		options:            driver.CommandOptions{Dir: workspace, Env: env, Stdin: stdin, TimeoutMs: node.TimeoutMs},
-		resultFile:         resultFile,
-		resultRelativePath: resultRelativePath,
-	}, state, nil
+	return &nodeTask{runDir: run.RunDir, node: node, executor: executor, state: cloneState(&state), command: prepared.Command, options: driver.CommandOptions{Dir: prepared.Workspace, Env: env, Stdin: prepared.Stdin, TimeoutMs: node.TimeoutMs}, resultFile: resultFile, resultRelativePath: resultRelativePath, visit: run.State.Visits[node.ID]}, state, nil
 }
 
 // run executes the command with retries and turns its result file into the
@@ -158,8 +109,8 @@ func (t *nodeTask) run() (model.NodeState, error) {
 			_ = store.AppendEvent(t.runDir, map[string]any{"type": "node.retrying", "nodeId": node.ID, "attempt": attempt, "code": result.Code})
 		}
 	}
-	stdoutArtifact := filepath.Join("logs", node.ID+".stdout.log")
-	stderrArtifact := filepath.Join("logs", node.ID+".stderr.log")
+	stdoutArtifact := filepath.Join("logs", visitArtifactName(t.node.ID, t.visit, "stdout.log"))
+	stderrArtifact := filepath.Join("logs", visitArtifactName(t.node.ID, t.visit, "stderr.log"))
 	if err := store.WriteArtifact(t.runDir, stdoutArtifact, []byte(result.Stdout)); err != nil {
 		return state, err
 	}
@@ -180,18 +131,7 @@ func (t *nodeTask) run() (model.NodeState, error) {
 	structured, resultBytes, err := loadResult(t.resultFile)
 	if err != nil {
 		state.OutputBytes = resultBytes
-		if node.Type == "agent" || (node.Result != nil && node.Result.Required) {
-			return t.failed(state, err.Error()), nil
-		}
-		structured = map[string]any{"exitCode": result.Code}
-		data, marshalErr := json.MarshalIndent(structured, "", "  ")
-		if marshalErr != nil {
-			return state, marshalErr
-		}
-		if err := store.WriteArtifact(t.runDir, t.resultRelativePath, append(data, '\n')); err != nil {
-			return state, err
-		}
-		resultBytes = int64(len(data) + 1)
+		return t.failed(state, err.Error()), nil
 	}
 	state.OutputBytes = resultBytes
 	state.Result = structured
@@ -199,13 +139,8 @@ func (t *nodeTask) run() (model.NodeState, error) {
 	if problems := schema.ValidateValue("output", structured, schema.EffectiveOutputSchema(node)); len(problems) > 0 {
 		return t.failed(state, schema.FormatContractErrors("output schema validation failed", problems)), nil
 	}
-	if resultObject, ok := structured.(map[string]any); ok {
-		if returnedSession, ok := resultObject["session_id"].(string); ok && returnedSession != "" {
-			state.SessionID = returnedSession
-		}
-		if returnedSession, ok := resultObject["sessionId"].(string); ok && returnedSession != "" {
-			state.SessionID = returnedSession
-		}
+	if sessionID := driver.SessionFromOutput(t.executor, structured); sessionID != "" {
+		state.SessionID = sessionID
 	}
 	state.Status = "succeeded"
 	state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
@@ -237,83 +172,22 @@ func cloneState(state *model.NodeState) model.NodeState {
 	return clone
 }
 
-func resolveInput(run *model.Run, node model.Node, runContext map[string]any) any {
-	input := map[string]any{}
-	for _, field := range inputFields(node) {
-		if value, ok := lookupDependencyField(run, node, field); ok {
-			input[field] = value
-		}
-	}
-	for target, expression := range node.InputMapping {
-		if value, ok := resolveMappingExpression(run, node, expression, runContext); ok {
-			input[target] = value
-		}
-	}
-	if node.Input != nil {
-		if rendered, ok := template.RenderValue(node.Input, runContext).(map[string]any); ok {
-			for key, value := range rendered {
-				input[key] = value
-			}
-		}
-	}
-	if len(input) == 0 && node.Input == nil && node.InputSchema == nil && len(node.InputFields) == 0 && len(node.InputMapping) == 0 {
-		return nil
-	}
-	return input
+func visitArtifact(run *model.Run, nodeID, suffix string) string {
+	return visitArtifactName(nodeID, run.State.Visits[nodeID], suffix)
 }
 
-func inputFields(node model.Node) []string {
-	if len(node.InputFields) > 0 {
-		fields := make([]string, 0, len(node.InputFields))
-		for _, field := range node.InputFields {
-			fields = append(fields, field.Name)
-		}
-		return fields
+func visitArtifactName(nodeID string, visit int, suffix string) string {
+	if visit < 1 {
+		return nodeID + "." + suffix
 	}
-	properties, _ := node.InputSchema["properties"].(map[string]any)
-	fields := make([]string, 0, len(properties))
-	for field := range properties {
-		fields = append(fields, field)
-	}
-	return fields
+	return fmt.Sprintf("%s.%d.%s", nodeID, visit, suffix)
 }
 
-func lookupDependencyField(run *model.Run, node model.Node, field string) (any, bool) {
-	for _, dependencyID := range node.Needs {
-		dependency := run.State.Nodes[dependencyID]
-		if result, ok := dependency.Result.(map[string]any); ok {
-			if value, exists := result[field]; exists {
-				return value, true
-			}
-		}
+func resolveInput(_ *model.Run, node model.Node, runContext map[string]any) any {
+	if node.Input == nil {
+		return map[string]any{}
 	}
-	return nil, false
-}
-
-func resolveMappingExpression(run *model.Run, node model.Node, expression string, runContext map[string]any) (any, bool) {
-	expression = strings.TrimSpace(expression)
-	if strings.HasPrefix(expression, "$node.") {
-		expression = "nodes." + strings.TrimPrefix(expression, "$node.")
-		expression = strings.Replace(expression, ".output.", ".result.", 1)
-	} else if strings.HasPrefix(expression, "$output.") {
-		field := strings.TrimPrefix(expression, "$output.")
-		return lookupDependencyField(run, node, field)
-	} else if strings.HasPrefix(expression, "$input.") {
-		field := strings.TrimPrefix(expression, "$input.")
-		value, ok := run.State.Inputs[field]
-		return value, ok
-	} else if strings.HasPrefix(expression, "{{") {
-		return template.RenderValue(expression, runContext), true
-	}
-	return template.Lookup(runContext, expression)
-}
-
-func fieldSummary(fields []model.FieldSpec) string {
-	data, _ := json.Marshal(fields)
-	if len(data) == 0 || string(data) == "null" {
-		return "[]"
-	}
-	return string(data)
+	return template.RenderValue(node.Input, runContext)
 }
 
 func writeJSONArtifact(runDir, relativePath string, value any) error {
@@ -342,25 +216,7 @@ func loadResult(file string) (any, int64, error) {
 func context(state model.RunState) map[string]any {
 	nodes := map[string]any{}
 	for id, node := range state.Nodes {
-		nodes[id] = map[string]any{"status": node.Status, "input": node.Input, "result": node.Result, "artifacts": node.Artifacts, "prompt": node.Prompt}
+		nodes[id] = map[string]any{"status": node.Status, "input": node.Input, "result": node.Result, "artifacts": node.Artifacts}
 	}
 	return map[string]any{"inputs": state.Inputs, "nodes": nodes}
-}
-
-func anyStatus(nodes []*model.NodeState, status string) bool {
-	for _, node := range nodes {
-		if node.Status == status {
-			return true
-		}
-	}
-	return false
-}
-
-func hasWaitingHuman(state model.RunState) bool {
-	for _, node := range state.Nodes {
-		if node.Status == "waiting_human" {
-			return true
-		}
-	}
-	return false
 }

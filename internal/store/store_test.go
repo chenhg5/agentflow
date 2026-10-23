@@ -8,7 +8,7 @@ import (
 
 func TestFindRunByIdempotency(t *testing.T) {
 	root := t.TempDir()
-	workflow := model.Workflow{Version: "1", Name: "demo", Nodes: []model.Node{{ID: "step", Type: "shell", Command: []string{"echo", "ok"}}}}
+	workflow := model.Workflow{Version: "2", Name: "demo", Entry: "step", Nodes: []model.Node{{ID: "step", Executor: "process", Input: map[string]any{"command": []string{"echo", "ok"}}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
 	created, err := CreateRun(root, workflow, map[string]string{"issue": "ABC-123"}, "request-1")
 	if err != nil {
 		t.Fatal(err)

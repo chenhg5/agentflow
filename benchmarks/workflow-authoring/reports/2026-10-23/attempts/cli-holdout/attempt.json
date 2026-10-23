@@ -1,0 +1,26 @@
+{
+  "case": "mixed-language",
+  "split": "holdout",
+  "binary_sha256": "8b9039882848a7cfb1791c8dd42e31276ce354073784038e0c6b5cdd4074f05d",
+  "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf",
+  "prepared_at": 1792746075.137058,
+  "agent_label": "codex-cli-default-fresh",
+  "agent_argv": [
+    "/Applications/ChatGPT.app/Contents/Resources/codex-cli/CodexCLI.app/Contents/MacOS/codex",
+    "exec",
+    "--ignore-user-config",
+    "--ignore-rules",
+    "--ephemeral",
+    "--skip-git-repo-check",
+    "-s",
+    "workspace-write",
+    "--json",
+    "-C",
+    "/private/tmp/agentflow-bench-cli-holdout",
+    "-"
+  ],
+  "context_mode": "new process; task passed on stdin; no resume",
+  "agent_status": "completed",
+  "agent_exit_code": 0,
+  "agent_elapsed_seconds": 69.5027178330347
+}

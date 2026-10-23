@@ -1,0 +1,53 @@
+{
+  "version": "2",
+  "name": "template-probe",
+  "entry": "probe",
+  "nodes": [
+    {
+      "id": "probe",
+      "executor": "external",
+      "input": {
+        "topic": "{{ inputs.topic }}",
+        "reviewer": "{{ inputs.reviewer }}",
+        "prior": "{{ nodes.probe.result.note }}"
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "signal",
+          "note"
+        ],
+        "properties": {
+          "signal": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "probe",
+      "to": "probe",
+      "when": "nodes.probe.result.signal == \"again\"",
+      "maxIterations": 2
+    },
+    {
+      "from": "probe",
+      "to": "$end"
+    }
+  ],
+  "inputs": {
+    "topic": {
+      "type": "string",
+      "required": true
+    },
+    "reviewer": {
+      "type": "string",
+      "required": true
+    }
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "triggers": [
+    {
+      "id": "weekday-research-0915",
+      "enabled": true,
+      "source": {
+        "kind": "cron",
+        "expression": "15 9 * * 1-5",
+        "timezone": "Asia/Shanghai"
+      },
+      "target": {
+        "workflow": "workflow.json"
+      },
+      "inputs": {
+        "topic": "产品研究：改进首次使用体验",
+        "reviewer": "research-reviewer-local"
+      },
+      "policy": {
+        "concurrency": "forbid",
+        "misfire": "skip"
+      }
+    }
+  ]
+}

@@ -1,0 +1,1802 @@
+{
+  "attempt": {
+    "case": "external-loop",
+    "split": "development",
+    "binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+    "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d",
+    "prepared_at": 1792744939.336491,
+    "agent_label": "codex-app-fresh-subagent",
+    "context_mode": "fork_turns=none; no task conversation inherited",
+    "model_identifier": "not exposed; inherited default",
+    "agent_task_name": "/root/baseline_external"
+  },
+  "evaluation_binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+  "grader_sha256": "a666bbb0e1eef534e34ffd6f077447dd6f8d4ef0f68c41ac05b98a65cf13a0b7",
+  "passed": true,
+  "checks_passed": 37,
+  "checks_total": 37,
+  "checks": [
+    {
+      "name": "role_mapping",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "definition_valid",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "all_executor_references_bound",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "runbook_written",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "draft_uses_codex",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "draft_prompt_is_input",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "finalize_uses_codex",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "finalize_prompt_is_input",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "accept_persisted_wait",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "accept_status",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "accept_route",
+      "passed": true,
+      "detail": "actual=['draft', 'review', 'finalize']; expected=['draft', 'review', 'finalize']"
+    },
+    {
+      "name": "accept_latest_proposal",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "accept_final_feedback",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "stop_persisted_wait",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "stop_status",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "stop_route",
+      "passed": true,
+      "detail": "actual=['draft', 'review']; expected=['draft', 'review']"
+    },
+    {
+      "name": "low-confidence_persisted_wait",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "low-confidence_status",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "low-confidence_route",
+      "passed": true,
+      "detail": "actual=['draft', 'review', 'draft', 'review', 'finalize']; expected=['draft', 'review', 'draft', 'review', 'finalize']"
+    },
+    {
+      "name": "low-confidence_latest_proposal",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "low-confidence_final_feedback",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "low-confidence_feedback_returned",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "back_persisted_wait",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "back_status",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "back_route",
+      "passed": true,
+      "detail": "actual=['draft', 'review', 'draft', 'review', 'finalize']; expected=['draft', 'review', 'draft', 'review', 'finalize']"
+    },
+    {
+      "name": "back_latest_proposal",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "back_final_feedback",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "back_feedback_returned",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "bound_persisted_wait",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "bound_status",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "bound_route",
+      "passed": true,
+      "detail": "actual=['draft', 'review', 'draft', 'review', 'draft', 'review']; expected=['draft', 'review', 'draft', 'review', 'draft', 'review']"
+    },
+    {
+      "name": "bound_bounded",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "invalid_output_0",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "invalid_output_1",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "invalid_output_2",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "invalid_output_3",
+      "passed": true,
+      "detail": ""
+    },
+    {
+      "name": "invalid_output_4",
+      "passed": true,
+      "detail": ""
+    }
+  ],
+  "quality_checks": [
+    {
+      "name": "required_inputs_declared",
+      "passed": false
+    }
+  ],
+  "traces": [
+    {
+      "scenario": "accept",
+      "exit_code": 0,
+      "state": {
+        "active_node": "",
+        "created_at": "2026-10-23T09:17:11.570485Z",
+        "duration_ms": 78,
+        "finished_at": "2026-10-23T09:17:11.649189Z",
+        "history": [
+          {
+            "nodeId": "revision",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-k0ot8qzh",
+              "attempts": 1,
+              "durationMs": 24,
+              "inputBytes": 97,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:11.57141Z",
+              "finishedAt": "2026-10-23T09:17:11.595893Z",
+              "result": {
+                "reworks": 0
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": null,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.1.input.json",
+                "result": "artifacts/revision.1.result.json",
+                "stderrLog": "artifacts/logs/revision.1.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.1.stdout.log"
+              },
+              "leaseToken": "6df7063a59c505340c5a28b1c75ee424"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-k0ot8qzh",
+              "attempts": 1,
+              "durationMs": 20,
+              "inputBytes": 303,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:11.596375Z",
+              "finishedAt": "2026-10-23T09:17:11.61665Z",
+              "result": {
+                "check": "check-round-1",
+                "summary": "proposal-round-1"
+              },
+              "input": {
+                "feedback": null,
+                "previous_summary": null,
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：。上一轮审核反馈：。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.1.input.json",
+                "result": "artifacts/draft.1.result.json",
+                "stderrLog": "artifacts/logs/draft.1.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+              },
+              "leaseToken": "7f067c1944fb821722e2653a5118d523"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 13,
+              "waitDurationMs": 13,
+              "inputBytes": 92,
+              "outputBytes": 50,
+              "startedAt": "2026-10-23T09:17:11.617166Z",
+              "finishedAt": "2026-10-23T09:17:11.630996Z",
+              "result": {
+                "confidence": 0.9,
+                "feedback": "ok-801",
+                "mood": "go"
+              },
+              "input": {
+                "check": "check-round-1",
+                "reworks": 0,
+                "summary": "proposal-round-1",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.1.input.json",
+                "result": "artifacts/review.1.result.json"
+              },
+              "leaseToken": "65d22dd97d7bcd59b21cec2c18620988"
+            }
+          },
+          {
+            "nodeId": "finalize",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-k0ot8qzh",
+              "attempts": 1,
+              "durationMs": 17,
+              "inputBytes": 352,
+              "outputBytes": 61,
+              "startedAt": "2026-10-23T09:17:11.631579Z",
+              "finishedAt": "2026-10-23T09:17:11.648846Z",
+              "result": {
+                "next_step": "take-action",
+                "verification": "verify-action"
+              },
+              "input": {
+                "check": "check-round-1",
+                "confidence": 0.9,
+                "feedback": "ok-801",
+                "prompt": "整理主题「benchmark-topic」的已审核文案：proposal-round-1。自查：check-round-1。审核反馈：ok-801。只输出 JSON 对象，next_step 为后续行动字符串，verification 为核验说明字符串。",
+                "summary": "proposal-round-1",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/finalize.1.input.json",
+                "result": "artifacts/finalize.1.result.json",
+                "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+                "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+              },
+              "leaseToken": "1fb578db289363c1fc6c1b9a7008d743"
+            }
+          }
+        ],
+        "inputs": {
+          "topic": "benchmark-topic"
+        },
+        "nodes": {
+          "draft": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-k0ot8qzh",
+            "attempts": 1,
+            "durationMs": 20,
+            "inputBytes": 303,
+            "outputBytes": 57,
+            "startedAt": "2026-10-23T09:17:11.596375Z",
+            "finishedAt": "2026-10-23T09:17:11.61665Z",
+            "result": {
+              "check": "check-round-1",
+              "summary": "proposal-round-1"
+            },
+            "input": {
+              "feedback": null,
+              "previous_summary": null,
+              "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：。上一轮审核反馈：。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/draft.1.input.json",
+              "result": "artifacts/draft.1.result.json",
+              "stderrLog": "artifacts/logs/draft.1.stderr.log",
+              "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+            },
+            "leaseToken": "7f067c1944fb821722e2653a5118d523"
+          },
+          "finalize": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-k0ot8qzh",
+            "attempts": 1,
+            "durationMs": 17,
+            "inputBytes": 352,
+            "outputBytes": 61,
+            "startedAt": "2026-10-23T09:17:11.631579Z",
+            "finishedAt": "2026-10-23T09:17:11.648846Z",
+            "result": {
+              "next_step": "take-action",
+              "verification": "verify-action"
+            },
+            "input": {
+              "check": "check-round-1",
+              "confidence": 0.9,
+              "feedback": "ok-801",
+              "prompt": "整理主题「benchmark-topic」的已审核文案：proposal-round-1。自查：check-round-1。审核反馈：ok-801。只输出 JSON 对象，next_step 为后续行动字符串，verification 为核验说明字符串。",
+              "summary": "proposal-round-1",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/finalize.1.input.json",
+              "result": "artifacts/finalize.1.result.json",
+              "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+              "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+            },
+            "leaseToken": "1fb578db289363c1fc6c1b9a7008d743"
+          },
+          "review": {
+            "status": "succeeded",
+            "attempts": 1,
+            "durationMs": 13,
+            "waitDurationMs": 13,
+            "inputBytes": 92,
+            "outputBytes": 50,
+            "startedAt": "2026-10-23T09:17:11.617166Z",
+            "finishedAt": "2026-10-23T09:17:11.630996Z",
+            "result": {
+              "confidence": 0.9,
+              "feedback": "ok-801",
+              "mood": "go"
+            },
+            "input": {
+              "check": "check-round-1",
+              "reworks": 0,
+              "summary": "proposal-round-1",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/review.1.input.json",
+              "result": "artifacts/review.1.result.json"
+            },
+            "leaseToken": "65d22dd97d7bcd59b21cec2c18620988"
+          },
+          "revision": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-k0ot8qzh",
+            "attempts": 1,
+            "durationMs": 24,
+            "inputBytes": 97,
+            "outputBytes": 14,
+            "startedAt": "2026-10-23T09:17:11.57141Z",
+            "finishedAt": "2026-10-23T09:17:11.595893Z",
+            "result": {
+              "reworks": 0
+            },
+            "input": {
+              "command": [
+                "python3",
+                "executors/revision.py"
+              ],
+              "previous_reworks": null,
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/revision.1.input.json",
+              "result": "artifacts/revision.1.result.json",
+              "stderrLog": "artifacts/logs/revision.1.stderr.log",
+              "stdoutLog": "artifacts/logs/revision.1.stdout.log"
+            },
+            "leaseToken": "6df7063a59c505340c5a28b1c75ee424"
+          }
+        },
+        "ok": true,
+        "outcome": "completed",
+        "run_id": "run_20261023091711_60b32db58383fd82",
+        "started_at": "2026-10-23T09:17:11.571152Z",
+        "status": "succeeded",
+        "updated_at": "2026-10-23T09:17:11.64919Z",
+        "visits": {
+          "draft": 1,
+          "finalize": 1,
+          "review": 1,
+          "revision": 1
+        },
+        "workflow": "durable-copy-review",
+        "workflow_digest": "525074d7502c"
+      }
+    },
+    {
+      "scenario": "stop",
+      "exit_code": 0,
+      "state": {
+        "active_node": "",
+        "created_at": "2026-10-23T09:17:13.075264Z",
+        "duration_ms": 69,
+        "finished_at": "2026-10-23T09:17:13.145234Z",
+        "history": [
+          {
+            "nodeId": "revision",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-ywd8nhw8",
+              "attempts": 1,
+              "durationMs": 29,
+              "inputBytes": 97,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:13.07618Z",
+              "finishedAt": "2026-10-23T09:17:13.105962Z",
+              "result": {
+                "reworks": 0
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": null,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.1.input.json",
+                "result": "artifacts/revision.1.result.json",
+                "stderrLog": "artifacts/logs/revision.1.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.1.stdout.log"
+              },
+              "leaseToken": "0f7eb55eb7556e969306600d428c7b55"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-ywd8nhw8",
+              "attempts": 1,
+              "durationMs": 22,
+              "inputBytes": 303,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:13.106471Z",
+              "finishedAt": "2026-10-23T09:17:13.128514Z",
+              "result": {
+                "check": "check-round-1",
+                "summary": "proposal-round-1"
+              },
+              "input": {
+                "feedback": null,
+                "previous_summary": null,
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：。上一轮审核反馈：。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.1.input.json",
+                "result": "artifacts/draft.1.result.json",
+                "stderrLog": "artifacts/logs/draft.1.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+              },
+              "leaseToken": "7a50653a1f30fa82c4c2a3e3a28f4614"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 15,
+              "waitDurationMs": 15,
+              "inputBytes": 92,
+              "outputBytes": 52,
+              "startedAt": "2026-10-23T09:17:13.129035Z",
+              "finishedAt": "2026-10-23T09:17:13.144874Z",
+              "result": {
+                "confidence": 0,
+                "feedback": "stop-802",
+                "mood": "stop"
+              },
+              "input": {
+                "check": "check-round-1",
+                "reworks": 0,
+                "summary": "proposal-round-1",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.1.input.json",
+                "result": "artifacts/review.1.result.json"
+              },
+              "leaseToken": "f0fdfdaa7cc53ce8ce5f2b6f13e3cb71"
+            }
+          }
+        ],
+        "inputs": {
+          "topic": "benchmark-topic"
+        },
+        "nodes": {
+          "draft": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-ywd8nhw8",
+            "attempts": 1,
+            "durationMs": 22,
+            "inputBytes": 303,
+            "outputBytes": 57,
+            "startedAt": "2026-10-23T09:17:13.106471Z",
+            "finishedAt": "2026-10-23T09:17:13.128514Z",
+            "result": {
+              "check": "check-round-1",
+              "summary": "proposal-round-1"
+            },
+            "input": {
+              "feedback": null,
+              "previous_summary": null,
+              "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：。上一轮审核反馈：。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/draft.1.input.json",
+              "result": "artifacts/draft.1.result.json",
+              "stderrLog": "artifacts/logs/draft.1.stderr.log",
+              "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+            },
+            "leaseToken": "7a50653a1f30fa82c4c2a3e3a28f4614"
+          },
+          "finalize": {
+            "status": "skipped",
+            "reason": "not_selected"
+          },
+          "review": {
+            "status": "succeeded",
+            "attempts": 1,
+            "durationMs": 15,
+            "waitDurationMs": 15,
+            "inputBytes": 92,
+            "outputBytes": 52,
+            "startedAt": "2026-10-23T09:17:13.129035Z",
+            "finishedAt": "2026-10-23T09:17:13.144874Z",
+            "result": {
+              "confidence": 0,
+              "feedback": "stop-802",
+              "mood": "stop"
+            },
+            "input": {
+              "check": "check-round-1",
+              "reworks": 0,
+              "summary": "proposal-round-1",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/review.1.input.json",
+              "result": "artifacts/review.1.result.json"
+            },
+            "leaseToken": "f0fdfdaa7cc53ce8ce5f2b6f13e3cb71"
+          },
+          "revision": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-ywd8nhw8",
+            "attempts": 1,
+            "durationMs": 29,
+            "inputBytes": 97,
+            "outputBytes": 14,
+            "startedAt": "2026-10-23T09:17:13.07618Z",
+            "finishedAt": "2026-10-23T09:17:13.105962Z",
+            "result": {
+              "reworks": 0
+            },
+            "input": {
+              "command": [
+                "python3",
+                "executors/revision.py"
+              ],
+              "previous_reworks": null,
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/revision.1.input.json",
+              "result": "artifacts/revision.1.result.json",
+              "stderrLog": "artifacts/logs/revision.1.stderr.log",
+              "stdoutLog": "artifacts/logs/revision.1.stdout.log"
+            },
+            "leaseToken": "0f7eb55eb7556e969306600d428c7b55"
+          }
+        },
+        "ok": true,
+        "outcome": "completed",
+        "run_id": "run_20261023091713_a8ea307bc8deeaef",
+        "started_at": "2026-10-23T09:17:13.076031Z",
+        "status": "succeeded",
+        "updated_at": "2026-10-23T09:17:13.145235Z",
+        "visits": {
+          "draft": 1,
+          "review": 1,
+          "revision": 1
+        },
+        "workflow": "durable-copy-review",
+        "workflow_digest": "525074d7502c"
+      }
+    },
+    {
+      "scenario": "low-confidence",
+      "exit_code": 0,
+      "state": {
+        "active_node": "",
+        "created_at": "2026-10-23T09:17:14.591528Z",
+        "duration_ms": 138,
+        "finished_at": "2026-10-23T09:17:14.730755Z",
+        "history": [
+          {
+            "nodeId": "revision",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+              "attempts": 1,
+              "durationMs": 30,
+              "inputBytes": 97,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:14.592464Z",
+              "finishedAt": "2026-10-23T09:17:14.62272Z",
+              "result": {
+                "reworks": 0
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": null,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.1.input.json",
+                "result": "artifacts/revision.1.result.json",
+                "stderrLog": "artifacts/logs/revision.1.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.1.stdout.log"
+              },
+              "leaseToken": "cf0ae3ee595ab52997f38b3cff30034c"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+              "attempts": 1,
+              "durationMs": 21,
+              "inputBytes": 303,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:14.623241Z",
+              "finishedAt": "2026-10-23T09:17:14.64507Z",
+              "result": {
+                "check": "check-round-1",
+                "summary": "proposal-round-1"
+              },
+              "input": {
+                "feedback": null,
+                "previous_summary": null,
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：。上一轮审核反馈：。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.1.input.json",
+                "result": "artifacts/draft.1.result.json",
+                "stderrLog": "artifacts/logs/draft.1.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+              },
+              "leaseToken": "a220e16cac3c6228908133257e619e67"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 14,
+              "waitDurationMs": 14,
+              "inputBytes": 92,
+              "outputBytes": 56,
+              "startedAt": "2026-10-23T09:17:14.645866Z",
+              "finishedAt": "2026-10-23T09:17:14.66034Z",
+              "result": {
+                "confidence": 0.79,
+                "feedback": "clarify-803",
+                "mood": "go"
+              },
+              "input": {
+                "check": "check-round-1",
+                "reworks": 0,
+                "summary": "proposal-round-1",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.1.input.json",
+                "result": "artifacts/review.1.result.json"
+              },
+              "leaseToken": "d1a2fab8a046e4d14155d5787821f24b"
+            }
+          },
+          {
+            "nodeId": "revision",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+              "attempts": 1,
+              "durationMs": 18,
+              "inputBytes": 94,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:14.660967Z",
+              "finishedAt": "2026-10-23T09:17:14.679351Z",
+              "result": {
+                "reworks": 1
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": 0,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.2.input.json",
+                "result": "artifacts/revision.2.result.json",
+                "stderrLog": "artifacts/logs/revision.2.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.2.stdout.log"
+              },
+              "leaseToken": "43bee4238a38271f2c47044730c17497"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+              "attempts": 1,
+              "durationMs": 17,
+              "inputBytes": 353,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:14.679889Z",
+              "finishedAt": "2026-10-23T09:17:14.697092Z",
+              "result": {
+                "check": "check-round-2",
+                "summary": "proposal-round-2"
+              },
+              "input": {
+                "feedback": "clarify-803",
+                "previous_summary": "proposal-round-1",
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：proposal-round-1。上一轮审核反馈：clarify-803。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.2.input.json",
+                "result": "artifacts/draft.2.result.json",
+                "stderrLog": "artifacts/logs/draft.2.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.2.stdout.log"
+              },
+              "leaseToken": "1d08725d2fe73c0840af4e2e75328394"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 14,
+              "waitDurationMs": 14,
+              "inputBytes": 92,
+              "outputBytes": 50,
+              "startedAt": "2026-10-23T09:17:14.697893Z",
+              "finishedAt": "2026-10-23T09:17:14.712141Z",
+              "result": {
+                "confidence": 0.8,
+                "feedback": "ok-804",
+                "mood": "go"
+              },
+              "input": {
+                "check": "check-round-2",
+                "reworks": 1,
+                "summary": "proposal-round-2",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.2.input.json",
+                "result": "artifacts/review.2.result.json"
+              },
+              "leaseToken": "137021f2750afd48a13b64cc2f8c497e"
+            }
+          },
+          {
+            "nodeId": "finalize",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+              "attempts": 1,
+              "durationMs": 17,
+              "inputBytes": 352,
+              "outputBytes": 61,
+              "startedAt": "2026-10-23T09:17:14.712931Z",
+              "finishedAt": "2026-10-23T09:17:14.730166Z",
+              "result": {
+                "next_step": "take-action",
+                "verification": "verify-action"
+              },
+              "input": {
+                "check": "check-round-2",
+                "confidence": 0.8,
+                "feedback": "ok-804",
+                "prompt": "整理主题「benchmark-topic」的已审核文案：proposal-round-2。自查：check-round-2。审核反馈：ok-804。只输出 JSON 对象，next_step 为后续行动字符串，verification 为核验说明字符串。",
+                "summary": "proposal-round-2",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/finalize.1.input.json",
+                "result": "artifacts/finalize.1.result.json",
+                "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+                "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+              },
+              "leaseToken": "cebf58754603309d1c96001fa37caa58"
+            }
+          }
+        ],
+        "inputs": {
+          "topic": "benchmark-topic"
+        },
+        "nodes": {
+          "draft": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+            "attempts": 1,
+            "durationMs": 17,
+            "inputBytes": 353,
+            "outputBytes": 57,
+            "startedAt": "2026-10-23T09:17:14.679889Z",
+            "finishedAt": "2026-10-23T09:17:14.697092Z",
+            "result": {
+              "check": "check-round-2",
+              "summary": "proposal-round-2"
+            },
+            "input": {
+              "feedback": "clarify-803",
+              "previous_summary": "proposal-round-1",
+              "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：proposal-round-1。上一轮审核反馈：clarify-803。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/draft.2.input.json",
+              "result": "artifacts/draft.2.result.json",
+              "stderrLog": "artifacts/logs/draft.2.stderr.log",
+              "stdoutLog": "artifacts/logs/draft.2.stdout.log"
+            },
+            "leaseToken": "1d08725d2fe73c0840af4e2e75328394"
+          },
+          "finalize": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+            "attempts": 1,
+            "durationMs": 17,
+            "inputBytes": 352,
+            "outputBytes": 61,
+            "startedAt": "2026-10-23T09:17:14.712931Z",
+            "finishedAt": "2026-10-23T09:17:14.730166Z",
+            "result": {
+              "next_step": "take-action",
+              "verification": "verify-action"
+            },
+            "input": {
+              "check": "check-round-2",
+              "confidence": 0.8,
+              "feedback": "ok-804",
+              "prompt": "整理主题「benchmark-topic」的已审核文案：proposal-round-2。自查：check-round-2。审核反馈：ok-804。只输出 JSON 对象，next_step 为后续行动字符串，verification 为核验说明字符串。",
+              "summary": "proposal-round-2",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/finalize.1.input.json",
+              "result": "artifacts/finalize.1.result.json",
+              "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+              "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+            },
+            "leaseToken": "cebf58754603309d1c96001fa37caa58"
+          },
+          "review": {
+            "status": "succeeded",
+            "attempts": 1,
+            "durationMs": 14,
+            "waitDurationMs": 14,
+            "inputBytes": 92,
+            "outputBytes": 50,
+            "startedAt": "2026-10-23T09:17:14.697893Z",
+            "finishedAt": "2026-10-23T09:17:14.712141Z",
+            "result": {
+              "confidence": 0.8,
+              "feedback": "ok-804",
+              "mood": "go"
+            },
+            "input": {
+              "check": "check-round-2",
+              "reworks": 1,
+              "summary": "proposal-round-2",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/review.2.input.json",
+              "result": "artifacts/review.2.result.json"
+            },
+            "leaseToken": "137021f2750afd48a13b64cc2f8c497e"
+          },
+          "revision": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-wwi45l_y",
+            "attempts": 1,
+            "durationMs": 18,
+            "inputBytes": 94,
+            "outputBytes": 14,
+            "startedAt": "2026-10-23T09:17:14.660967Z",
+            "finishedAt": "2026-10-23T09:17:14.679351Z",
+            "result": {
+              "reworks": 1
+            },
+            "input": {
+              "command": [
+                "python3",
+                "executors/revision.py"
+              ],
+              "previous_reworks": 0,
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/revision.2.input.json",
+              "result": "artifacts/revision.2.result.json",
+              "stderrLog": "artifacts/logs/revision.2.stderr.log",
+              "stdoutLog": "artifacts/logs/revision.2.stdout.log"
+            },
+            "leaseToken": "43bee4238a38271f2c47044730c17497"
+          }
+        },
+        "ok": true,
+        "outcome": "completed",
+        "run_id": "run_20261023091714_c40843df82236cdf",
+        "started_at": "2026-10-23T09:17:14.59232Z",
+        "status": "succeeded",
+        "updated_at": "2026-10-23T09:17:14.730755Z",
+        "visits": {
+          "draft": 2,
+          "finalize": 1,
+          "review": 2,
+          "revision": 2
+        },
+        "workflow": "durable-copy-review",
+        "workflow_digest": "525074d7502c"
+      }
+    },
+    {
+      "scenario": "back",
+      "exit_code": 0,
+      "state": {
+        "active_node": "",
+        "created_at": "2026-10-23T09:17:16.154939Z",
+        "duration_ms": 148,
+        "finished_at": "2026-10-23T09:17:16.304306Z",
+        "history": [
+          {
+            "nodeId": "revision",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+              "attempts": 1,
+              "durationMs": 33,
+              "inputBytes": 97,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:16.156326Z",
+              "finishedAt": "2026-10-23T09:17:16.189376Z",
+              "result": {
+                "reworks": 0
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": null,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.1.input.json",
+                "result": "artifacts/revision.1.result.json",
+                "stderrLog": "artifacts/logs/revision.1.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.1.stdout.log"
+              },
+              "leaseToken": "f760a9084594e0f47e253d9ad046430c"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+              "attempts": 1,
+              "durationMs": 23,
+              "inputBytes": 303,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:16.189914Z",
+              "finishedAt": "2026-10-23T09:17:16.213087Z",
+              "result": {
+                "check": "check-round-1",
+                "summary": "proposal-round-1"
+              },
+              "input": {
+                "feedback": null,
+                "previous_summary": null,
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：。上一轮审核反馈：。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.1.input.json",
+                "result": "artifacts/draft.1.result.json",
+                "stderrLog": "artifacts/logs/draft.1.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+              },
+              "leaseToken": "27a4db5b9cc43e43754477b9b35db2d4"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 15,
+              "waitDurationMs": 15,
+              "inputBytes": 92,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:16.213886Z",
+              "finishedAt": "2026-10-23T09:17:16.229883Z",
+              "result": {
+                "confidence": 0.99,
+                "feedback": "revise-805",
+                "mood": "back"
+              },
+              "input": {
+                "check": "check-round-1",
+                "reworks": 0,
+                "summary": "proposal-round-1",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.1.input.json",
+                "result": "artifacts/review.1.result.json"
+              },
+              "leaseToken": "3e505d2a1a70479d1735173165b44009"
+            }
+          },
+          {
+            "nodeId": "revision",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+              "attempts": 1,
+              "durationMs": 18,
+              "inputBytes": 94,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:16.230472Z",
+              "finishedAt": "2026-10-23T09:17:16.249259Z",
+              "result": {
+                "reworks": 1
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": 0,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.2.input.json",
+                "result": "artifacts/revision.2.result.json",
+                "stderrLog": "artifacts/logs/revision.2.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.2.stdout.log"
+              },
+              "leaseToken": "d1c59c1c643ef50d128e48cece7ac99a"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+              "attempts": 1,
+              "durationMs": 19,
+              "inputBytes": 351,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:16.249826Z",
+              "finishedAt": "2026-10-23T09:17:16.269635Z",
+              "result": {
+                "check": "check-round-2",
+                "summary": "proposal-round-2"
+              },
+              "input": {
+                "feedback": "revise-805",
+                "previous_summary": "proposal-round-1",
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：proposal-round-1。上一轮审核反馈：revise-805。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.2.input.json",
+                "result": "artifacts/draft.2.result.json",
+                "stderrLog": "artifacts/logs/draft.2.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.2.stdout.log"
+              },
+              "leaseToken": "0f464c052d61a145c439dd38559ef1f3"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 14,
+              "waitDurationMs": 14,
+              "inputBytes": 92,
+              "outputBytes": 48,
+              "startedAt": "2026-10-23T09:17:16.270689Z",
+              "finishedAt": "2026-10-23T09:17:16.284798Z",
+              "result": {
+                "confidence": 1,
+                "feedback": "ok-806",
+                "mood": "go"
+              },
+              "input": {
+                "check": "check-round-2",
+                "reworks": 1,
+                "summary": "proposal-round-2",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.2.input.json",
+                "result": "artifacts/review.2.result.json"
+              },
+              "leaseToken": "cb700990dd82b444c6ef25209e36afb4"
+            }
+          },
+          {
+            "nodeId": "finalize",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+              "attempts": 1,
+              "durationMs": 18,
+              "inputBytes": 350,
+              "outputBytes": 61,
+              "startedAt": "2026-10-23T09:17:16.285403Z",
+              "finishedAt": "2026-10-23T09:17:16.303917Z",
+              "result": {
+                "next_step": "take-action",
+                "verification": "verify-action"
+              },
+              "input": {
+                "check": "check-round-2",
+                "confidence": 1,
+                "feedback": "ok-806",
+                "prompt": "整理主题「benchmark-topic」的已审核文案：proposal-round-2。自查：check-round-2。审核反馈：ok-806。只输出 JSON 对象，next_step 为后续行动字符串，verification 为核验说明字符串。",
+                "summary": "proposal-round-2",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/finalize.1.input.json",
+                "result": "artifacts/finalize.1.result.json",
+                "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+                "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+              },
+              "leaseToken": "6ca3040f4b5f9303a1810d3d2e6fa815"
+            }
+          }
+        ],
+        "inputs": {
+          "topic": "benchmark-topic"
+        },
+        "nodes": {
+          "draft": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+            "attempts": 1,
+            "durationMs": 19,
+            "inputBytes": 351,
+            "outputBytes": 57,
+            "startedAt": "2026-10-23T09:17:16.249826Z",
+            "finishedAt": "2026-10-23T09:17:16.269635Z",
+            "result": {
+              "check": "check-round-2",
+              "summary": "proposal-round-2"
+            },
+            "input": {
+              "feedback": "revise-805",
+              "previous_summary": "proposal-round-1",
+              "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：proposal-round-1。上一轮审核反馈：revise-805。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/draft.2.input.json",
+              "result": "artifacts/draft.2.result.json",
+              "stderrLog": "artifacts/logs/draft.2.stderr.log",
+              "stdoutLog": "artifacts/logs/draft.2.stdout.log"
+            },
+            "leaseToken": "0f464c052d61a145c439dd38559ef1f3"
+          },
+          "finalize": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+            "attempts": 1,
+            "durationMs": 18,
+            "inputBytes": 350,
+            "outputBytes": 61,
+            "startedAt": "2026-10-23T09:17:16.285403Z",
+            "finishedAt": "2026-10-23T09:17:16.303917Z",
+            "result": {
+              "next_step": "take-action",
+              "verification": "verify-action"
+            },
+            "input": {
+              "check": "check-round-2",
+              "confidence": 1,
+              "feedback": "ok-806",
+              "prompt": "整理主题「benchmark-topic」的已审核文案：proposal-round-2。自查：check-round-2。审核反馈：ok-806。只输出 JSON 对象，next_step 为后续行动字符串，verification 为核验说明字符串。",
+              "summary": "proposal-round-2",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/finalize.1.input.json",
+              "result": "artifacts/finalize.1.result.json",
+              "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+              "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+            },
+            "leaseToken": "6ca3040f4b5f9303a1810d3d2e6fa815"
+          },
+          "review": {
+            "status": "succeeded",
+            "attempts": 1,
+            "durationMs": 14,
+            "waitDurationMs": 14,
+            "inputBytes": 92,
+            "outputBytes": 48,
+            "startedAt": "2026-10-23T09:17:16.270689Z",
+            "finishedAt": "2026-10-23T09:17:16.284798Z",
+            "result": {
+              "confidence": 1,
+              "feedback": "ok-806",
+              "mood": "go"
+            },
+            "input": {
+              "check": "check-round-2",
+              "reworks": 1,
+              "summary": "proposal-round-2",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/review.2.input.json",
+              "result": "artifacts/review.2.result.json"
+            },
+            "leaseToken": "cb700990dd82b444c6ef25209e36afb4"
+          },
+          "revision": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-o87g8lac",
+            "attempts": 1,
+            "durationMs": 18,
+            "inputBytes": 94,
+            "outputBytes": 14,
+            "startedAt": "2026-10-23T09:17:16.230472Z",
+            "finishedAt": "2026-10-23T09:17:16.249259Z",
+            "result": {
+              "reworks": 1
+            },
+            "input": {
+              "command": [
+                "python3",
+                "executors/revision.py"
+              ],
+              "previous_reworks": 0,
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/revision.2.input.json",
+              "result": "artifacts/revision.2.result.json",
+              "stderrLog": "artifacts/logs/revision.2.stderr.log",
+              "stdoutLog": "artifacts/logs/revision.2.stdout.log"
+            },
+            "leaseToken": "d1c59c1c643ef50d128e48cece7ac99a"
+          }
+        },
+        "ok": true,
+        "outcome": "completed",
+        "run_id": "run_20261023091716_10f06b2459965034",
+        "started_at": "2026-10-23T09:17:16.156034Z",
+        "status": "succeeded",
+        "updated_at": "2026-10-23T09:17:16.304306Z",
+        "visits": {
+          "draft": 2,
+          "finalize": 1,
+          "review": 2,
+          "revision": 2
+        },
+        "workflow": "durable-copy-review",
+        "workflow_digest": "525074d7502c"
+      }
+    },
+    {
+      "scenario": "bound",
+      "exit_code": 0,
+      "state": {
+        "active_node": "",
+        "created_at": "2026-10-23T09:17:17.747272Z",
+        "duration_ms": 173,
+        "finished_at": "2026-10-23T09:17:17.921048Z",
+        "history": [
+          {
+            "nodeId": "revision",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+              "attempts": 1,
+              "durationMs": 31,
+              "inputBytes": 97,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:17.748188Z",
+              "finishedAt": "2026-10-23T09:17:17.779732Z",
+              "result": {
+                "reworks": 0
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": null,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.1.input.json",
+                "result": "artifacts/revision.1.result.json",
+                "stderrLog": "artifacts/logs/revision.1.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.1.stdout.log"
+              },
+              "leaseToken": "7cd52643cb301daa0d7832f12b4e123f"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+              "attempts": 1,
+              "durationMs": 22,
+              "inputBytes": 303,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:17.780275Z",
+              "finishedAt": "2026-10-23T09:17:17.802537Z",
+              "result": {
+                "check": "check-round-1",
+                "summary": "proposal-round-1"
+              },
+              "input": {
+                "feedback": null,
+                "previous_summary": null,
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：。上一轮审核反馈：。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.1.input.json",
+                "result": "artifacts/draft.1.result.json",
+                "stderrLog": "artifacts/logs/draft.1.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+              },
+              "leaseToken": "6f48741a2fad0bf3c2f54ee3a6d073a5"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 1,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 15,
+              "waitDurationMs": 15,
+              "inputBytes": 92,
+              "outputBytes": 47,
+              "startedAt": "2026-10-23T09:17:17.80343Z",
+              "finishedAt": "2026-10-23T09:17:17.81862Z",
+              "result": {
+                "confidence": 0.3,
+                "feedback": "x",
+                "mood": "back"
+              },
+              "input": {
+                "check": "check-round-1",
+                "reworks": 0,
+                "summary": "proposal-round-1",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.1.input.json",
+                "result": "artifacts/review.1.result.json"
+              },
+              "leaseToken": "38631eb1e564d6855223ee81c68fd8de"
+            }
+          },
+          {
+            "nodeId": "revision",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+              "attempts": 1,
+              "durationMs": 18,
+              "inputBytes": 94,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:17.819199Z",
+              "finishedAt": "2026-10-23T09:17:17.837484Z",
+              "result": {
+                "reworks": 1
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": 0,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.2.input.json",
+                "result": "artifacts/revision.2.result.json",
+                "stderrLog": "artifacts/logs/revision.2.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.2.stdout.log"
+              },
+              "leaseToken": "9e9f5f05b297ca3f01f2fb94c3526657"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+              "attempts": 1,
+              "durationMs": 17,
+              "inputBytes": 333,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:17.838038Z",
+              "finishedAt": "2026-10-23T09:17:17.855232Z",
+              "result": {
+                "check": "check-round-2",
+                "summary": "proposal-round-2"
+              },
+              "input": {
+                "feedback": "x",
+                "previous_summary": "proposal-round-1",
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：proposal-round-1。上一轮审核反馈：x。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.2.input.json",
+                "result": "artifacts/draft.2.result.json",
+                "stderrLog": "artifacts/logs/draft.2.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.2.stdout.log"
+              },
+              "leaseToken": "dba907ae8ddac50252309bf1732cd889"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 2,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 15,
+              "waitDurationMs": 15,
+              "inputBytes": 92,
+              "outputBytes": 47,
+              "startedAt": "2026-10-23T09:17:17.85579Z",
+              "finishedAt": "2026-10-23T09:17:17.871043Z",
+              "result": {
+                "confidence": 0.3,
+                "feedback": "x",
+                "mood": "back"
+              },
+              "input": {
+                "check": "check-round-2",
+                "reworks": 1,
+                "summary": "proposal-round-2",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.2.input.json",
+                "result": "artifacts/review.2.result.json"
+              },
+              "leaseToken": "7d2f239bcc6e7537a710850002b3a5bf"
+            }
+          },
+          {
+            "nodeId": "revision",
+            "visit": 3,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+              "attempts": 1,
+              "durationMs": 16,
+              "inputBytes": 94,
+              "outputBytes": 14,
+              "startedAt": "2026-10-23T09:17:17.871586Z",
+              "finishedAt": "2026-10-23T09:17:17.888261Z",
+              "result": {
+                "reworks": 2
+              },
+              "input": {
+                "command": [
+                  "python3",
+                  "executors/revision.py"
+                ],
+                "previous_reworks": 1,
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/revision.3.input.json",
+                "result": "artifacts/revision.3.result.json",
+                "stderrLog": "artifacts/logs/revision.3.stderr.log",
+                "stdoutLog": "artifacts/logs/revision.3.stdout.log"
+              },
+              "leaseToken": "a7ce53ecfd517eccd383dd8fa66776b9"
+            }
+          },
+          {
+            "nodeId": "draft",
+            "visit": 3,
+            "state": {
+              "status": "succeeded",
+              "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+              "attempts": 1,
+              "durationMs": 18,
+              "inputBytes": 333,
+              "outputBytes": 57,
+              "startedAt": "2026-10-23T09:17:17.888836Z",
+              "finishedAt": "2026-10-23T09:17:17.906942Z",
+              "result": {
+                "check": "check-round-3",
+                "summary": "proposal-round-3"
+              },
+              "input": {
+                "feedback": "x",
+                "previous_summary": "proposal-round-2",
+                "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：proposal-round-2。上一轮审核反馈：x。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/draft.3.input.json",
+                "result": "artifacts/draft.3.result.json",
+                "stderrLog": "artifacts/logs/draft.3.stderr.log",
+                "stdoutLog": "artifacts/logs/draft.3.stdout.log"
+              },
+              "leaseToken": "0ca67d2184b926370f647b2392c5e42b"
+            }
+          },
+          {
+            "nodeId": "review",
+            "visit": 3,
+            "state": {
+              "status": "succeeded",
+              "attempts": 1,
+              "durationMs": 13,
+              "waitDurationMs": 13,
+              "inputBytes": 92,
+              "outputBytes": 47,
+              "startedAt": "2026-10-23T09:17:17.907594Z",
+              "finishedAt": "2026-10-23T09:17:17.920679Z",
+              "result": {
+                "confidence": 0.3,
+                "feedback": "x",
+                "mood": "back"
+              },
+              "input": {
+                "check": "check-round-3",
+                "reworks": 2,
+                "summary": "proposal-round-3",
+                "topic": "benchmark-topic"
+              },
+              "artifacts": {
+                "input": "artifacts/review.3.input.json",
+                "result": "artifacts/review.3.result.json"
+              },
+              "leaseToken": "571db6e2c32136d18269adcedb0ffee3"
+            }
+          }
+        ],
+        "inputs": {
+          "topic": "benchmark-topic"
+        },
+        "nodes": {
+          "draft": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+            "attempts": 1,
+            "durationMs": 18,
+            "inputBytes": 333,
+            "outputBytes": 57,
+            "startedAt": "2026-10-23T09:17:17.888836Z",
+            "finishedAt": "2026-10-23T09:17:17.906942Z",
+            "result": {
+              "check": "check-round-3",
+              "summary": "proposal-round-3"
+            },
+            "input": {
+              "feedback": "x",
+              "previous_summary": "proposal-round-2",
+              "prompt": "围绕主题「benchmark-topic」写文案。上一轮文案：proposal-round-2。上一轮审核反馈：x。若有反馈，按反馈修改文案。只输出 JSON 对象，summary 为完整文案字符串，check 为自查说明字符串。",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/draft.3.input.json",
+              "result": "artifacts/draft.3.result.json",
+              "stderrLog": "artifacts/logs/draft.3.stderr.log",
+              "stdoutLog": "artifacts/logs/draft.3.stdout.log"
+            },
+            "leaseToken": "0ca67d2184b926370f647b2392c5e42b"
+          },
+          "finalize": {
+            "status": "skipped",
+            "reason": "not_selected"
+          },
+          "review": {
+            "status": "succeeded",
+            "attempts": 1,
+            "durationMs": 13,
+            "waitDurationMs": 13,
+            "inputBytes": 92,
+            "outputBytes": 47,
+            "startedAt": "2026-10-23T09:17:17.907594Z",
+            "finishedAt": "2026-10-23T09:17:17.920679Z",
+            "result": {
+              "confidence": 0.3,
+              "feedback": "x",
+              "mood": "back"
+            },
+            "input": {
+              "check": "check-round-3",
+              "reworks": 2,
+              "summary": "proposal-round-3",
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/review.3.input.json",
+              "result": "artifacts/review.3.result.json"
+            },
+            "leaseToken": "571db6e2c32136d18269adcedb0ffee3"
+          },
+          "revision": {
+            "status": "succeeded",
+            "workspace": "/private/var/folders/rd/151hh9sd0dx8h5jjrz03b3zr0000gn/T/agentflow-grade-603lwl9x",
+            "attempts": 1,
+            "durationMs": 16,
+            "inputBytes": 94,
+            "outputBytes": 14,
+            "startedAt": "2026-10-23T09:17:17.871586Z",
+            "finishedAt": "2026-10-23T09:17:17.888261Z",
+            "result": {
+              "reworks": 2
+            },
+            "input": {
+              "command": [
+                "python3",
+                "executors/revision.py"
+              ],
+              "previous_reworks": 1,
+              "topic": "benchmark-topic"
+            },
+            "artifacts": {
+              "input": "artifacts/revision.3.input.json",
+              "result": "artifacts/revision.3.result.json",
+              "stderrLog": "artifacts/logs/revision.3.stderr.log",
+              "stdoutLog": "artifacts/logs/revision.3.stdout.log"
+            },
+            "leaseToken": "a7ce53ecfd517eccd383dd8fa66776b9"
+          }
+        },
+        "ok": true,
+        "outcome": "completed",
+        "run_id": "run_20261023091717_8ef323a2e2232df7",
+        "started_at": "2026-10-23T09:17:17.748042Z",
+        "status": "succeeded",
+        "updated_at": "2026-10-23T09:17:17.921049Z",
+        "visits": {
+          "draft": 3,
+          "review": 3,
+          "revision": 3
+        },
+        "workflow": "durable-copy-review",
+        "workflow_digest": "525074d7502c"
+      }
+    }
+  ]
+}

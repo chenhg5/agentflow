@@ -1,6 +1,7 @@
 package trigger
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -19,7 +20,7 @@ import (
 type Runtime struct {
 	Root      string
 	CWD       string
-	Providers map[string]driver.Provider
+	Executors map[string]driver.Executor
 	queue     chan string
 	workers   int
 	wg        sync.WaitGroup
@@ -38,11 +39,11 @@ func NewRuntime(root, cwd string, workers int) (*Runtime, error) {
 	if workers < 1 {
 		workers = 1
 	}
-	providers, err := driver.LoadProviders(cwd)
+	executors, err := driver.LoadExecutors(cwd)
 	if err != nil {
 		return nil, err
 	}
-	return &Runtime{Root: root, CWD: cwd, Providers: providers, queue: make(chan string, workers*4), workers: workers}, nil
+	return &Runtime{Root: root, CWD: cwd, Executors: executors, queue: make(chan string, workers*4), workers: workers}, nil
 }
 
 func (r *Runtime) StartWorkers(ctx context.Context) {
@@ -69,7 +70,9 @@ func (r *Runtime) Start(_ context.Context, command StartRunCommand) (RunRef, err
 		return RunRef{}, err
 	}
 	var workflow model.Workflow
-	if err := json.Unmarshal(data, &workflow); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&workflow); err != nil {
 		return RunRef{}, fmt.Errorf("invalid workflow JSON: %w", err)
 	}
 	if problems := schema.Validate(workflow); len(problems) > 0 {
@@ -123,7 +126,7 @@ func (r *Runtime) execute(runID string) {
 	r.updateJob(runID, "running", "")
 	run, err := store.LoadRun(r.Root, runID)
 	if err == nil && run.State.Status != "cancelled" {
-		err = engine.Execute(run, r.Providers)
+		err = engine.Execute(run, r.Executors)
 		if err == nil && run.State.Status == "queued" {
 			run.State.Status = "failed"
 			err = fmt.Errorf("run worker did not advance queued run")
@@ -141,8 +144,8 @@ func (r *Runtime) execute(runID string) {
 	status := "succeeded"
 	if run.State.Status == "failed" {
 		status = "failed"
-	} else if run.State.Status == "waiting_human" {
-		status = "waiting_human"
+	} else if run.State.Status == "waiting_input" {
+		status = "waiting_input"
 	}
 	r.updateJob(runID, status, "")
 }

@@ -1,85 +1,133 @@
 {
-  "version": "1",
+  "version": "2",
   "name": "real-agent-pipeline",
+  "entry": "claude_inspect",
   "inputs": {
-    "workspace": { "type": "string", "required": true }
+    "workspace": {
+      "type": "string",
+      "required": true
+    }
   },
   "nodes": [
     {
       "id": "claude_inspect",
-      "type": "agent",
-      "provider": "claude-code",
-      "workspace": "{{ inputs.workspace }}",
       "input": {
-        "workspace": "{{ inputs.workspace }}"
+        "workspace": "{{ inputs.workspace }}",
+        "prompt": "Read input.txt in the current workspace. Do not modify input.txt or any other source file. Write exactly one JSON object to AGENTFLOW_RESULT_FILE with keys summary (string), line_count (number), and reviewed_by (string). Set reviewed_by to claude-code. The summary must mention the fixture text. You may use shell commands only to inspect the file and write the required result file."
       },
-      "inputFields": [
-        { "name": "workspace", "type": "string", "description": "Absolute workspace containing input.txt", "required": true }
-      ],
       "inputSchema": {
         "type": "object",
-        "required": ["workspace"],
-        "properties": { "workspace": { "type": "string", "minLength": 1 } },
+        "required": [
+          "workspace",
+          "prompt"
+        ],
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "minLength": 1
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "additionalProperties": false
       },
       "outputSchema": {
         "type": "object",
-        "required": ["summary", "line_count", "reviewed_by"],
+        "required": [
+          "summary",
+          "line_count",
+          "reviewed_by"
+        ],
         "properties": {
-          "summary": { "type": "string", "minLength": 1 },
-          "line_count": { "type": "integer", "minimum": 1 },
-          "reviewed_by": { "type": "string", "enum": ["claude-code"] }
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reviewed_by": {
+            "type": "string",
+            "enum": [
+              "claude-code"
+            ]
+          }
         },
         "additionalProperties": false
       },
-      "outputFields": [
-        { "name": "summary", "type": "string", "description": "Short summary of input.txt", "required": true },
-        { "name": "line_count", "type": "integer", "description": "Number of lines observed", "required": true },
-        { "name": "reviewed_by", "type": "string", "description": "Provider that performed the inspection", "required": true }
-      ],
       "timeoutMs": 180000,
-      "prompt": "Read input.txt in the current workspace. Do not modify input.txt or any other source file. Write exactly one JSON object to AGENTFLOW_RESULT_FILE with keys summary (string), line_count (number), and reviewed_by (string). Set reviewed_by to claude-code. The summary must mention the fixture text. You may use shell commands only to inspect the file and write the required result file."
+      "executor": "claude-code"
     },
     {
       "id": "codex_verify",
-      "type": "agent",
-      "provider": "codex",
-      "needs": ["claude_inspect"],
-      "workspace": "{{ inputs.workspace }}",
       "input": {
         "summary": "{{ nodes.claude_inspect.result.summary }}",
-        "line_count": "{{ nodes.claude_inspect.result.line_count }}"
+        "line_count": "{{ nodes.claude_inspect.result.line_count }}",
+        "prompt": "Verify the previous agent's structured result: summary={{ nodes.claude_inspect.result.summary }}, line_count={{ nodes.claude_inspect.result.line_count }}. Read input.txt yourself and compare. Do not modify source files. Write exactly one JSON object to AGENTFLOW_RESULT_FILE with keys verified (boolean), observed_line_count (number), and reviewed_by (string). Set reviewed_by to codex.",
+        "workspace": "{{ inputs.workspace }}"
       },
       "inputSchema": {
         "type": "object",
-        "required": ["summary", "line_count"],
+        "required": [
+          "summary",
+          "line_count",
+          "prompt"
+        ],
         "properties": {
-          "summary": { "type": "string", "minLength": 1 },
-          "line_count": { "type": "integer", "minimum": 1 }
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "line_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          }
         },
         "additionalProperties": false
       },
-      "inputFields": [
-        { "name": "summary", "type": "string", "description": "Summary returned by the inspection node", "required": true },
-        { "name": "line_count", "type": "integer", "description": "Line count returned by the inspection node", "required": true }
-      ],
       "outputSchema": {
         "type": "object",
-        "required": ["verified", "observed_line_count", "reviewed_by"],
+        "required": [
+          "verified",
+          "observed_line_count",
+          "reviewed_by"
+        ],
         "properties": {
-          "verified": { "type": "boolean" },
-          "observed_line_count": { "type": "integer", "minimum": 1 },
-          "reviewed_by": { "type": "string", "enum": ["codex"] }
+          "verified": {
+            "type": "boolean"
+          },
+          "observed_line_count": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "reviewed_by": {
+            "type": "string",
+            "enum": [
+              "codex"
+            ]
+          }
         },
         "additionalProperties": false
       },
-      "outputFields": [
-        { "name": "verified", "type": "boolean", "description": "Whether the independent verification passed", "required": true },
-        { "name": "observed_line_count", "type": "integer", "description": "Line count observed by the verifier", "required": true },
-        { "name": "reviewed_by", "type": "string", "description": "Provider that performed verification", "required": true }
-      ],
       "timeoutMs": 180000,
-      "prompt": "Verify the previous agent's structured result: summary={{ nodes.claude_inspect.result.summary }}, line_count={{ nodes.claude_inspect.result.line_count }}. Read input.txt yourself and compare. Do not modify source files. Write exactly one JSON object to AGENTFLOW_RESULT_FILE with keys verified (boolean), observed_line_count (number), and reviewed_by (string). Set reviewed_by to codex."
+      "executor": "codex"
+    }
+  ],
+  "edges": [
+    {
+      "from": "claude_inspect",
+      "to": "codex_verify"
+    },
+    {
+      "from": "codex_verify",
+      "to": "$end"
     }
   ]
 }

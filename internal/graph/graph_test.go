@@ -6,41 +6,23 @@ import (
 	"github.com/chenhg5/agentflow/internal/model"
 )
 
-func TestDescribeMergesControlDataAndConditionChannels(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "graph", Nodes: []model.Node{
-		{ID: "inspect", Type: "shell", Command: []string{"true"}},
-		{ID: "review", Type: "human", Prompt: "approve", Needs: []string{"inspect"}, When: "nodes.inspect.result.ready == true", InputMapping: map[string]string{"summary": "$node.inspect.output.summary"}},
+func TestDescribeAndValidateConditionalCycle(t *testing.T) {
+	workflow := model.Workflow{Version: "2", Name: "graph", Entry: "draft", Nodes: []model.Node{
+		{ID: "draft", Executor: "codex"}, {ID: "review", Executor: "external"},
+	}, Edges: []model.Transition{
+		{From: "draft", To: "review"},
+		{From: "review", To: "draft", When: "nodes.review.result.decision == 'again'", MaxIterations: 2},
+		{From: "review", To: End},
 	}}
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatalf("valid graph: %v", problems)
+	}
 	document := Describe(workflow)
-	if len(document.Edges) != 1 {
-		t.Fatalf("edges = %#v", document.Edges)
+	if len(document.Edges) != 3 || document.Edges[1].Condition != workflow.Edges[1].When || document.Edges[1].MaxIterations != 2 {
+		t.Fatalf("unexpected graph view: %+v", document)
 	}
-	edge := document.Edges[0]
-	if edge.Source != "inspect" || edge.Target != "review" || len(edge.Channels) != 3 {
-		t.Fatalf("unexpected edge: %#v", edge)
-	}
-	if edge.Mapping["summary"] != "$node.inspect.output.summary" {
-		t.Fatalf("mapping = %#v", edge.Mapping)
-	}
-}
-
-func TestValidateRejectsUndeclaredMappingDependency(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "graph", Nodes: []model.Node{
-		{ID: "source", Type: "shell", Command: []string{"true"}},
-		{ID: "consumer", Type: "shell", InputMapping: map[string]string{"value": "$node.source.output.value"}, Command: []string{"true"}},
-	}}
-	errors := Validate(workflow)
-	if len(errors) != 1 || errors[0] != "node consumer inputMapping.value references source without declaring it in needs" {
-		t.Fatalf("errors = %v", errors)
-	}
-}
-
-func TestParseNodeOutput(t *testing.T) {
-	node, field, ok := ParseNodeOutput("$node.inspect.output.summary.text")
-	if !ok || node != "inspect" || field != "summary.text" {
-		t.Fatalf("parsed = %q %q %v", node, field, ok)
-	}
-	if _, _, ok := ParseNodeOutput("$output.summary"); ok {
-		t.Fatal("$output reference should not identify a source node")
+	workflow.Edges[1].MaxIterations = 0
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("unbounded cycle should fail")
 	}
 }

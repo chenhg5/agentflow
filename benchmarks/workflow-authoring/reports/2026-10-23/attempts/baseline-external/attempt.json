@@ -1,0 +1,11 @@
+{
+  "case": "external-loop",
+  "split": "development",
+  "binary_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+  "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d",
+  "prepared_at": 1792744939.336491,
+  "agent_label": "codex-app-fresh-subagent",
+  "context_mode": "fork_turns=none; no task conversation inherited",
+  "model_identifier": "not exposed; inherited default",
+  "agent_task_name": "/root/baseline_external"
+}

@@ -1,0 +1,183 @@
+{
+  "version": "2",
+  "name": "scheduled-review",
+  "entry": "draft",
+  "inputs": {
+    "topic": {
+      "type": "string",
+      "required": true
+    },
+    "reviewer": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "draft",
+      "executor": "codex",
+      "input": {
+        "prompt": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.note }}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "check"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "review",
+      "executor": "channel",
+      "input": {
+        "recipient": "{{ inputs.reviewer }}",
+        "content": "{{ nodes.draft.result.summary }}",
+        "actions": [
+          {
+            "label": "happy",
+            "output": {
+              "signal": "happy",
+              "note": "happy"
+            }
+          },
+          {
+            "label": "again",
+            "output": {
+              "signal": "again",
+              "note": "again"
+            }
+          },
+          {
+            "label": "sad",
+            "output": {
+              "signal": "sad",
+              "note": "sad"
+            }
+          }
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "recipient": {
+            "type": "string"
+          },
+          "content": {
+            "type": "string"
+          },
+          "actions": {
+            "type": "array"
+          }
+        },
+        "required": [
+          "recipient",
+          "content",
+          "actions"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "enum": [
+              "happy",
+              "again",
+              "sad"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "finalize",
+      "executor": "codex",
+      "input": {
+        "prompt": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.note }}"
+      },
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "prompt": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "prompt"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "next_step": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "next_step",
+          "verification"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "draft",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "finalize",
+      "when": "nodes.review.result.signal == 'happy'"
+    },
+    {
+      "from": "review",
+      "to": "draft",
+      "when": "nodes.review.result.signal == 'again'",
+      "maxIterations": 2
+    },
+    {
+      "from": "review",
+      "to": "$end"
+    },
+    {
+      "from": "finalize",
+      "to": "$end"
+    }
+  ]
+}

@@ -1,185 +1,107 @@
 # AgentFlow
 
-AgentFlow is a standalone local workflow runner for Claude Code, Codex, and other command based agent sessions.
+AgentFlow runs local workflows described by `entry`, `nodes`, and explicit `edges`. Each node calls a named executor with JSON input and produces JSON output. Executors can run Codex, Claude Code, an interactive program, or a program you write in any language.
 
-It uses a small JSON workflow definition, persists every run under `.agentflow/`, and supports resumable human approval steps.
+The runner persists state under `.agentflow/`, validates input/output schemas, evaluates conditions, and advances the graph automatically. Workflow version `2` is the supported format.
 
-The current release is `v0.0.3` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
-
-For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
-The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md). Scheduling, `runIf`, human waits, retry, and crash recovery are documented in [`docs/execution-semantics.md`](docs/execution-semantics.md).
-
-## Install
+## Install and try
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chenhg5/agentflow/main/scripts/install.sh | sh
 ```
 
-Or `go install github.com/chenhg5/agentflow/cmd/agentflow@latest`, or download an archive from [Releases](https://github.com/chenhg5/agentflow/releases). See [`INSTALL.md`](INSTALL.md) for details.
-
-## Quick start
+This executor schema is currently in the source checkout. Build the checkout to try it:
 
 ```bash
-go run ./cmd/agentflow workflow validate examples/smoke.json --format json
-go run ./cmd/agentflow run start examples/smoke.json --input name=Codex --format json
+make build
+bin/agentflow workflow validate examples/smoke.json --check-executors --format json
+bin/agentflow run start examples/smoke.json --input name=Codex --format json
+bin/agentflow run submit <run-id> approve --output '{"decision":"happy"}' --format json
 ```
 
-The command pauses at the `approve` node. Copy the run id and continue it:
+See [INSTALL.md](INSTALL.md) for setup and [skills/agentflow/SKILL.md](skills/agentflow/SKILL.md) for agent instructions.
 
-```bash
-go run ./cmd/agentflow run approve <run-id> approval --message "approved" --format json
-go run ./cmd/agentflow run get <run-id> --format json
-```
-
-## Agent-friendly CLI contract
-
-- Commands use a noun-verb tree such as `workflow validate` and `run get`.
-- Piped output defaults to JSON; use `--format table` for humans and `--format ndjson` for event streams.
-- stdout contains data. Diagnostics and errors go to stderr.
-- Errors include a stable machine-readable code, a recovery suggestion, and `retryable`.
-- Exit codes: `0` success, `1` execution failure, `2` invalid arguments, `3` not found, `4` permission denied, `5` conflict, `10` dry-run passed.
-- `agentflow schema --all` exposes the command tree; `agentflow schema run start` returns one command contract; `agentflow schema workflow` returns the workflow JSON Schema.
-- `--dry-run` is available for run start, approval, rejection, resume, cancellation, and provider initialization.
-- `run start --idempotency-key <token>` safely replays an identical request without creating a duplicate run; a different request with the same key exits with code `5`.
-- `run metrics <run-id>` exposes per-node duration, attempts, prompt/result/log byte sizes, workspace, and session; `run stats [workflow-name]` aggregates historical efficiency.
-- `trigger list`, `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher for cron and webhook events.
-
-## Agent onboarding skill
-
-给 Claude Code、Codex 或其他 agent 使用的编排手册位于 [`skills/agentflow/SKILL.md`](skills/agentflow/SKILL.md)。它覆盖和用户澄清需求、生成 workflow、provider/session 绑定、校验、dry-run、人工审批、恢复以及 metrics/stats 观测。
-
-## Agent providers
-
-Claude Code and Codex have built-in providers. Their binaries and provider-specific runtime options are configured outside workflow definitions in `.agentflow/providers.json` or `~/.agentflow/providers.json`. Start from [`providers.example.json`](providers.example.json). Custom agents can use `kind: "command"` with explicit command templates.
+## Workflow
 
 ```json
 {
-  "providers": {
-    "claude-code": { "kind": "claude-code", "binary": "claude" },
-    "codex": { "kind": "codex", "binary": "codex", "model": "gpt-5.6-sol", "sandbox": "workspace-write" }
+  "version": "2",
+  "name": "example",
+  "entry": "draft",
+  "nodes": [
+    {"id": "draft", "executor": "codex", "input": {"prompt": "Write a short proposal."}},
+    {"id": "review", "executor": "my-review", "input": {"content": "{{ nodes.draft.result.summary }}"}}
+  ],
+  "edges": [
+    {"from": "draft", "to": "review"},
+    {"from": "review", "to": "draft", "when": "nodes.review.result.score < 5", "maxIterations": 2},
+    {"from": "review", "to": "$end"}
+  ]
+}
+```
+
+A node has `id`, `executor`, optional `input`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge. See [graph semantics](docs/graph-and-visualization.md).
+
+`prompt`, `score`, `decision`, recipient IDs, and similar values are executor input/output data. The graph assigns no meaning to them.
+
+## Register your executor
+
+Create `.agentflow/executors.json` in the directory where you run AgentFlow. If absent, the runner checks `~/.agentflow/executors.json`. Start with [executors.example.json](executors.example.json) or `agentflow config init`.
+
+```json
+{
+  "executors": {
+    "my-review": {
+      "command": ["python3", "./executors/review.py"],
+      "workspace": ".",
+      "env": {"REVIEW_PROFILE": "local"}
+    }
   }
 }
 ```
 
-Agent nodes can bind both a workspace and an existing session:
+Executor names are arbitrary. `command` is an argument array, `workspace` is the process working directory, and `env` adds environment variables. Configured commands and environment values can reference `{{ input.field }}`. A relative workspace resolves from the AgentFlow invocation directory; relative command paths resolve inside that workspace.
 
-```json
-{
-  "id": "implement",
-  "type": "agent",
-  "provider": "claude-code",
-  "workspace": "/Users/me/code/my-repo",
-  "session": "{{ inputs.session_id }}",
-  "prompt": "Implement the requested change and write the structured result."
-}
+Built-in executors are `codex`, `claude-code`, `process`, and `external`. Codex and Claude Code adapters accept `input.prompt`, optional `input.workspace`, and optional `input.session`. Their CLI options belong in executor configuration. `process` accepts `input.command` as an argument array. `external` persists `waiting_input` until `run submit` supplies JSON output. These are ready-made executors; nodes use the same reference contract for custom executors.
+
+## Program contract
+
+The runner starts the configured program whenever the graph reaches its node. The program reads a JSON object from `AGENTFLOW_INPUT_FILE`, writes one JSON object to `AGENTFLOW_RESULT_FILE`, and exits successfully. stdout and stderr are logs. The runner validates output and selects the next edge.
+
+```python
+import json, os
+from pathlib import Path
+request = json.loads(Path(os.environ["AGENTFLOW_INPUT_FILE"]).read_text())
+Path(os.environ["AGENTFLOW_RESULT_FILE"]).write_text(json.dumps({"score": 8}))
 ```
 
-`session` can be a literal ID or a template such as `{{ inputs.session_id }}` / `{{ nodes.previous.result.session_id }}`. The Runner executes with `cmd.Dir=workspace`, sets `AGENTFLOW_WORKSPACE` and `AGENTFLOW_SESSION_ID`, and persists the effective workspace/session under the node state. Command templates support `{{ prompt }}`, `{{ workspace }}`, `{{ session_id }}`, `{{ result_file }}`, `{{ run_id }}`, and `{{ node_id }}`. `promptMode: "stdin"` sends the prompt through stdin.
+The language and communication channel are unrestricted. An interaction program can send a card or display a terminal prompt, wait for a response, then write output. A person clicking a button does not select graph edges; the returned JSON is evaluated by the graph's conditions. Programs do not edit run state.
 
-## Structured node results
+Input and output contracts use JSON Schema draft 2020-12. Exact templates such as `{{ nodes.draft.result.count }}` preserve JSON types. Every visit has separate input, result, and log artifacts. See [execution semantics](docs/execution-semantics.md).
 
-Agent nodes must write a JSON object to the `AGENTFLOW_RESULT_FILE` environment variable before they exit successfully. The runner also includes the exact absolute result path and workspace in the execution contract appended to the prompt, which helps non-interactive sessions that cannot inspect process environment variables. The Runner stores that JSON under `node.result` and remains the only component that advances the workflow. stdout and stderr are retained only as log artifacts under `artifacts/logs/`.
-
-For example, a command can write:
-
-```json
-{"decision":"pass","summary":"tests passed"}
-```
-
-Downstream nodes reference structured data with expressions such as `{{ nodes.review.result.decision }}`.
-
-Nodes can make this boundary explicit with `input`, `inputSchema`, and `outputSchema`. Exact placeholders preserve JSON types, and contract failures stop the node before the command starts or after the structured result is read:
-
-```json
-{
-  "input": { "count": "{{ nodes.inspect.result.line_count }}" },
-  "inputSchema": { "type": "object", "required": ["count"], "properties": { "count": { "type": "integer" } } },
-  "outputSchema": { "type": "object", "required": ["verified"], "properties": { "verified": { "type": "boolean" } } }
-}
-```
-
-Contracts use JSON Schema draft 2020-12, so constraints such as `pattern`, `oneOf`, `const`, nested arrays, and strict `additionalProperties` are enforced both when loading a workflow and when a node runs. For field-oriented handoff, add `inputFields` and `outputFields`; `outputFields` derive a strict object schema when `outputSchema` is omitted. Downstream input is built by explicit `inputMapping` first, then by matching field names from direct dependencies, with an explicit `input` template taking precedence. The rendered input is saved as `artifacts/<node>.input.json`. stdout and stderr remain logs; only `AGENTFLOW_RESULT_FILE` is business output.
-
-## Cron and webhook triggers
-
-Store trigger definitions in `.agentflow/triggers.json` and start the long-lived runtime:
+## Operate and inspect
 
 ```bash
-agentflow trigger validate --format json
-agentflow trigger serve --host 127.0.0.1 --port 7071
-```
-
-The service runs cron scheduling, webhook HTTP intake, durable delivery receipts, a dispatch queue, and workers. A webhook is acknowledged with `202` after the delivery and queued run are persisted. For an external scheduler, use `agentflow trigger fire <trigger-id> --scheduled-at ... --delivery-id ...`; repeated delivery IDs are idempotent. See [`examples/triggers.json`](examples/triggers.json) and [`docs/trigger-architecture.md`](docs/trigger-architecture.md).
-
-## Observability
-
-Inspect one run with:
-
-```bash
-agentflow run metrics <run-id> --format json
+agentflow doctor --format json
+agentflow schema --all --format json
+agentflow run get <run-id> --format json
 agentflow run logs <run-id> --format ndjson
+agentflow run metrics <run-id> --format json
+agentflow run stats <workflow-name> --by-version --format json
+agentflow run retry <run-id> --format json
+agentflow run resume <run-id> --format json
+agentflow run cancel <run-id> --format json
+agentflow web --host 127.0.0.1 --port 7070
 ```
 
-`run metrics` reports run and node status, trigger metadata, duration, retry attempts, human waiting time, workspace/session binding, and byte counts. `input_bytes` is the rendered prompt plus structured node input, `output_bytes` is the structured result file, and `stdout_bytes`/`stderr_bytes` are log sizes. Structured results and logs stay separate.
+One active node runs at a time. Retry restarts the active failed node. Each run saves its workflow snapshot; executor registrations are resolved from the current environment. Changing executor configuration therefore affects a later resume or retry. Old workflow formats and removed node fields are rejected.
 
-Aggregate historical runs to find slow or failure-prone steps:
+Cron and webhook configuration lives in `.agentflow/triggers.json`. `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher; the persistent scheduler requires `trigger serve` to stay running. See [trigger architecture](docs/trigger-architecture.md).
 
-```bash
-agentflow run stats --format json
-agentflow run stats release-review --format json
-agentflow run stats release-review --by-version --format json
-```
+CLI stdout contains data; diagnostics go to stderr. Piped output defaults to JSON. Exit codes are `0` success, `1` execution failure, `2` invalid input, `3` not found, `4` permission denied, `5` conflict, and `10` successful dry run. Start requests support idempotency keys. Controls are queued when another process owns the run lock.
 
-Every run records a `workflow_digest`, a content hash of its workflow definition, so `--by-version` (or `--digest <hash>`) compares a workflow before and after a change. Run-level durations cover finished runs only and are split into `active_ms` and human `waiting_ms`.
+Run `make check` and `make test-e2e` for deterministic verification. Real model testing is opt-in: [testing](docs/testing.md). Release instructions: [releasing](docs/releasing.md).
 
-Callers such as schedulers, watchdogs, or an agent that woke itself up query results through stable commands instead of reading `.agentflow/runs/`:
+## Workflow authoring benchmark
 
-```bash
-agentflow run latest release-review --status succeeded,failed --format json
-agentflow run list --workflow release-review --status waiting_human --format json
-```
-
-The aggregate includes run counts, average/P50/P95/max durations, human waiting time, retry totals, and input/output/log byte totals. Run data is persisted under `.agentflow/runs/<run-id>/` so it can be inspected or exported by another tool.
-
-## Workflow visualization
-
-Open a workflow definition in a local React Flow based UI:
-
-```bash
-agentflow web workflow.json
-```
-
-Open the graph for an existing run, including live node status and metrics:
-
-```bash
-agentflow web --run <run-id>
-```
-
-The server prints a local URL and refreshes run data every two seconds. Use `--port 0` to let the operating system choose an available port, or `--host 0.0.0.0` when the UI needs to be reached from another machine on a trusted network.
-
-The UI distinguishes control, structured-data, and conditional edges. Select a node to inspect its contracts, resolved input, structured result, artifacts, and runtime state.
-
-The Runner owns all state transitions. Agent processes receive `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, `AGENTFLOW_NODE_TOKEN`, and `AGENTFLOW_RESULT_FILE`; they write the result file and exit, while the Runner validates the file and advances dependent nodes. An Agent never writes `state.json` or starts the next node directly.
-
-Provider adapters keep vendor-specific CLI and session behavior out of the workflow engine while preserving a generic command escape hatch. Session discovery and history are separate capabilities that can be added without changing workflow definitions.
-
-For reproducible validation, [`docs/testing.md`](docs/testing.md) describes the deterministic test suite and an opt-in smoke workflow that invokes real Claude Code and Codex sessions.
-
-Build a standalone binary with:
-
-```bash
-go build -o agentflow ./cmd/agentflow
-```
-
-## MVP scope
-
-- JSON workflow validation
-- shell, agent, and human nodes
-- parallel execution of independent nodes (`maxParallel`), conditional `when` expressions, and `runIf: success | failure | always`
-- failure isolation: a failed node only skips its own dependents
-- retries, timeouts, persisted run state, `run retry` from failed nodes, and crash recovery on `run resume`
-- structured JSON node results with separate stdout/stderr log artifacts
-- explicit node input/output schemas with runtime validation
-- human approve/reject/resume; waiting for a human does not block independent branches
-- built-in Claude Code and Codex providers, including workspace and existing-session resume
-- cron/webhook triggers with durable dispatch and idempotent deliveries
+[Cold-context authoring benchmark](benchmarks/workflow-authoring/README.md) includes business tasks, private golden workflows, deterministic execution checks, arbitrary agent-command runners, and retained authoring artifacts. `make test-benchmark` verifies the goldens and detects deliberately broken routes, bindings, type handoffs, feedback and loop limits without calling a model. Live authoring runs are opt-in. The [initial report](benchmarks/workflow-authoring/reports/2026-10-23/REPORT.md) distinguishes final task success from errors repaired during authoring.

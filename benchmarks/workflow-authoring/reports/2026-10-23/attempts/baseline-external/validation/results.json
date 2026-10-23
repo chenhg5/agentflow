@@ -1,0 +1,101 @@
+[
+  {
+    "case": "missing or empty topic rejected before any model step",
+    "run_id": "run_20261023084812_822485864d3a2937",
+    "status": "failed",
+    "visits": {
+      "revision": 1
+    }
+  },
+  {
+    "case": "missing or empty topic rejected before any model step",
+    "run_id": "run_20261023084812_e3cfff4845900700",
+    "status": "failed",
+    "visits": {
+      "revision": 1
+    }
+  },
+  {
+    "case": "process exit/get/resume/submit, go boundary accepted",
+    "run_id": "run_20261023084812_2f54ea3b401e34d1",
+    "status": "succeeded",
+    "visits": {
+      "draft": 1,
+      "finalize": 1,
+      "review": 1,
+      "revision": 1
+    }
+  },
+  {
+    "case": "stop succeeds without finalize or rewriting",
+    "run_id": "run_20261023084812_8bcfa9f1003e853f",
+    "status": "succeeded",
+    "visits": {
+      "draft": 1,
+      "review": 1,
+      "revision": 1
+    }
+  },
+  {
+    "case": "low go loops with typed feedback and prior draft, then high go finalizes",
+    "run_id": "run_20261023084812_d04220160ed63dd1",
+    "status": "succeeded",
+    "visits": {
+      "draft": 2,
+      "finalize": 1,
+      "review": 2,
+      "revision": 2
+    }
+  },
+  {
+    "case": "back reworks twice; third request ends normally",
+    "run_id": "run_20261023084812_09608de895893aa4",
+    "status": "succeeded",
+    "visits": {
+      "draft": 3,
+      "review": 3,
+      "revision": 3
+    }
+  },
+  {
+    "case": "low-confidence go limited to two reworks",
+    "run_id": "run_20261023084812_89d0a52b9aedeca9",
+    "status": "succeeded",
+    "visits": {
+      "draft": 3,
+      "review": 3,
+      "revision": 3
+    }
+  },
+  {
+    "case": "high go still finalizes after second rework",
+    "run_id": "run_20261023084812_eee33bb3fc11356d",
+    "status": "succeeded",
+    "visits": {
+      "draft": 3,
+      "finalize": 1,
+      "review": 3,
+      "revision": 3
+    }
+  },
+  {
+    "case": "stop after revisions ends normally",
+    "run_id": "run_20261023084812_f10cd6e47669a5d8",
+    "status": "succeeded",
+    "visits": {
+      "draft": 3,
+      "review": 3,
+      "revision": 3
+    }
+  },
+  {
+    "case": "11 invalid payloads rejected without changing wait; valid stop works",
+    "run_id": "run_20261023084812_98a15fe380efa3e3",
+    "status": "succeeded",
+    "visits": {
+      "draft": 1,
+      "review": 1,
+      "revision": 1
+    }
+  }
+]

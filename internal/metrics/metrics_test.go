@@ -11,7 +11,7 @@ func TestSnapshotAndAggregate(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	start := now.Add(-2 * time.Second).Format(time.RFC3339Nano)
 	finish := now.Add(-500 * time.Millisecond).Format(time.RFC3339Nano)
-	run := &model.Run{RunID: "run-1", Workflow: model.Workflow{Name: "demo", Nodes: []model.Node{{ID: "agent", Type: "agent"}}}, State: model.RunState{
+	run := &model.Run{RunID: "run-1", Workflow: model.Workflow{Name: "demo", Nodes: []model.Node{{ID: "agent", Executor: "codex"}}}, State: model.RunState{
 		RunID: "run-1", WorkflowName: "demo", Status: "succeeded", StartedAt: start, FinishedAt: finish,
 		Nodes: map[string]*model.NodeState{"agent": {Status: "succeeded", StartedAt: start, FinishedAt: finish, Attempts: 2, InputBytes: 100, OutputBytes: 80, StdoutBytes: 12, StderrBytes: 3}},
 	}}
@@ -28,7 +28,7 @@ func TestSnapshotAndAggregate(t *testing.T) {
 func TestAggregateSplitsWaitingAndExcludesOpenRuns(t *testing.T) {
 	now := time.Now().UTC().Truncate(time.Millisecond)
 	at := func(offset time.Duration) string { return now.Add(offset).Format(time.RFC3339Nano) }
-	workflow := model.Workflow{Name: "gate", Nodes: []model.Node{{ID: "build", Type: "shell"}, {ID: "approve", Type: "human", Needs: []string{"build"}}}}
+	workflow := model.Workflow{Name: "gate", Nodes: []model.Node{{ID: "build", Executor: "process"}, {ID: "approve", Executor: "external"}}}
 	done := &model.Run{RunID: "done", Workflow: workflow, State: model.RunState{
 		WorkflowName: "gate", Status: "succeeded", CreatedAt: at(-10 * time.Second), StartedAt: at(-10 * time.Second), FinishedAt: at(-4 * time.Second),
 		Nodes: map[string]*model.NodeState{
@@ -37,10 +37,10 @@ func TestAggregateSplitsWaitingAndExcludesOpenRuns(t *testing.T) {
 		},
 	}}
 	open := &model.Run{RunID: "open", Workflow: workflow, State: model.RunState{
-		WorkflowName: "gate", Status: "waiting_human", CreatedAt: at(-time.Hour), StartedAt: at(-time.Hour),
+		WorkflowName: "gate", Status: "waiting_input", CreatedAt: at(-time.Hour), StartedAt: at(-time.Hour),
 		Nodes: map[string]*model.NodeState{
 			"build":   {Status: "succeeded", StartedAt: at(-time.Hour), FinishedAt: at(-time.Hour + time.Second)},
-			"approve": {Status: "waiting_human", StartedAt: at(-time.Hour + time.Second)},
+			"approve": {Status: "waiting_input", StartedAt: at(-time.Hour + time.Second)},
 		},
 	}}
 	snapshot := Snapshot(done, now)
@@ -48,7 +48,7 @@ func TestAggregateSplitsWaitingAndExcludesOpenRuns(t *testing.T) {
 		t.Fatalf("expected 6000 total = 1000 active + 5000 waiting, got %#v", snapshot)
 	}
 	aggregate := Aggregate([]*model.Run{done, open}, Filter{Workflow: "gate"}, now)
-	if aggregate.Runs.Total != 2 || aggregate.Runs.WaitingHuman != 1 {
+	if aggregate.Runs.Total != 2 || aggregate.Runs.WaitingInput != 1 {
 		t.Fatalf("unexpected counts: %#v", aggregate.Runs)
 	}
 	if aggregate.Duration.Count != 1 || aggregate.Duration.Max != 6000 || aggregate.Active.Avg != 1000 || aggregate.Waiting.Avg != 5000 {
@@ -58,8 +58,8 @@ func TestAggregateSplitsWaitingAndExcludesOpenRuns(t *testing.T) {
 
 func TestAggregateByDigestSeparatesWorkflowVersions(t *testing.T) {
 	now := time.Now().UTC()
-	v1 := model.Workflow{Name: "demo", Nodes: []model.Node{{ID: "a", Type: "shell"}}}
-	v2 := model.Workflow{Name: "demo", Nodes: []model.Node{{ID: "a", Type: "shell", TimeoutMs: 1000}}}
+	v1 := model.Workflow{Name: "demo", Nodes: []model.Node{{ID: "a", Executor: "process"}}}
+	v2 := model.Workflow{Name: "demo", Nodes: []model.Node{{ID: "a", TimeoutMs: 1000, Executor: "process"}}}
 	run := func(id, created string, workflow model.Workflow) *model.Run {
 		return &model.Run{RunID: id, Workflow: workflow, State: model.RunState{WorkflowName: "demo", Status: "succeeded", CreatedAt: created, Nodes: map[string]*model.NodeState{"a": {Status: "succeeded"}}}}
 	}
