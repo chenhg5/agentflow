@@ -84,7 +84,7 @@ func TestAgentResumesSessionInWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	executor := driver.Executor{Kind: "codex", Command: []string{"sh", "-c", "exit 9"}, ResumeCommand: []string{"sh", "-c", `printf '{"session_id":"%s","workspace":"%s"}' "$AGENTFLOW_SESSION_ID" "$AGENTFLOW_WORKSPACE" > "$AGENTFLOW_RESULT_FILE"`}}
+	executor := driver.Executor{Kind: "codex", Command: []string{"sh", "-c", "exit 9"}, ResumeCommand: []string{"sh", "-c", `printf '{"session_id":"%s"}' "$AGENTFLOW_SESSION_ID" > "$AGENTFLOW_RESULT_FILE"`}}
 	if err := Execute(run, map[string]driver.Executor{"fake": executor}); err != nil {
 		t.Fatal(err)
 	}
