@@ -9,6 +9,7 @@ import (
 const (
 	ChannelControl   = "control"
 	ChannelCondition = "condition"
+	ChannelParallel  = "parallel"
 )
 
 type Edge struct {
@@ -31,6 +32,12 @@ func Describe(workflow model.Workflow) Document {
 		channels := []string{ChannelControl}
 		if transition.When != "" {
 			channels = append(channels, ChannelCondition)
+		}
+		for _, node := range workflow.Nodes {
+			if node.ID == transition.From && node.Dispatch == "all" {
+				channels = append(channels, ChannelParallel)
+				break
+			}
 		}
 		result = append(result, Edge{
 			ID: fmt.Sprintf("edge-%d", index), Source: transition.From, Target: transition.To,

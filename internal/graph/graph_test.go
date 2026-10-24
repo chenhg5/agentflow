@@ -30,3 +30,36 @@ func TestDescribeAndValidateConditionalCycle(t *testing.T) {
 		t.Fatalf("explicitly unbounded cycle should pass: %v", problems)
 	}
 }
+
+func TestParallelDispatchAndJoinValidation(t *testing.T) {
+	workflow := model.Workflow{Version: "3", Name: "parallel", Entry: "start", Nodes: []model.Node{
+		{ID: "start", Executor: "process", Dispatch: "all"},
+		{ID: "left", Executor: "process"},
+		{ID: "right", Executor: "process"},
+		{ID: "join", Executor: "process", Join: &model.JoinSpec{From: []string{"left", "right"}}},
+	}, Edges: []model.Transition{
+		{From: "start", To: "left"}, {From: "start", To: "right"},
+		{From: "left", To: "join"}, {From: "right", To: "join"}, {From: "join", To: End},
+	}}
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatalf("valid parallel graph: %v", problems)
+	}
+	if channels := Describe(workflow).Edges[0].Channels; len(channels) != 2 || channels[1] != ChannelParallel {
+		t.Fatalf("fan-out edge missing parallel channel: %v", channels)
+	}
+	workflow.Nodes[0].Dispatch = "first"
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("serial dispatch must reject multiple defaults")
+	}
+	workflow.Nodes[0].Dispatch = "all"
+	workflow.Nodes[3].Execution.Session.Mode = "inherit"
+	workflow.Nodes[3].Execution.Session.From = "start"
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("join session source must be a declared predecessor")
+	}
+	workflow.Nodes[3].Execution.Session = model.SessionSpec{}
+	workflow.Nodes[3].Join.From = []string{"left", "unknown"}
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("join must reject non-incoming predecessor")
+	}
+}

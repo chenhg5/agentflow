@@ -105,6 +105,24 @@
           "type": "string",
           "minLength": 1
         },
+        "dispatch": {
+          "enum": ["first", "all"],
+          "description": "Choose the first matching outgoing edge (default) or activate every matching outgoing edge"
+        },
+        "join": {
+          "type": "object",
+          "required": ["from"],
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "array",
+              "minItems": 2,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "description": "Wait for one incoming payload from each listed predecessor; input is an object keyed by predecessor ID"
+        },
         "inputSchema": {
           "$ref": "#/$defs/contract",
           "description": "Runtime JSON contract for the rendered node input"

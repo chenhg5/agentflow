@@ -15,6 +15,8 @@ description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与�
 
 循环默认必须有 `maxIterations` 限制。只有任务明确要求无限返工/持续运行时，才在 workflow 顶层设置 `allowUnboundedCycles: true`；这只是运行策略，不代表任何业务决策。
 
+需要同图节点并发时，在分叉源节点写 `"dispatch":"all"`，从它连向各并行节点；在汇合节点写 `"join":{"from":["a","b"]}`，列出所有必须到达的直接前驱。每条边的 `map` 独立构造该分支或汇合输入。汇合节点收到以来源节点 ID 为键的 JSON 对象。不要为了并行而把两个节点塞进一个 shell 程序；参考 `examples/parallel.json`。普通条件分支继续使用默认的 `first`，不会同时执行多条边。
+
 ```json
 {
   "version": "3", "name": "example", "entry": "draft",

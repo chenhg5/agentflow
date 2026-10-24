@@ -1191,7 +1191,14 @@ func runPayload(run *model.Run) map[string]any {
 	if history == nil {
 		history = []model.NodeVisit{}
 	}
-	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "outcome": run.State.Outcome, "active_node": run.State.ActiveNode, "visits": run.State.Visits, "history": history, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+	activeNodes := run.State.ActiveNodes
+	if activeNodes == nil && run.State.ActiveNode != "" {
+		activeNodes = []string{run.State.ActiveNode}
+	}
+	if activeNodes == nil {
+		activeNodes = []string{}
+	}
+	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "outcome": run.State.Outcome, "active_node": run.State.ActiveNode, "active_nodes": activeNodes, "visits": run.State.Visits, "history": history, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
 	if run.State.StartedAt != "" {
 		payload["started_at"] = run.State.StartedAt
 	}
@@ -1364,7 +1371,7 @@ Verbs:
                             Compare runtime and evaluation measurements
   submit <run-id> <node-id> --output JSON
   resume <run-id>         Continue pending nodes (also recovers nodes orphaned by a crash)
-  retry <run-id>          Re-run the active failed node (--from node-id)
+  retry <run-id>          Re-run failed active nodes (--from node-id)
   cancel <run-id>
 
 Common flags:

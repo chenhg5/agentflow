@@ -33,7 +33,11 @@ func Execute(run *model.Run, executors map[string]driver.Executor) error {
 			}
 			return err
 		}
-		err = executeGraph(run, executors)
+		if parallelWorkflow(run.Workflow) {
+			err = executeParallelGraph(run, executors)
+		} else {
+			err = executeGraph(run, executors)
+		}
 		release()
 		if err != nil || !store.HasControls(run.RunDir) {
 			return err
@@ -59,8 +63,35 @@ func recoverOrphans(run *model.Run) {
 	}
 }
 
-// RetryPlan permits retrying only the active failed node.
+// RetryPlan permits retrying failed active nodes without resetting successful siblings.
 func RetryPlan(run *model.Run, from []string) ([]string, error) {
+	if parallelWorkflow(run.Workflow) {
+		failed := []string{}
+		for _, id := range run.State.ActiveNodes {
+			if node := run.State.Nodes[id]; node != nil && node.Status == "failed" {
+				failed = append(failed, id)
+			}
+		}
+		if len(failed) == 0 {
+			return nil, fmt.Errorf("no active failed node to retry")
+		}
+		if len(from) == 0 {
+			return failed, nil
+		}
+		for _, id := range from {
+			found := false
+			for _, candidate := range failed {
+				if id == candidate {
+					found = true
+					break
+				}
+			}
+			if !found {
+				return nil, fmt.Errorf("node %s is not active and failed", id)
+			}
+		}
+		return from, nil
+	}
 	id := run.State.ActiveNode
 	if id == "" || run.State.Nodes[id] == nil || run.State.Nodes[id].Status != "failed" {
 		return nil, fmt.Errorf("active node is not failed")
@@ -71,7 +102,7 @@ func RetryPlan(run *model.Run, from []string) ([]string, error) {
 	return []string{id}, nil
 }
 
-// Exactly one active node follows the first matching outgoing edge.
+// Serial workflows follow the first matching outgoing edge.
 func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 	if err := store.ReloadState(run); err != nil {
 		return err

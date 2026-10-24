@@ -42,6 +42,8 @@ See [INSTALL.md](INSTALL.md) for setup and [skills/agentflow/SKILL.md](skills/ag
 
 A node has `id`, `executor`, optional `config`, `execution.session`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. The entry node receives the run input; each later node receives the previous node's JSON output by default. An edge may declare `map` to build the next input from source `input`, source `output`, run `inputs`, and prior `nodes`; for example, `"map":{"review":"{{ output.comments }}","original":"{{ input.summary }}"}`. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge by default; `allowUnboundedCycles: true` explicitly permits unlimited loops. See [graph semantics](docs/graph-and-visualization.md).
 
+Set `"dispatch":"all"` on a node to run every matching outgoing branch concurrently. A target with `"join":{"from":["left","right"]}` starts only after both predecessors have delivered input; it receives `{"left": <payload>, "right": <payload>}`. The default dispatch remains first matching edge. See [the runnable parallel example](examples/parallel.json) and [parallel execution semantics](docs/graph-and-visualization.md#parallel-nodes-and-joins).
+
 `prompt`, `score`, `decision`, recipient IDs, and similar values are executor configuration or input/output data. The graph assigns no meaning to them.
 
 ## Register your executor
@@ -96,7 +98,7 @@ agentflow run cancel <run-id> --format json
 agentflow web --host 127.0.0.1 --port 7070
 ```
 
-One active node runs at a time. Retry restarts the active failed node. Each run saves its workflow snapshot; executor registrations are resolved from the current environment. Changing executor configuration therefore affects a later resume or retry. Old workflow formats and removed node fields are rejected.
+Serial graphs run one active node at a time; `dispatch: "all"` can run siblings concurrently. Retry restarts failed active nodes while preserving successful siblings. Each run saves its workflow snapshot; executor registrations are resolved from the current environment. Changing executor configuration therefore affects a later resume or retry. Old workflow formats and removed node fields are rejected.
 
 Cron and webhook configuration lives in `.agentflow/triggers.json`. `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher; the persistent scheduler requires `trigger serve` to stay running. See [trigger architecture](docs/trigger-architecture.md).
 

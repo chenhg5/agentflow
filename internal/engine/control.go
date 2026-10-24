@@ -92,9 +92,16 @@ func applyRetry(run *model.Run, control model.Control) string {
 	if err != nil {
 		return err.Error()
 	}
-	id := ids[0]
-	previous := run.State.Nodes[id]
-	*previous = model.NodeState{Status: "pending", Input: previous.Input, IncomingNode: previous.IncomingNode, IncomingSessionID: previous.IncomingSessionID, Artifacts: map[string]string{}}
+	for _, id := range ids {
+		previous := run.State.Nodes[id]
+		*previous = model.NodeState{Status: "pending", Input: previous.Input, IncomingNode: previous.IncomingNode, IncomingSessionID: previous.IncomingSessionID, Artifacts: map[string]string{}}
+		for target, arrivals := range run.State.JoinInputs {
+			delete(arrivals, id)
+			if len(arrivals) == 0 {
+				delete(run.State.JoinInputs, target)
+			}
+		}
+	}
 	run.State.Status = "running"
 	run.State.Outcome = ""
 	run.State.FinishedAt = ""

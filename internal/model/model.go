@@ -33,14 +33,23 @@ type Retry struct {
 }
 
 type Node struct {
-	ID           string         `json:"id"`
-	Executor     string         `json:"executor"`
+	ID       string `json:"id"`
+	Executor string `json:"executor"`
+	// Dispatch selects one matching outgoing edge by default, or all matching
+	// edges when set to "all".
+	Dispatch string `json:"dispatch,omitempty"`
+	// Join waits for one payload from every named immediate predecessor.
+	Join         *JoinSpec      `json:"join,omitempty"`
 	Config       map[string]any `json:"config,omitempty"`
 	InputSchema  map[string]any `json:"inputSchema,omitempty"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 	Execution    Execution      `json:"execution,omitempty"`
 	TimeoutMs    int            `json:"timeoutMs,omitempty"`
 	Retry        Retry          `json:"retry,omitempty"`
+}
+
+type JoinSpec struct {
+	From []string `json:"from"`
 }
 
 // Execution contains runtime policy that is independent of node data. The
@@ -87,25 +96,27 @@ type NodeState struct {
 }
 
 type RunState struct {
-	RunID          string                `json:"runId"`
-	WorkflowName   string                `json:"workflowName"`
-	WorkflowDigest string                `json:"workflowDigest,omitempty"`
-	Status         string                `json:"status"`
-	Inputs         map[string]string     `json:"inputs"`
-	IdempotencyKey string                `json:"idempotency_key,omitempty"`
-	Nodes          map[string]*NodeState `json:"nodes"`
-	ActiveNode     string                `json:"activeNode,omitempty"`
-	Outcome        string                `json:"outcome,omitempty"`
-	Visits         map[string]int        `json:"visits,omitempty"`
-	Traversals     map[string]int        `json:"traversals,omitempty"`
-	History        []NodeVisit           `json:"history,omitempty"`
-	CreatedAt      string                `json:"createdAt"`
-	UpdatedAt      string                `json:"updatedAt"`
-	StartedAt      string                `json:"startedAt,omitempty"`
-	FinishedAt     string                `json:"finishedAt,omitempty"`
-	DurationMs     int64                 `json:"durationMs,omitempty"`
-	Trigger        *TriggerInfo          `json:"trigger,omitempty"`
-	Evaluation     *Evaluation           `json:"evaluation,omitempty"`
+	RunID          string                    `json:"runId"`
+	WorkflowName   string                    `json:"workflowName"`
+	WorkflowDigest string                    `json:"workflowDigest,omitempty"`
+	Status         string                    `json:"status"`
+	Inputs         map[string]string         `json:"inputs"`
+	IdempotencyKey string                    `json:"idempotency_key,omitempty"`
+	Nodes          map[string]*NodeState     `json:"nodes"`
+	ActiveNode     string                    `json:"activeNode,omitempty"`
+	ActiveNodes    []string                  `json:"activeNodes,omitempty"`
+	JoinInputs     map[string]map[string]any `json:"joinInputs,omitempty"`
+	Outcome        string                    `json:"outcome,omitempty"`
+	Visits         map[string]int            `json:"visits,omitempty"`
+	Traversals     map[string]int            `json:"traversals,omitempty"`
+	History        []NodeVisit               `json:"history,omitempty"`
+	CreatedAt      string                    `json:"createdAt"`
+	UpdatedAt      string                    `json:"updatedAt"`
+	StartedAt      string                    `json:"startedAt,omitempty"`
+	FinishedAt     string                    `json:"finishedAt,omitempty"`
+	DurationMs     int64                     `json:"durationMs,omitempty"`
+	Trigger        *TriggerInfo              `json:"trigger,omitempty"`
+	Evaluation     *Evaluation               `json:"evaluation,omitempty"`
 }
 
 // Evaluation stores measurements produced by a human, program, or agent after
