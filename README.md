@@ -40,7 +40,7 @@ See [INSTALL.md](INSTALL.md) for setup and [skills/agentflow/SKILL.md](skills/ag
 }
 ```
 
-A node has `id`, `executor`, optional `config`, `execution.session`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. The entry node receives the run input; each later node receives the previous node's JSON output. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge. See [graph semantics](docs/graph-and-visualization.md).
+A node has `id`, `executor`, optional `config`, `execution.session`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. The entry node receives the run input; each later node receives the previous node's JSON output by default. An edge may declare `map` to build the next input from source `input`, source `output`, run `inputs`, and prior `nodes`; for example, `"map":{"review":"{{ output.comments }}","original":"{{ input.summary }}"}`. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge by default; `allowUnboundedCycles: true` explicitly permits unlimited loops. See [graph semantics](docs/graph-and-visualization.md).
 
 `prompt`, `score`, `decision`, recipient IDs, and similar values are executor configuration or input/output data. The graph assigns no meaning to them.
 

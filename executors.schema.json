@@ -74,6 +74,13 @@
             "items": {
               "type": "string"
             }
+          },
+          "forkCommand": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
           }
         },
         "additionalProperties": false

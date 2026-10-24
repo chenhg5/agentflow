@@ -31,6 +31,16 @@ func RenderArray(values []string, context map[string]any) []string {
 // exact placeholder. For example, "{{ nodes.build.result.count }}" resolves to
 // a number, while "count={{ nodes.build.result.count }}" remains a string.
 func RenderValue(value any, context map[string]any) any {
+	return renderValue(value, context, nil)
+}
+
+// RenderMappingValue preserves value types and renders a missing exact
+// reference as an empty string, which is useful for optional edge data.
+func RenderMappingValue(value any, context map[string]any) any {
+	return renderValue(value, context, "")
+}
+
+func renderValue(value any, context map[string]any, missing any) any {
 	switch current := value.(type) {
 	case string:
 		match := placeholder.FindStringSubmatch(current)
@@ -38,19 +48,19 @@ func RenderValue(value any, context map[string]any) any {
 			if resolved, ok := Lookup(context, strings.TrimSpace(match[1])); ok {
 				return resolved
 			}
-			return nil
+			return missing
 		}
 		return Render(current, context)
 	case map[string]any:
 		result := make(map[string]any, len(current))
 		for key, item := range current {
-			result[key] = RenderValue(item, context)
+			result[key] = renderValue(item, context, missing)
 		}
 		return result
 	case []any:
 		result := make([]any, len(current))
 		for index, item := range current {
-			result[index] = RenderValue(item, context)
+			result[index] = renderValue(item, context, missing)
 		}
 		return result
 	default:

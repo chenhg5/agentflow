@@ -116,6 +116,33 @@ func TestProgramResultRoutesByNumericCondition(t *testing.T) {
 	}
 }
 
+func TestEdgeMapsSourceInputAndOutputWithoutChangingTypes(t *testing.T) {
+	workflow := model.Workflow{Version: "3", Name: "projection", Entry: "produce", Inputs: map[string]model.InputDefinition{"source": {Required: true}}, Nodes: []model.Node{
+		{ID: "produce", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"score":8,"choice":"go"}' > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "consume", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}},
+	}, Edges: []model.Transition{
+		{From: "produce", To: "consume", When: "output.score > 7", Map: testEdgeMap(map[string]any{
+			"score": "{{ output.score }}", "original": "{{ input.source }}", "label": "score={{ output.score }}", "literal": "none",
+		})},
+		{From: "produce", To: "$end"},
+		{From: "consume", To: "$end"},
+	}}
+	run, err := store.CreateRun(t.TempDir(), workflow, map[string]string{"source": "seed"}, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	executeTestRun(t, run)
+	if run.State.Status != "succeeded" {
+		t.Fatalf("status=%s error=%q", run.State.Status, run.State.Nodes["consume"].Error)
+	}
+	input := run.State.Nodes["consume"].Input.(map[string]any)
+	if input["score"] != float64(8) || input["original"] != "seed" || input["label"] != "score=8" || input["literal"] != "none" {
+		t.Fatalf("unexpected mapped input: %#v", input)
+	}
+}
+
+func testEdgeMap(value map[string]any) *map[string]any { return &value }
+
 func TestHumanAdapterProgramAdvancesWithoutManualControl(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "adapter", Entry: "review", Nodes: []model.Node{
 		{ID: "review", Config: map[string]any{"text": "choose", "command": []string{"sh", "-c", `printf '{"decision":"happy","message":"ok"}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},

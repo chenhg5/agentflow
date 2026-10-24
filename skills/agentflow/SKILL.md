@@ -11,7 +11,9 @@ description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与�
 
 ## 图结构与数据流
 
-只使用 version `3`。`entry` 是起点，`edges` 是唯一控制流，节点数组顺序没有执行含义。入口节点得到 run input；之后每条被选中的边将源节点的完整 JSON 输出作为目标节点的输入。节点没有 `input` 字段，也不要把业务指令伪装成上游数据。
+只使用 version `3`。`entry` 是起点，`edges` 是唯一控制流，节点数组顺序没有执行含义。入口节点得到 run input；之后每条被选中的边默认将源节点的完整 JSON 输出作为目标节点的输入。需要保留源节点输入或重组字段时，在边上写通用 `map`；节点没有 `input` 字段，也不要把业务指令伪装成上游数据。
+
+循环默认必须有 `maxIterations` 限制。只有任务明确要求无限返工/持续运行时，才在 workflow 顶层设置 `allowUnboundedCycles: true`；这只是运行策略，不代表任何业务决策。
 
 ```json
 {
@@ -31,9 +33,9 @@ description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与�
 
 节点只定义 `id`、`executor`、可选 `config`、`inputSchema`、`outputSchema`、`execution.session`、`timeoutMs` 和 `retry.maxAttempts`。`config` 是执行器的不透明配置；图引擎不解释其业务键。`inputSchema` 校验到达节点的运行数据，`outputSchema` 校验结果。结果必须是 JSON 对象。业务字段可任意命名，`happy`、`reject`、`decision`、`score` 等没有引擎特权。
 
-节点完成后按顺序评估出边，选第一条条件为真的边。无 `when` 的默认边必须在最后。条件用 Expr，支持比较、算术、逻辑、集合和正则等。循环必须有 `maxIterations`。每次重新进入节点，输入来自刚穿越的边；历史访问另存于 run history。
+节点完成后按顺序评估出边，选第一条条件为真的边。无 `when` 的默认边必须在最后。条件用 Expr，支持比较、算术、逻辑、集合和正则等。条件可读源节点的 `input`、`output`，也可读运行 `inputs` 和历史 `nodes`。循环必须有 `maxIterations`。每次重新进入节点，输入来自刚穿越的边；历史访问另存于 run history。
 
-`config` 可引用当前节点输入 `{{ input.field }}`、运行输入 `{{ inputs.topic }}` 或历史节点结果 `{{ nodes.draft.result.summary }}`；执行器注册中的 command、workspace 和 env 可引用 `{{ input.field }}` 与 `{{ config.field }}`。边的 `when` 写 `nodes.draft.result.score > 80`，不加模板括号。精确模板保留 JSON 类型，拼接字符串时转换为字符串。
+`config` 可引用当前节点输入 `{{ input.field }}`、运行输入 `{{ inputs.topic }}` 或历史节点结果 `{{ nodes.draft.result.summary }}`；执行器注册中的 command、workspace 和 env 可引用 `{{ input.field }}` 与 `{{ config.field }}`。边的 `when` 可写 `output.score > 80`，不加模板括号。边的 `map` 可写 `{"summary":"{{ input.summary }}","review":"{{ output.comments }}"}`；省略 `map` 会原样传递输出，`"map":{}` 会传空对象。精确模板保留 JSON 类型，拼接字符串时转换为字符串；边映射中缺失的引用变为空字符串。
 
 ## Session 策略
 

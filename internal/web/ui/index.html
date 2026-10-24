@@ -327,7 +327,7 @@
             h(JsonBlock, { label: t(language, "runtimeResult"), value: state?.result }),
             h(JsonBlock, { label: t(language, "artifacts"), value: state?.artifacts }),
           ),
-          edges.length ? h("div", { className: "graph-warning" }, t(language, "edges") + ": ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id }, edge.source + " → " + edge.target + (edge.condition ? " · " + edge.condition : "") + (edge.maxIterations ? " · max " + edge.maxIterations : "")))) : null,
+          edges.length ? h("div", { className: "graph-warning" }, t(language, "edges") + ": ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id, title: edge.map ? JSON.stringify(edge.map, null, 2) : undefined }, edge.source + " → " + edge.target + (edge.condition ? " · " + edge.condition : "") + (edge.map ? " · map" : "") + (edge.maxIterations ? " · max " + edge.maxIterations : "")))) : null,
         );
       }
 

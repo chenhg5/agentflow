@@ -88,3 +88,26 @@ func TestInputReferenceNamespaces(t *testing.T) {
 		t.Fatal(problems)
 	}
 }
+
+func TestEdgeMapReferences(t *testing.T) {
+	workflow := model.Workflow{Version: "3", Name: "edge-map", Entry: "first", Inputs: map[string]model.InputDefinition{"seed": {}}, Nodes: []model.Node{
+		{ID: "first", Executor: "process"}, {ID: "second", Executor: "process"},
+	}, Edges: []model.Transition{
+		{From: "first", To: "second", Map: testEdgeMap(map[string]any{"a": "{{ input.seed }}", "b": "{{ output.result }}", "c": "{{ nodes.first.result }}"})},
+		{From: "second", To: "$end"},
+	}}
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatal(problems)
+	}
+	(*workflow.Edges[0].Map)["bad"] = "{{ other.result }}"
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("unknown edge map reference must be rejected")
+	}
+	delete(*workflow.Edges[0].Map, "bad")
+	workflow.Edges[0].Map = testEdgeMap(map[string]any{})
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatalf("empty edge map should produce an empty input: %v", problems)
+	}
+}
+
+func testEdgeMap(value map[string]any) *map[string]any { return &value }

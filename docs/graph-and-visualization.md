@@ -19,12 +19,12 @@ Workflow version `3` uses `entry`, `nodes`, and `edges`. The edge list is the so
 }
 ```
 
-After a node succeeds, the runner evaluates its outgoing edges in JSON order and follows the first whose `when` is true. An edge without `when` is the default and must be last. `$end` completes the run. Conditions use [Expr](https://expr-lang.org/docs/v1.15/language-definition): comparisons, arithmetic, logical operators, membership, string and regex operations, and collection functions. They read `inputs` and `nodes.<id>.result/status/input`. A condition must return a boolean. Validation checks syntax; runtime errors fail the active node.
+After a node succeeds, the runner evaluates its outgoing edges in JSON order and follows the first whose `when` is true. An edge without `when` is the default and must be last. `$end` completes the run. Conditions use [Expr](https://expr-lang.org/docs/v1.15/language-definition): comparisons, arithmetic, logical operators, membership, string and regex operations, and collection functions. They read source `input` and `output`, run `inputs`, and `nodes.<id>.result/status/input`. A condition must return a boolean. Validation checks syntax; runtime errors fail the active node.
 
-Cycles must contain a bounded edge. `maxIterations` limits how many times that edge can be traversed in one run; every visit is recorded in `run.state.history`, and its input, result, and logs have visit-numbered artifacts.
+Cycles must contain a bounded edge by default. `maxIterations` limits how many times that edge can be traversed in one run. Set top-level `allowUnboundedCycles: true` only when an unlimited loop is intended; a workflow with that setting can continue until a condition exits the loop or the run is cancelled. Every visit is recorded in `run.state.history`, and its input, result, and logs have visit-numbered artifacts.
 
-The Web API exposes the same edges in `graph.edges`, including `condition` and `maxIterations`. The Web UI draws these edges, including the return path and `$end`. The graph view does not add routing rules of its own.
+The Web API exposes the same edges in `graph.edges`, including `condition`, `map`, and `maxIterations`. The Web UI draws these edges, including the return path and `$end`. The graph view does not add routing rules of its own.
 
 Nodes reference a named executor. Registration lives in `.agentflow/executors.json`; command programs may be written in any language. The graph only validates JSON input/output and follows its edges. Removed workflow fields are rejected.
 
-The entry node receives the run input. Every selected edge carries its source node JSON result into the target node as input. Nodes do not declare an input template. Executor-specific settings live in opaque `config`; `execution.session` selects new, fixed, inherited, or forked agent sessions.
+The entry node receives the run input. Every selected edge carries its source node JSON result into the target node as input by default. An optional edge `map` can project fields from the source input, output, run inputs, and prior node results; `{}` sends an empty object. Nodes do not declare an input template. Executor-specific settings live in opaque `config`; `execution.session` selects new, fixed, inherited, or forked agent sessions.

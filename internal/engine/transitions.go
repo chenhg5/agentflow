@@ -11,6 +11,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/store"
+	"github.com/chenhg5/agentflow/internal/template"
 )
 
 // Execute is the sole writer of run state. Controls are queued if another
@@ -141,12 +142,15 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 			return fmt.Errorf("active node %s has unexpected status %s", id, state.Status)
 		}
 		var selected *model.Transition
+		edgeContext := context(run.State)
+		edgeContext["input"] = state.Input
+		edgeContext["output"] = state.Result
 		for i := range run.Workflow.Edges {
 			edge := &run.Workflow.Edges[i]
 			if edge.From != id {
 				continue
 			}
-			matched, err := condition.Evaluate(edge.When, context(run.State))
+			matched, err := condition.Evaluate(edge.When, edgeContext)
 			if err != nil {
 				state.Status = "failed"
 				state.Error = err.Error()
@@ -193,9 +197,13 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 			}
 			return store.AppendEvent(run.RunDir, map[string]any{"type": "run.succeeded", "runId": run.RunID, "outcome": run.State.Outcome})
 		}
+		nextInput := cloneValue(state.Result)
+		if selected.Map != nil {
+			nextInput = template.RenderMappingValue(*selected.Map, edgeContext)
+		}
 		run.State.ActiveNode = selected.To
 		run.State.Visits[selected.To]++
-		*run.State.Nodes[selected.To] = model.NodeState{Status: "pending", Input: cloneValue(state.Result), IncomingNode: id, IncomingSessionID: state.SessionID, Artifacts: map[string]string{}}
+		*run.State.Nodes[selected.To] = model.NodeState{Status: "pending", Input: nextInput, IncomingNode: id, IncomingSessionID: state.SessionID, Artifacts: map[string]string{}}
 		if err := store.SaveState(run); err != nil {
 			return err
 		}

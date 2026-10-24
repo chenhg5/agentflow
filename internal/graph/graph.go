@@ -12,12 +12,13 @@ const (
 )
 
 type Edge struct {
-	ID            string   `json:"id"`
-	Source        string   `json:"source"`
-	Target        string   `json:"target"`
-	Channels      []string `json:"channels"`
-	Condition     string   `json:"condition,omitempty"`
-	MaxIterations int      `json:"maxIterations,omitempty"`
+	ID            string          `json:"id"`
+	Source        string          `json:"source"`
+	Target        string          `json:"target"`
+	Channels      []string        `json:"channels"`
+	Condition     string          `json:"condition,omitempty"`
+	MaxIterations int             `json:"maxIterations,omitempty"`
+	Map           *map[string]any `json:"map,omitempty"`
 }
 
 type Document struct {
@@ -34,7 +35,7 @@ func Describe(workflow model.Workflow) Document {
 		result = append(result, Edge{
 			ID: fmt.Sprintf("edge-%d", index), Source: transition.From, Target: transition.To,
 			Channels: channels, Condition: transition.When,
-			MaxIterations: transition.MaxIterations,
+			MaxIterations: transition.MaxIterations, Map: transition.Map,
 		})
 	}
 	return Document{Edges: result}

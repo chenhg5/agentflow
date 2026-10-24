@@ -26,3 +26,10 @@ func TestRenderValuePreservesExactPlaceholderType(t *testing.T) {
 		t.Fatalf("embedded placeholder was not rendered as text: %#v", value["ok"])
 	}
 }
+
+func TestRenderMappingValueUsesEmptyStringForMissingReference(t *testing.T) {
+	value := RenderMappingValue(map[string]any{"known": "{{ output.count }}", "missing": "{{ input.absent }}", "literal": nil}, map[string]any{"output": map[string]any{"count": float64(3)}}).(map[string]any)
+	if value["known"] != float64(3) || value["missing"] != "" || value["literal"] != nil {
+		t.Fatalf("unexpected mapped values: %#v", value)
+	}
+}

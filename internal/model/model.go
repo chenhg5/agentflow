@@ -7,6 +7,9 @@ type Workflow struct {
 	Nodes   []Node                     `json:"nodes"`
 	Entry   string                     `json:"entry,omitempty"`
 	Edges   []Transition               `json:"edges,omitempty"`
+	// AllowUnboundedCycles explicitly permits cycles with no maxIterations edge.
+	// The default remains bounded to catch accidental infinite loops.
+	AllowUnboundedCycles bool `json:"allowUnboundedCycles,omitempty"`
 }
 
 // Transition is a control-flow edge in a version 3 workflow. $end ends a run.
@@ -15,6 +18,9 @@ type Transition struct {
 	To            string `json:"to"`
 	When          string `json:"when,omitempty"`
 	MaxIterations int    `json:"maxIterations,omitempty"`
+	// Map optionally builds the target input from the source input, output,
+	// run inputs, and node results. Without it, the source output is forwarded.
+	Map *map[string]any `json:"map,omitempty"`
 }
 
 type InputDefinition struct {

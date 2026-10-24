@@ -1,12 +1,12 @@
 # Execution semantics
 
-Version `2` executes one active node at a time, starting at `entry`. After success, outgoing edges are evaluated in definition order and the first matching target is activated. `$end` completes the run. A missing matching edge or invalid expression fails the active node. Cycles require a bounded edge; its `maxIterations` limits traversals per run.
+Version `3` executes one active node at a time, starting at `entry`. After success, outgoing edges are evaluated in definition order and the first matching target is activated. `$end` completes the run. A missing matching edge or invalid expression fails the active node. Cycles require a bounded edge by default; its `maxIterations` limits traversals per run. `allowUnboundedCycles: true` explicitly opts into unlimited loops.
 
 ## Executor contract
 
 Each node references an executor registered in `.agentflow/executors.json` or a built-in executor. The registry defines the program entry point, working directory, and environment. Custom names have no graph meaning.
 
-The entry node receives the run input; each selected edge passes the source node output to its target. An empty run input is an empty JSON object, including after save/reload. Programs read a JSON object from `AGENTFLOW_INPUT_FILE`, write a JSON object to `AGENTFLOW_RESULT_FILE`, and exit with zero status. The runner validates `inputSchema` and `outputSchema` using JSON Schema draft 2020-12. stdout/stderr are logs. The runner alone advances the graph.
+The entry node receives the run input; each selected edge passes the source node output to its target. An edge may declare `map` to construct the target input from `{{ input.field }}`, `{{ output.field }}`, run inputs, and prior node results. An explicit empty `map` sends `{}`. A missing reference in an edge map yields an empty string. An empty run input is an empty JSON object, including after save/reload. Programs read a JSON object from `AGENTFLOW_INPUT_FILE`, write a JSON object to `AGENTFLOW_RESULT_FILE`, and exit with zero status. The runner validates `inputSchema` and `outputSchema` using JSON Schema draft 2020-12. stdout/stderr are logs. The runner alone advances the graph.
 
 The built-in Codex/Claude Code adapters interpret `config.instruction` and optional `config.workspace`. The generic process adapter interprets `config.command`. The engine resolves `execution.session` independently of node input. These conventions live in adapters; the graph does not require prompt, decision, or any other business field.
 

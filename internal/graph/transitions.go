@@ -67,8 +67,8 @@ func validateTransitions(workflow model.Workflow) []string {
 			}
 		}
 	}
-	// A cycle must contain at least one bounded edge. Removing bounded edges
-	// must leave a DAG, so a run cannot loop forever without consuming a limit.
+	// By default, a cycle must contain at least one bounded edge. Removing
+	// bounded edges must leave a DAG. A workflow can opt into unlimited cycles.
 	visiting, visited := map[string]bool{}, map[string]bool{}
 	var visit func(string) bool
 	visit = func(id string) bool {
@@ -88,10 +88,12 @@ func validateTransitions(workflow model.Workflow) []string {
 		visited[id] = true
 		return false
 	}
-	for _, node := range workflow.Nodes {
-		if visit(node.ID) {
-			errors = append(errors, "every cycle needs a maxIterations edge")
-			break
+	if !workflow.AllowUnboundedCycles {
+		for _, node := range workflow.Nodes {
+			if visit(node.ID) {
+				errors = append(errors, "every cycle needs a maxIterations edge (or allowUnboundedCycles: true)")
+				break
+			}
 		}
 	}
 	reachable := map[string]bool{}
