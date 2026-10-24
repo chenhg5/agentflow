@@ -6,11 +6,11 @@ WORKSPACE=$(mktemp -d "${TMPDIR:-/tmp}/agentflow-execution-e2e.XXXXXX")
 trap 'if [[ "${AGENTFLOW_KEEP_WORKSPACE:-0}" != "1" ]]; then rm -rf "$WORKSPACE"; fi' EXIT
 cat > "$WORKSPACE/window.json" <<'JSON'
 {
-  "version":"2", "name":"e2e-window", "entry":"build",
+  "version":"3", "name":"e2e-window", "entry":"build",
   "nodes":[
-    {"id":"build","executor":"process","input":{"command":["sh","-c","printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}},
+    {"id":"build","executor":"process","config":{"command":["sh","-c","printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}},
     {"id":"review","executor":"external","outputSchema":{"type":"object","required":["score"],"properties":{"score":{"type":"number"}}}},
-    {"id":"publish","executor":"process","input":{"command":["sh","-c","test -f fixed && printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}}
+    {"id":"publish","executor":"process","config":{"command":["sh","-c","test -f fixed && printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}}
   ],
   "edges":[
     {"from":"build","to":"review"},

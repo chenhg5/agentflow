@@ -1,5 +1,5 @@
 {
-  "version": "2",
+  "version": "3",
   "name": "smoke",
   "entry": "greet",
   "inputs": {
@@ -12,7 +12,7 @@
     {
       "id": "greet",
       "executor": "process",
-      "input": {
+      "config": {
         "command": [
           "sh",
           "-c",
@@ -24,15 +24,12 @@
     },
     {
       "id": "approve",
-      "input": {
-        "text": "Approve the greeting?"
-      },
       "executor": "external"
     },
     {
       "id": "finish",
       "executor": "process",
-      "input": {
+      "config": {
         "command": [
           "sh",
           "-c",

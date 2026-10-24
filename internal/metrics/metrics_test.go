@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"math"
 	"testing"
 	"time"
 
@@ -77,5 +78,71 @@ func TestAggregateByDigestSeparatesWorkflowVersions(t *testing.T) {
 	}
 	if model.Digest(v1) == model.Digest(v2) {
 		t.Fatal("changing a node must change the digest")
+	}
+}
+
+func TestCompareReportsRuntimeAndEvaluationChanges(t *testing.T) {
+	now := time.Now().UTC().Truncate(time.Millisecond)
+	at := func(offset time.Duration) string { return now.Add(offset).Format(time.RFC3339Nano) }
+	workflow := model.Workflow{Name: "demo", Version: "3", Nodes: []model.Node{{ID: "agent", Executor: "process"}}}
+	makeRun := func(id string, duration time.Duration, score float64, created time.Duration) *model.Run {
+		start := at(created)
+		finish := at(created + duration)
+		return &model.Run{
+			RunID: id, Workflow: workflow,
+			State: model.RunState{
+				RunID: id, WorkflowName: "demo", Status: "succeeded", CreatedAt: start, StartedAt: start, FinishedAt: finish,
+				Nodes:      map[string]*model.NodeState{"agent": {Status: "succeeded", StartedAt: start, FinishedAt: finish, Attempts: 2}},
+				Evaluation: &model.Evaluation{EvaluatedAt: finish, Measurements: map[string]model.Measurement{"quality": {Value: score, Direction: "higher", Unit: "ratio"}}},
+			},
+		}
+	}
+	baseline := makeRun("baseline", 2*time.Second, 0.75, -10*time.Second)
+	current := makeRun("current", time.Second, 0.90, -5*time.Second)
+	comparison := Compare(current, baseline, now)
+	if !comparison.SameWorkflow || !comparison.SameVersion {
+		t.Fatalf("unexpected version flags: %#v", comparison)
+	}
+	if improved := comparison.Runtime["active_ms"].Improved; improved == nil || !*improved {
+		t.Fatalf("active runtime should improve: %#v", comparison.Runtime["active_ms"])
+	}
+	if improved := comparison.Measurements["quality"].Improved; improved == nil || !*improved {
+		t.Fatalf("quality should improve: %#v", comparison.Measurements["quality"])
+	}
+	if change := comparison.Measurements["quality"].ChangePercent; change == nil || math.Abs(*change-20) > 1e-9 {
+		t.Fatalf("expected 20%% quality change, got %#v", change)
+	}
+}
+
+func TestAggregateIncludesCustomMeasurements(t *testing.T) {
+	now := time.Now().UTC()
+	workflow := model.Workflow{Name: "demo", Version: "3", Nodes: []model.Node{{ID: "agent", Executor: "process"}}}
+	runs := []*model.Run{
+		{RunID: "r1", Workflow: workflow, State: model.RunState{WorkflowName: "demo", Status: "succeeded", CreatedAt: "2026-10-01T00:00:00Z", Evaluation: &model.Evaluation{EvaluatedAt: "2026-10-01T00:01:00Z", Measurements: map[string]model.Measurement{"quality": {Value: 0.8, Direction: "higher", Unit: "ratio"}}}}},
+		{RunID: "r2", Workflow: workflow, State: model.RunState{WorkflowName: "demo", Status: "succeeded", CreatedAt: "2026-10-02T00:00:00Z", Evaluation: &model.Evaluation{EvaluatedAt: "2026-10-02T00:01:00Z", Measurements: map[string]model.Measurement{"quality": {Value: 0.9, Direction: "higher", Unit: "ratio"}}}}},
+	}
+	aggregate := Aggregate(runs, Filter{Workflow: "demo"}, now)
+	if len(aggregate.Measurements) != 1 || math.Abs(aggregate.Measurements[0].Values.Avg-0.85) > 1e-9 {
+		t.Fatalf("unexpected measurement aggregate: %#v", aggregate.Measurements)
+	}
+}
+
+func TestCompareSkipsIncompatibleEvaluationUnits(t *testing.T) {
+	baseline := &model.Evaluation{Measurements: map[string]model.Measurement{"cost": {Value: 10, Unit: "USD", Direction: "lower"}}}
+	current := &model.Evaluation{Measurements: map[string]model.Measurement{"cost": {Value: 9, Unit: "minutes", Direction: "lower"}}}
+	if comparisons := compareMeasurements(current, baseline); len(comparisons) != 0 {
+		t.Fatalf("different units cannot be compared: %#v", comparisons)
+	}
+}
+
+func TestAggregateSeparatesUnits(t *testing.T) {
+	now := time.Now().UTC()
+	runs := []*model.Run{
+		{State: model.RunState{Status: "succeeded", Evaluation: &model.Evaluation{Measurements: map[string]model.Measurement{"cost": {Value: 2, Unit: "USD", Direction: "lower"}}}}},
+		{State: model.RunState{Status: "succeeded", Evaluation: &model.Evaluation{Measurements: map[string]model.Measurement{"cost": {Value: 3, Unit: "minutes", Direction: "lower"}}}}},
+	}
+	aggregate := Aggregate(runs, Filter{}, now)
+	if len(aggregate.Measurements) != 2 || aggregate.Measurements[0].Values.Count != 1 || aggregate.Measurements[1].Values.Count != 1 {
+		t.Fatalf("different units were merged: %#v", aggregate.Measurements)
 	}
 }

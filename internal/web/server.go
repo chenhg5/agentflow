@@ -179,7 +179,7 @@ func dashboardView(root string) map[string]any {
 }
 
 func runView(run *model.Run, root string) map[string]any {
-	return map[string]any{
+	view := map[string]any{
 		"mode":             "run",
 		"workflow":         run.Workflow,
 		"graph":            graph.Describe(run.Workflow),
@@ -192,6 +192,41 @@ func runView(run *model.Run, root string) map[string]any {
 			"metrics": metrics.Snapshot(run, time.Now().UTC()),
 		},
 	}
+	switch run.State.Status {
+	case "succeeded", "failed", "cancelled":
+		if baseline := previousFinishedRun(run, root); baseline != nil {
+			view["comparison"] = metrics.Compare(run, baseline, time.Now().UTC())
+		}
+	}
+	return view
+}
+
+func previousFinishedRun(current *model.Run, root string) *model.Run {
+	entries, err := os.ReadDir(filepath.Join(root, "runs"))
+	if err != nil {
+		return nil
+	}
+	var candidates []*model.Run
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == current.RunID {
+			continue
+		}
+		candidate, err := store.LoadRun(root, entry.Name())
+		if err != nil || candidate.State.WorkflowName != current.State.WorkflowName {
+			continue
+		}
+		switch candidate.State.Status {
+		case "succeeded", "failed", "cancelled":
+			if current.State.CreatedAt == "" || candidate.State.CreatedAt < current.State.CreatedAt {
+				candidates = append(candidates, candidate)
+			}
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].State.CreatedAt > candidates[j].State.CreatedAt })
+	if len(candidates) == 0 {
+		return nil
+	}
+	return candidates[0]
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

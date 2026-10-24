@@ -6,9 +6,9 @@ Version `2` executes one active node at a time, starting at `entry`. After succe
 
 Each node references an executor registered in `.agentflow/executors.json` or a built-in executor. The registry defines the program entry point, working directory, and environment. Custom names have no graph meaning.
 
-Omitted node input is an empty JSON object, including after save/reload. Programs read a JSON object from `AGENTFLOW_INPUT_FILE`, write a JSON object to `AGENTFLOW_RESULT_FILE`, and exit with zero status. The runner validates `inputSchema` and `outputSchema` using JSON Schema draft 2020-12. stdout/stderr are logs. The runner alone advances the graph.
+The entry node receives the run input; each selected edge passes the source node output to its target. An empty run input is an empty JSON object, including after save/reload. Programs read a JSON object from `AGENTFLOW_INPUT_FILE`, write a JSON object to `AGENTFLOW_RESULT_FILE`, and exit with zero status. The runner validates `inputSchema` and `outputSchema` using JSON Schema draft 2020-12. stdout/stderr are logs. The runner alone advances the graph.
 
-The built-in Codex/Claude Code adapters interpret `input.prompt`, optional workspace and session. The generic process adapter interprets `input.command`. These conventions live in adapters; the graph does not require prompt, decision, or any other business field.
+The built-in Codex/Claude Code adapters interpret `config.instruction` and optional `config.workspace`. The generic process adapter interprets `config.command`. The engine resolves `execution.session` independently of node input. These conventions live in adapters; the graph does not require prompt, decision, or any other business field.
 
 An interaction program can send a message and wait for its callback before writing output. Its process remains running during the interaction and occupies the run's single active node. The demo binds its review node directly to such an executor. No workflow-name scanner is needed.
 

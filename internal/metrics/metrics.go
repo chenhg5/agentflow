@@ -1,7 +1,10 @@
 package metrics
 
 import (
+	"fmt"
+	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/model"
@@ -23,6 +26,7 @@ type RunSnapshot struct {
 	WaitingMs      int64              `json:"waiting_ms"`
 	Totals         ByteTotals         `json:"totals"`
 	Nodes          []NodeSnapshot     `json:"nodes"`
+	Evaluation     *model.Evaluation  `json:"evaluation,omitempty"`
 }
 
 type NodeSnapshot struct {
@@ -79,6 +83,23 @@ type NodeAggregate struct {
 	Totals     ByteTotals   `json:"totals"`
 }
 
+type NumericDistribution struct {
+	Count int     `json:"count"`
+	Total float64 `json:"total"`
+	Avg   float64 `json:"avg"`
+	Min   float64 `json:"min"`
+	Max   float64 `json:"max"`
+	P50   float64 `json:"p50"`
+	P95   float64 `json:"p95"`
+}
+
+type MeasurementAggregate struct {
+	Name      string              `json:"name"`
+	Unit      string              `json:"unit,omitempty"`
+	Direction string              `json:"direction,omitempty"`
+	Values    NumericDistribution `json:"values"`
+}
+
 // AggregateSnapshot summarizes all matching runs. It is intentionally local and
 // deterministic so it can be exported or sent to another metrics system later.
 //
@@ -86,24 +107,70 @@ type NodeAggregate struct {
 // for a human does not inflate them. Duration is wall-clock time, Waiting is
 // time spent in human nodes, and Active is the difference.
 type AggregateSnapshot struct {
-	OK             bool            `json:"ok"`
-	Workflow       string          `json:"workflow,omitempty"`
-	WorkflowDigest string          `json:"workflow_digest,omitempty"`
-	AsOf           string          `json:"as_of"`
-	FirstRunAt     string          `json:"first_run_at,omitempty"`
-	LastRunAt      string          `json:"last_run_at,omitempty"`
-	Runs           RunCounts       `json:"runs"`
-	Duration       Distribution    `json:"duration_ms"`
-	Active         Distribution    `json:"active_ms"`
-	Waiting        Distribution    `json:"waiting_ms"`
-	Totals         ByteTotals      `json:"totals"`
-	NodeGroups     []NodeAggregate `json:"nodes"`
+	OK             bool                   `json:"ok"`
+	Workflow       string                 `json:"workflow,omitempty"`
+	WorkflowDigest string                 `json:"workflow_digest,omitempty"`
+	AsOf           string                 `json:"as_of"`
+	FirstRunAt     string                 `json:"first_run_at,omitempty"`
+	LastRunAt      string                 `json:"last_run_at,omitempty"`
+	Runs           RunCounts              `json:"runs"`
+	Duration       Distribution           `json:"duration_ms"`
+	Active         Distribution           `json:"active_ms"`
+	Waiting        Distribution           `json:"waiting_ms"`
+	Totals         ByteTotals             `json:"totals"`
+	NodeGroups     []NodeAggregate        `json:"nodes"`
+	Measurements   []MeasurementAggregate `json:"measurements,omitempty"`
+}
+
+type MetricComparison struct {
+	Baseline      float64  `json:"baseline"`
+	Current       float64  `json:"current"`
+	Delta         float64  `json:"delta"`
+	ChangePercent *float64 `json:"change_percent,omitempty"`
+	Direction     string   `json:"direction"`
+	Unit          string   `json:"unit,omitempty"`
+	Improved      *bool    `json:"improved,omitempty"`
+}
+
+// Comparison explains the change from a previous run to a current run. The
+// runtime measurements use lower-is-better semantics for elapsed time,
+// waiting time, and attempts. User evaluation measurements carry their own
+// direction and remain separate from these derived runtime facts.
+type Comparison struct {
+	OK           bool                        `json:"ok"`
+	Current      RunSnapshot                 `json:"current"`
+	Baseline     RunSnapshot                 `json:"baseline"`
+	SameWorkflow bool                        `json:"same_workflow"`
+	SameVersion  bool                        `json:"same_version"`
+	Runtime      map[string]MetricComparison `json:"runtime"`
+	Measurements map[string]MetricComparison `json:"measurements,omitempty"`
 }
 
 // Filter selects runs for aggregation. Empty fields match everything.
 type Filter struct {
 	Workflow string
 	Digest   string
+}
+
+func ValidateEvaluation(evaluation model.Evaluation) error {
+	if evaluation.EvaluatedAt == "" {
+		return fmt.Errorf("evaluatedAt is required")
+	}
+	if _, err := time.Parse(time.RFC3339Nano, evaluation.EvaluatedAt); err != nil {
+		return fmt.Errorf("evaluatedAt must be an RFC3339 timestamp")
+	}
+	for name, measurement := range evaluation.Measurements {
+		if strings.TrimSpace(name) == "" {
+			return fmt.Errorf("measurement name cannot be empty")
+		}
+		if math.IsNaN(measurement.Value) || math.IsInf(measurement.Value, 0) {
+			return fmt.Errorf("measurement %q value must be finite", name)
+		}
+		if normalizeDirection(measurement.Direction) == "" {
+			return fmt.Errorf("measurement %q direction must be higher, lower, or neutral", name)
+		}
+	}
+	return nil
 }
 
 func (f Filter) matches(run *model.Run) bool {
@@ -141,6 +208,7 @@ func Snapshot(run *model.Run, asOf time.Time) RunSnapshot {
 		AsOf:           asOf.UTC().Format(time.RFC3339Nano),
 		DurationMs:     duration,
 		Nodes:          make([]NodeSnapshot, 0, len(run.Workflow.Nodes)),
+		Evaluation:     run.State.Evaluation,
 	}
 	for _, definition := range run.Workflow.Nodes {
 		state := run.State.Nodes[definition.ID]
@@ -286,6 +354,7 @@ func Aggregate(runs []*model.Run, filter Filter, asOf time.Time) AggregateSnapsh
 	result.Duration = summarize(durations)
 	result.Active = summarize(active)
 	result.Waiting = summarize(waiting)
+	result.Measurements = aggregateMeasurements(runs, filter)
 	ids := make([]string, 0, len(groups))
 	for id := range groups {
 		ids = append(ids, id)
@@ -298,6 +367,116 @@ func Aggregate(runs []*model.Run, filter Filter, asOf time.Time) AggregateSnapsh
 		result.NodeGroups = append(result.NodeGroups, *group)
 	}
 	return result
+}
+
+func aggregateMeasurements(runs []*model.Run, filter Filter) []MeasurementAggregate {
+	type values struct {
+		name      string
+		unit      string
+		direction string
+		items     []float64
+	}
+	groups := map[string]*values{}
+	for _, run := range runs {
+		if !filter.matches(run) || !finished(run.State.Status) || run.State.Evaluation == nil {
+			continue
+		}
+		for name, measurement := range run.State.Evaluation.Measurements {
+			direction := normalizeDirection(measurement.Direction)
+			key := name + "\x00" + measurement.Unit + "\x00" + direction
+			group, ok := groups[key]
+			if !ok {
+				group = &values{name: name, unit: measurement.Unit, direction: direction}
+				groups[key] = group
+			}
+			group.items = append(group.items, measurement.Value)
+		}
+	}
+	keys := make([]string, 0, len(groups))
+	for key := range groups {
+		keys = append(keys, key)
+	}
+	sort.Strings(keys)
+	result := make([]MeasurementAggregate, 0, len(keys))
+	for _, key := range keys {
+		group := groups[key]
+		result = append(result, MeasurementAggregate{Name: group.name, Unit: group.unit, Direction: group.direction, Values: summarizeFloat(group.items)})
+	}
+	return result
+}
+
+func Compare(current, baseline *model.Run, asOf time.Time) Comparison {
+	if asOf.IsZero() {
+		asOf = time.Now().UTC()
+	}
+	currentSnapshot := Snapshot(current, asOf)
+	baselineSnapshot := Snapshot(baseline, asOf)
+	return Comparison{
+		OK:           true,
+		Current:      currentSnapshot,
+		Baseline:     baselineSnapshot,
+		SameWorkflow: current.State.WorkflowName == baseline.State.WorkflowName,
+		SameVersion:  current.WorkflowDigest() == baseline.WorkflowDigest(),
+		Runtime: map[string]MetricComparison{
+			"duration_ms": compareMetric(float64(currentSnapshot.DurationMs), float64(baselineSnapshot.DurationMs), "lower", "ms"),
+			"active_ms":   compareMetric(float64(currentSnapshot.ActiveMs), float64(baselineSnapshot.ActiveMs), "lower", "ms"),
+			"waiting_ms":  compareMetric(float64(currentSnapshot.WaitingMs), float64(baselineSnapshot.WaitingMs), "lower", "ms"),
+			"attempts":    compareMetric(float64(currentSnapshot.Totals.Attempts), float64(baselineSnapshot.Totals.Attempts), "lower", "count"),
+		},
+		Measurements: compareMeasurements(current.State.Evaluation, baseline.State.Evaluation),
+	}
+}
+
+func compareMeasurements(current, baseline *model.Evaluation) map[string]MetricComparison {
+	result := map[string]MetricComparison{}
+	if current == nil || baseline == nil {
+		return result
+	}
+	for name, measurement := range current.Measurements {
+		previous, ok := baseline.Measurements[name]
+		if !ok {
+			continue
+		}
+		if measurement.Unit != previous.Unit {
+			continue
+		}
+		direction := normalizeDirection(measurement.Direction)
+		previousDirection := normalizeDirection(previous.Direction)
+		if direction != previousDirection {
+			continue
+		}
+		result[name] = compareMetric(measurement.Value, previous.Value, direction, measurement.Unit)
+	}
+	return result
+}
+
+func compareMetric(current, baseline float64, direction, unit string) MetricComparison {
+	comparison := MetricComparison{Baseline: baseline, Current: current, Delta: current - baseline, Direction: direction, Unit: unit}
+	if baseline != 0 {
+		change := (current - baseline) / math.Abs(baseline) * 100
+		comparison.ChangePercent = &change
+	}
+	if direction == "higher" || direction == "lower" {
+		improved := (direction == "higher" && current > baseline) || (direction == "lower" && current < baseline)
+		comparison.Improved = &improved
+	}
+	return comparison
+}
+
+func normalizeDirection(direction string) string {
+	switch strings.ToLower(strings.TrimSpace(direction)) {
+	case "higher", "up", "maximize", "max":
+		return "higher"
+	case "lower", "down", "minimize", "min":
+		return "lower"
+	case "neutral", "none", "":
+		if strings.TrimSpace(direction) == "" {
+			return "neutral"
+		}
+		return "neutral"
+	default:
+		return ""
+	}
 }
 
 func finished(status string) bool {
@@ -363,7 +542,36 @@ func summarize(values []int64) Distribution {
 	}
 }
 
+func summarizeFloat(values []float64) NumericDistribution {
+	if len(values) == 0 {
+		return NumericDistribution{}
+	}
+	sorted := append([]float64(nil), values...)
+	sort.Float64s(sorted)
+	var total float64
+	for _, value := range sorted {
+		total += value
+	}
+	return NumericDistribution{
+		Count: len(sorted),
+		Total: total,
+		Avg:   total / float64(len(sorted)),
+		Min:   sorted[0],
+		Max:   sorted[len(sorted)-1],
+		P50:   percentileFloat(sorted, 0.50),
+		P95:   percentileFloat(sorted, 0.95),
+	}
+}
+
 func percentile(values []int64, quantile float64) int64 {
+	if len(values) == 0 {
+		return 0
+	}
+	index := int(float64(len(values)-1) * quantile)
+	return values[index]
+}
+
+func percentileFloat(values []float64, quantile float64) float64 {
 	if len(values) == 0 {
 		return 0
 	}

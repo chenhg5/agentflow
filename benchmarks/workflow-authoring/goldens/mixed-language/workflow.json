@@ -1,5 +1,5 @@
 {
-  "version": "2",
+  "version": "3",
   "name": "mixed-language",
   "entry": "collect",
   "inputs": {
@@ -12,9 +12,6 @@
     {
       "id": "collect",
       "executor": "collect",
-      "input": {
-        "batch": "{{ inputs.batch }}"
-      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -67,11 +64,6 @@
     {
       "id": "report",
       "executor": "report",
-      "input": {
-        "batch": "{{ nodes.collect.result.batch }}",
-        "readings": "{{ nodes.collect.result.readings }}",
-        "meta": "{{ nodes.collect.result.meta }}"
-      },
       "inputSchema": {
         "type": "object",
         "properties": {

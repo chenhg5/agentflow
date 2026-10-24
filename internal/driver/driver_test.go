@@ -25,19 +25,19 @@ func TestBuildClaudeCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"claude", "--resume", "session-1", "--print", "--permission-mode", "acceptEdits", "inspect"}
+	want := []string{"claude", "--resume", "session-1", "--print", "--output-format", "json", "--permission-mode", "acceptEdits", "inspect"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
 }
 
 func TestBuildCodexCommand(t *testing.T) {
-	executor := Executor{Kind: "codex", Binary: "codex", Model: "gpt-5.6-sol", Sandbox: "workspace-write", SkipGitRepoCheck: true, Ephemeral: true}
+	executor := Executor{Kind: "codex", Binary: "codex", Model: "gpt-5.6-sol", Sandbox: "workspace-write", SkipGitRepoCheck: true}
 	got, err := BuildCommand("codex", executor, Request{Prompt: "verify", SessionID: "session-2"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"codex", "exec", "resume", "-m", "gpt-5.6-sol", "--ephemeral", "session-2", "verify"}
+	want := []string{"codex", "exec", "resume", "-m", "gpt-5.6-sol", "--json", "session-2", "verify"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -49,9 +49,54 @@ func TestBuildCodexStartCommandIncludesSandbox(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"codex", "exec", "-m", "gpt-5.6-sol", "-s", "workspace-write", "--skip-git-repo-check", "--ephemeral", "inspect"}
+	want := []string{"codex", "exec", "-m", "gpt-5.6-sol", "-s", "workspace-write", "--skip-git-repo-check", "--ephemeral", "--json", "inspect"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
+	}
+}
+
+func TestSessionModesSelectNativeAndCustomForkCommands(t *testing.T) {
+	if _, err := BuildCommand("codex", Executor{Kind: "codex", Ephemeral: true}, Request{SessionMode: "fork", SessionID: "parent"}); err == nil {
+		t.Fatal("ephemeral session must not be forked")
+	}
+	codex, err := BuildCommand("codex", Executor{Kind: "codex"}, Request{SessionMode: "fork", SessionID: "parent", Prompt: "continue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(codex, []string{"codex", "exec", "fork", "--json", "parent", "continue"}) {
+		t.Fatalf("codex fork command = %v", codex)
+	}
+	claude, err := BuildCommand("claude-code", Executor{Kind: "claude-code"}, Request{SessionMode: "fork", SessionID: "parent", Prompt: "continue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(claude, []string{"claude", "--resume", "parent", "--fork-session", "--print", "--output-format", "json", "continue"}) {
+		t.Fatalf("claude fork command = %v", claude)
+	}
+	custom := Executor{Kind: "command", Command: []string{"tool", "new"}, ResumeCommand: []string{"tool", "resume"}, ForkCommand: []string{"tool", "fork", "{{session_id}}"}}
+	command, err := BuildCommand("custom", custom, Request{SessionMode: "fork", SessionID: "parent"})
+	if err != nil || !reflect.DeepEqual(command, []string{"tool", "fork", "parent"}) {
+		t.Fatalf("custom fork command = %v, %v", command, err)
+	}
+	custom.ForkCommand = nil
+	if _, err := BuildCommand("custom", custom, Request{SessionMode: "fork", SessionID: "parent"}); err == nil {
+		t.Fatal("fork must not silently resume the parent session")
+	}
+}
+
+func TestSessionMetadataFromNativeLogs(t *testing.T) {
+	if got := SessionFromLogs(Executor{Kind: "codex"}, "{\"type\":\"thread.started\",\"thread_id\":\"codex-123\"}\n"); got != "codex-123" {
+		t.Fatalf("codex session = %q", got)
+	}
+	if got := SessionFromLogs(Executor{Kind: "claude-code"}, "{\"session_id\":\"claude-123\"}"); got != "claude-123" {
+		t.Fatalf("claude session = %q", got)
+	}
+}
+
+func TestCustomForkOnlyExecutorCanRun(t *testing.T) {
+	prepared, err := Prepare("fork-only", Executor{Kind: "command", ForkCommand: []string{"tool", "fork", "{{session_id}}"}}, Invocation{Input: map[string]any{}, SessionMode: "fork", SessionID: "parent"})
+	if err != nil || !reflect.DeepEqual(prepared.Command, []string{"tool", "fork", "parent"}) {
+		t.Fatalf("fork-only executor = %+v, %v", prepared, err)
 	}
 }
 
@@ -85,7 +130,7 @@ func TestCustomExecutorEntryDoesNotInferBehaviorFromItsName(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(directory, ".agentflow"), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	config := `{"executors":{"codex":{"command":["echo","{{ input.label }}"],"workspace":"{{ input.directory }}","env":{"CHANNEL":"{{ input.channel }}"}}}}`
+	config := `{"executors":{"codex":{"command":["echo","{{ config.label }}"],"workspace":"{{ config.directory }}","env":{"CHANNEL":"{{ config.channel }}"}}}}`
 	if err := os.WriteFile(filepath.Join(directory, ".agentflow", "executors.json"), []byte(config), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -93,7 +138,7 @@ func TestCustomExecutorEntryDoesNotInferBehaviorFromItsName(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	prepared, err := Prepare("codex", executors["codex"], Invocation{Input: map[string]any{"label": "custom", "channel": "terminal", "directory": directory}})
+	prepared, err := Prepare("codex", executors["codex"], Invocation{Config: map[string]any{"label": "custom", "channel": "terminal", "directory": directory}})
 	if err != nil {
 		t.Fatal(err)
 	}

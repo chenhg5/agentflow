@@ -41,8 +41,28 @@ func TestWorkflowAndRunViews(t *testing.T) {
 		t.Fatalf("workflow graph edges = %#v", graphView["edges"])
 	}
 
-	run, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "2", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Input: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "")
+	run, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "")
 	if err != nil {
+		t.Fatal(err)
+	}
+	baseline, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "baseline")
+	if err != nil {
+		t.Fatal(err)
+	}
+	baseline.State.Status = "succeeded"
+	baseline.State.CreatedAt = "2026-10-23T00:00:00Z"
+	baseline.State.StartedAt = baseline.State.CreatedAt
+	baseline.State.FinishedAt = "2026-10-23T00:00:01Z"
+	baseline.State.Evaluation = &model.Evaluation{EvaluatedAt: baseline.State.FinishedAt, Measurements: map[string]model.Measurement{"quality": {Value: 0.5, Direction: "higher"}}}
+	if err := store.SaveState(baseline); err != nil {
+		t.Fatal(err)
+	}
+	run.State.Status = "succeeded"
+	run.State.CreatedAt = "2026-10-24T00:00:00Z"
+	run.State.StartedAt = run.State.CreatedAt
+	run.State.FinishedAt = "2026-10-24T00:00:01Z"
+	run.State.Evaluation = &model.Evaluation{EvaluatedAt: run.State.FinishedAt, Measurements: map[string]model.Measurement{"quality": {Value: 0.8, Direction: "higher"}}}
+	if err := store.SaveState(run); err != nil {
 		t.Fatal(err)
 	}
 	runServer := NewServer(Options{Root: filepath.Join(root, ".agentflow"), RunID: run.RunID, Port: -1})
@@ -67,5 +87,8 @@ func TestWorkflowAndRunViews(t *testing.T) {
 	}
 	if _, ok := runViewPayload["graph"].(map[string]any); !ok {
 		t.Fatalf("run graph missing: %#v", runViewPayload["graph"])
+	}
+	if _, ok := runViewPayload["comparison"].(map[string]any); !ok {
+		t.Fatalf("run comparison missing: %#v", runViewPayload["comparison"])
 	}
 }

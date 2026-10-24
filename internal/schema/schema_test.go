@@ -7,9 +7,9 @@ import (
 )
 
 func TestValidateWorkflowAndCycle(t *testing.T) {
-	valid := model.Workflow{Version: "2", Name: "test", Entry: "a", Nodes: []model.Node{
-		{ID: "a", Executor: "process", Input: map[string]any{"command": []string{"echo", "a"}}},
-		{ID: "b", Input: map[string]any{"text": "approve"}, Executor: "external"},
+	valid := model.Workflow{Version: "3", Name: "test", Entry: "a", Nodes: []model.Node{
+		{ID: "a", Executor: "process", Config: map[string]any{"command": []string{"echo", "a"}}},
+		{ID: "b", Config: map[string]any{"text": "approve"}, Executor: "external"},
 	}, Edges: []model.Transition{{From: "a", To: "b"}, {From: "b", To: "$end"}}}
 	if errors := Validate(valid); len(errors) != 0 {
 		t.Fatalf("valid workflow errors: %v", errors)
@@ -22,7 +22,7 @@ func TestValidateWorkflowAndCycle(t *testing.T) {
 }
 
 func TestExecutorReferenceIsRequired(t *testing.T) {
-	workflow := model.Workflow{Version: "2", Name: "executor", Entry: "step", Nodes: []model.Node{{ID: "step"}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
+	workflow := model.Workflow{Version: "3", Name: "executor", Entry: "step", Nodes: []model.Node{{ID: "step"}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
 	problems := Validate(workflow)
 	if len(problems) != 1 || problems[0] != "node step needs an executor" {
 		t.Fatalf("unexpected errors: %v", problems)
@@ -71,19 +71,19 @@ func TestFullJSONSchemaKeywords(t *testing.T) {
 }
 
 func TestInputReferenceNamespaces(t *testing.T) {
-	workflow := model.Workflow{Version: "2", Name: "refs", Entry: "step", Inputs: map[string]model.InputDefinition{"sample": {}}, Nodes: []model.Node{{ID: "step", Executor: "process", Input: map[string]any{"sample": "{{ input.sample }}"}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
-	if problems := Validate(workflow); len(problems) == 0 {
-		t.Fatal("executor input namespace must not silently resolve to null inside a workflow")
-	}
-	workflow.Nodes[0].Input["sample"] = "{{ inputs.sample }}"
+	workflow := model.Workflow{Version: "3", Name: "refs", Entry: "step", Inputs: map[string]model.InputDefinition{"sample": {}}, Nodes: []model.Node{{ID: "step", Executor: "process", Config: map[string]any{"sample": "{{ input.sample }}"}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
 	if problems := Validate(workflow); len(problems) != 0 {
 		t.Fatal(problems)
 	}
-	workflow.Nodes[0].Input["sample"] = "{{ nodes.missing.result.score }}"
+	workflow.Nodes[0].Config["sample"] = "{{ inputs.sample }}"
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatal(problems)
+	}
+	workflow.Nodes[0].Config["sample"] = "{{ nodes.missing.result.score }}"
 	if problems := Validate(workflow); len(problems) == 0 {
 		t.Fatal("unknown node reference must be rejected")
 	}
-	workflow.Nodes[0].Input["sample"] = "{{ nodes }}"
+	workflow.Nodes[0].Config["sample"] = "{{ nodes }}"
 	if problems := Validate(workflow); len(problems) != 0 {
 		t.Fatal(problems)
 	}

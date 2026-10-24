@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -18,15 +19,17 @@ import (
 
 // nodeTask invokes one executor using the same file contract for every node.
 type nodeTask struct {
-	runDir             string
-	node               model.Node
-	executor           driver.Executor
-	state              model.NodeState
-	command            []string
-	options            driver.CommandOptions
-	resultFile         string
-	resultRelativePath string
-	visit              int
+	runDir              string
+	node                model.Node
+	executor            driver.Executor
+	state               model.NodeState
+	command             []string
+	options             driver.CommandOptions
+	resultFile          string
+	sessionFile         string
+	sessionRelativePath string
+	resultRelativePath  string
+	visit               int
 }
 
 func prepareNode(run *model.Run, node model.Node, executors map[string]driver.Executor) (*nodeTask, model.NodeState, error) {
@@ -37,7 +40,9 @@ func prepareNode(run *model.Run, node model.Node, executors map[string]driver.Ex
 	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "node.started", "nodeId": node.ID, "executor": node.Executor}); err != nil {
 		return nil, state, err
 	}
-	state.Input = resolveInput(run, node, context(run.State))
+	if state.Input == nil {
+		state.Input = map[string]any{}
+	}
 	inputArtifact := visitArtifact(run, node.ID, "input.json")
 	if err := writeJSONArtifact(run.RunDir, inputArtifact, state.Input); err != nil {
 		return nil, state, err
@@ -61,32 +66,60 @@ func prepareNode(run *model.Run, node model.Node, executors map[string]driver.Ex
 	if err != nil {
 		return nil, state, err
 	}
-	input, _ := state.Input.(map[string]any)
-	prepared, err := driver.Prepare(node.Executor, executor, driver.Invocation{Input: input, InputSchema: node.InputSchema, OutputSchema: node.OutputSchema, ResultFile: resultFile, RunID: run.RunID, NodeID: node.ID})
+	sessionRelativePath := visitArtifact(run, node.ID, "session.txt")
+	sessionFile, err := store.ArtifactPath(run.RunDir, sessionRelativePath)
+	if err != nil {
+		return nil, state, err
+	}
+	input, ok := state.Input.(map[string]any)
+	if !ok {
+		return nil, fail(state, "node input must be a JSON object"), nil
+	}
+	runContext := context(run.State)
+	runContext["input"] = state.Input
+	config, _ := template.RenderValue(node.Config, runContext).(map[string]any)
+	configArtifact := visitArtifact(run, node.ID, "config.json")
+	if err := writeJSONArtifact(run.RunDir, configArtifact, config); err != nil {
+		return nil, state, err
+	}
+	state.Artifacts["config"] = "artifacts/" + filepath.ToSlash(configArtifact)
+	configFile, err := store.ArtifactPath(run.RunDir, configArtifact)
+	if err != nil {
+		return nil, state, err
+	}
+	sessionMode, sessionID, err := sessionForNode(run, node, state, runContext)
+	if err != nil {
+		return nil, fail(state, err.Error()), nil
+	}
+	prepared, err := driver.Prepare(node.Executor, executor, driver.Invocation{Input: input, Config: config, InputSchema: node.InputSchema, OutputSchema: node.OutputSchema, SessionMode: sessionMode, SessionID: sessionID, ResultFile: resultFile, RunID: run.RunID, NodeID: node.ID})
 	if err != nil {
 		return nil, fail(state, err.Error()), nil
 	}
 	if prepared.Waiting {
 		state.Status = "waiting_input"
+		state.SessionID = sessionID
 		_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.waiting_input", "nodeId": node.ID})
 		return nil, state, nil
 	}
 	state.Workspace, state.SessionID = prepared.Workspace, prepared.SessionID
 	env := map[string]string{
-		"AGENTFLOW_RUN_ID":      run.RunID,
-		"AGENTFLOW_NODE_ID":     node.ID,
-		"AGENTFLOW_NODE_TOKEN":  state.LeaseToken,
-		"AGENTFLOW_WORKSPACE":   prepared.Workspace,
-		"AGENTFLOW_SESSION_ID":  prepared.SessionID,
-		"AGENTFLOW_RESULT_FILE": resultFile,
-		"AGENTFLOW_INPUT_FILE":  inputFile,
+		"AGENTFLOW_RUN_ID":       run.RunID,
+		"AGENTFLOW_NODE_ID":      node.ID,
+		"AGENTFLOW_NODE_TOKEN":   state.LeaseToken,
+		"AGENTFLOW_WORKSPACE":    prepared.Workspace,
+		"AGENTFLOW_SESSION_ID":   prepared.SessionID,
+		"AGENTFLOW_SESSION_MODE": prepared.SessionMode,
+		"AGENTFLOW_RESULT_FILE":  resultFile,
+		"AGENTFLOW_INPUT_FILE":   inputFile,
+		"AGENTFLOW_CONFIG_FILE":  configFile,
+		"AGENTFLOW_SESSION_FILE": sessionFile,
 	}
 	for key, value := range prepared.Env {
 		if _, reserved := env[key]; !reserved {
 			env[key] = value
 		}
 	}
-	return &nodeTask{runDir: run.RunDir, node: node, executor: executor, state: cloneState(&state), command: prepared.Command, options: driver.CommandOptions{Dir: prepared.Workspace, Env: env, Stdin: prepared.Stdin, TimeoutMs: node.TimeoutMs}, resultFile: resultFile, resultRelativePath: resultRelativePath, visit: run.State.Visits[node.ID]}, state, nil
+	return &nodeTask{runDir: run.RunDir, node: node, executor: executor, state: cloneState(&state), command: prepared.Command, options: driver.CommandOptions{Dir: prepared.Workspace, Env: env, Stdin: prepared.Stdin, TimeoutMs: node.TimeoutMs}, resultFile: resultFile, resultRelativePath: resultRelativePath, sessionFile: sessionFile, sessionRelativePath: sessionRelativePath, visit: run.State.Visits[node.ID]}, state, nil
 }
 
 // run executes the command with retries and turns its result file into the
@@ -101,6 +134,7 @@ func (t *nodeTask) run() (model.NodeState, error) {
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
 		state.Attempts++
 		_ = os.Remove(t.resultFile)
+		_ = os.Remove(t.sessionFile)
 		result = driver.RunCommand(t.command, t.options)
 		if result.Code == 0 {
 			break
@@ -139,14 +173,31 @@ func (t *nodeTask) run() (model.NodeState, error) {
 	if problems := schema.ValidateValue("output", structured, schema.EffectiveOutputSchema(node)); len(problems) > 0 {
 		return t.failed(state, schema.FormatContractErrors("output schema validation failed", problems)), nil
 	}
-	if sessionID := driver.SessionFromOutput(t.executor, structured); sessionID != "" {
+	if sessionID := sessionFromFile(t.sessionFile); sessionID != "" {
 		state.SessionID = sessionID
+		state.Artifacts["session"] = "artifacts/" + filepath.ToSlash(t.sessionRelativePath)
+	} else if sessionID := driver.SessionFromLogs(t.executor, result.Stdout); sessionID != "" {
+		state.SessionID = sessionID
+	}
+	if t.node.Execution.Session.Mode == "fork" && (state.SessionID == "" || state.SessionID == t.options.Env["AGENTFLOW_SESSION_ID"]) {
+		return t.failed(state, "fork executor must report a new session ID in AGENTFLOW_SESSION_FILE or native JSON logs"), nil
+	}
+	if t.node.Execution.Session.Mode == "fixed" && state.SessionID == "" {
+		return t.failed(state, "fixed session executor must report a session ID in AGENTFLOW_SESSION_FILE or native JSON logs"), nil
 	}
 	state.Status = "succeeded"
 	state.FinishedAt = time.Now().UTC().Format(time.RFC3339Nano)
 	metrics.RefreshNode(&state, time.Now().UTC())
 	_ = store.AppendEvent(t.runDir, map[string]any{"type": "node.succeeded", "nodeId": node.ID, "resultArtifact": state.Artifacts["result"]})
 	return state, nil
+}
+
+func sessionFromFile(path string) string {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return ""
+	}
+	return string(bytes.TrimSpace(data))
 }
 
 func (t *nodeTask) failed(state model.NodeState, message string) model.NodeState {
@@ -172,6 +223,87 @@ func cloneState(state *model.NodeState) model.NodeState {
 	return clone
 }
 
+// cloneValue keeps edge payloads isolated from the previous node's result.
+// Results are required to be JSON objects, so a JSON round trip gives the
+// engine a simple deep copy without coupling it to executor-specific types.
+func cloneValue(value any) any {
+	if value == nil {
+		return map[string]any{}
+	}
+	data, err := json.Marshal(value)
+	if err != nil {
+		return value
+	}
+	var clone any
+	if err := json.Unmarshal(data, &clone); err != nil {
+		return value
+	}
+	return clone
+}
+
+func sessionForNode(run *model.Run, node model.Node, state model.NodeState, runContext map[string]any) (string, string, error) {
+	spec := node.Execution.Session
+	mode := spec.Mode
+	if mode == "" {
+		mode = "new"
+	}
+	switch mode {
+	case "new":
+		return mode, "", nil
+	case "fixed":
+		if spec.ID != "" {
+			id := template.Render(spec.ID, runContext)
+			if id == "" {
+				return "", "", fmt.Errorf("node %s fixed session id resolved to an empty value", node.ID)
+			}
+			return mode, id, nil
+		}
+		for index := len(run.State.History) - 1; index >= 0; index-- {
+			visit := run.State.History[index]
+			if visit.NodeID == node.ID && visit.State.SessionID != "" {
+				return mode, visit.State.SessionID, nil
+			}
+		}
+		return mode, "", nil
+	case "inherit", "fork":
+		source := spec.From
+		if source == "" {
+			source = state.IncomingNode
+		}
+		id := ""
+		if source == state.IncomingNode {
+			id = state.IncomingSessionID
+		}
+		if source != "" {
+			if sourceState := run.State.Nodes[source]; sourceState != nil {
+				id = sourceState.SessionID
+			}
+			if id == "" {
+				for index := len(run.State.History) - 1; index >= 0; index-- {
+					visit := run.State.History[index]
+					if visit.NodeID == source && visit.State.SessionID != "" {
+						id = visit.State.SessionID
+						break
+					}
+				}
+			}
+		}
+		if id == "" {
+			return "", "", fmt.Errorf("node %s session mode %s needs a session from %s", node.ID, mode, sourceLabel(source))
+		}
+		return mode, id, nil
+	default:
+		return "", "", fmt.Errorf("node %s has unsupported session mode %q", node.ID, mode)
+	}
+}
+
+func sourceLabel(source string) string {
+	if source == "" {
+		return "the incoming node"
+	}
+	return "node " + source
+}
+
 func visitArtifact(run *model.Run, nodeID, suffix string) string {
 	return visitArtifactName(nodeID, run.State.Visits[nodeID], suffix)
 }
@@ -181,13 +313,6 @@ func visitArtifactName(nodeID string, visit int, suffix string) string {
 		return nodeID + "." + suffix
 	}
 	return fmt.Sprintf("%s.%d.%s", nodeID, visit, suffix)
-}
-
-func resolveInput(_ *model.Run, node model.Node, runContext map[string]any) any {
-	if node.Input == nil {
-		return map[string]any{}
-	}
-	return template.RenderValue(node.Input, runContext)
 }
 
 func writeJSONArtifact(runDir, relativePath string, value any) error {
@@ -216,7 +341,7 @@ func loadResult(file string) (any, int64, error) {
 func context(state model.RunState) map[string]any {
 	nodes := map[string]any{}
 	for id, node := range state.Nodes {
-		nodes[id] = map[string]any{"status": node.Status, "input": node.Input, "result": node.Result, "artifacts": node.Artifacts}
+		nodes[id] = map[string]any{"status": node.Status, "input": node.Input, "result": node.Result, "sessionId": node.SessionID, "artifacts": node.Artifacts}
 	}
 	return map[string]any{"inputs": state.Inputs, "nodes": nodes}
 }

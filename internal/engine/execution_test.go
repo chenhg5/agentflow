@@ -12,10 +12,10 @@ import (
 
 func graphRun(t *testing.T, limit int) *model.Run {
 	t.Helper()
-	workflow := model.Workflow{Version: "2", Name: "review", Entry: "draft", Nodes: []model.Node{
-		{ID: "draft", Executor: "process", Input: map[string]any{"command": []string{"sh", "-c", `printf '{"summary":"draft"}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "review", Input: map[string]any{"text": "Review {{ nodes.draft.result.summary }}"}, Executor: "external"},
-		{ID: "finalize", Executor: "process", Input: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
+	workflow := model.Workflow{Version: "3", Name: "review", Entry: "draft", Nodes: []model.Node{
+		{ID: "draft", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"summary":"draft"}' > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "review", Config: map[string]any{"text": "Review {{ nodes.draft.result.summary }}"}, Executor: "external"},
+		{ID: "finalize", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
 	}, Edges: []model.Transition{
 		{From: "draft", To: "review"},
 		{From: "review", To: "finalize", When: "nodes.review.result.decision == 'happy'"},
@@ -98,9 +98,9 @@ func TestReworkBoundStopsRun(t *testing.T) {
 }
 
 func TestProgramResultRoutesByNumericCondition(t *testing.T) {
-	workflow := model.Workflow{Version: "2", Name: "program", Entry: "check", Nodes: []model.Node{
-		{ID: "check", Input: map[string]any{"threshold": 7, "command": []string{"sh", "-c", `test -f "$AGENTFLOW_INPUT_FILE" && printf '{"score":8}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},
-		{ID: "high", Executor: "process", Input: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
+	workflow := model.Workflow{Version: "3", Name: "program", Entry: "check", Nodes: []model.Node{
+		{ID: "check", Config: map[string]any{"threshold": 7, "command": []string{"sh", "-c", `test -f "$AGENTFLOW_INPUT_FILE" && printf '{"score":8}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},
+		{ID: "high", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
 	}, Edges: []model.Transition{
 		{From: "check", To: "high", When: "nodes.check.result.score > 7"},
 		{From: "check", To: "$end"},
@@ -117,8 +117,8 @@ func TestProgramResultRoutesByNumericCondition(t *testing.T) {
 }
 
 func TestHumanAdapterProgramAdvancesWithoutManualControl(t *testing.T) {
-	workflow := model.Workflow{Version: "2", Name: "adapter", Entry: "review", Nodes: []model.Node{
-		{ID: "review", Input: map[string]any{"text": "choose", "command": []string{"sh", "-c", `printf '{"decision":"happy","message":"ok"}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},
+	workflow := model.Workflow{Version: "3", Name: "adapter", Entry: "review", Nodes: []model.Node{
+		{ID: "review", Config: map[string]any{"text": "choose", "command": []string{"sh", "-c", `printf '{"decision":"happy","message":"ok"}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},
 	}, Edges: []model.Transition{{From: "review", To: "$end", When: "nodes.review.result.decision == 'happy'"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
@@ -132,7 +132,7 @@ func TestHumanAdapterProgramAdvancesWithoutManualControl(t *testing.T) {
 
 func TestEmptyObjectInputSurvivesExternalResume(t *testing.T) {
 	root := t.TempDir()
-	workflow := model.Workflow{Version: "2", Name: "empty-input", Entry: "wait", Nodes: []model.Node{{ID: "wait", Executor: "external", Input: map[string]any{}, InputSchema: map[string]any{"type": "object"}}}, Edges: []model.Transition{{From: "wait", To: "wait", When: "nodes.wait.result.again", MaxIterations: 1}, {From: "wait", To: "$end"}}}
+	workflow := model.Workflow{Version: "3", Name: "empty-input", Entry: "wait", Nodes: []model.Node{{ID: "wait", Executor: "external", Config: map[string]any{}, InputSchema: map[string]any{"type": "object"}}}, Edges: []model.Transition{{From: "wait", To: "wait", When: "nodes.wait.result.again", MaxIterations: 1}, {From: "wait", To: "$end"}}}
 	run, err := store.CreateRun(root, workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)

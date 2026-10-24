@@ -45,7 +45,7 @@ func TestRuntimeQueuesAndExecutesShellWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflowPath := filepath.Join(cwd, "workflow.json")
-	workflow, err := json.Marshal(model.Workflow{Version: "2", Name: "triggered", Entry: "shell", Nodes: []model.Node{{ID: "shell", Executor: "process", Input: map[string]any{"command": []string{"sh", "-c", `printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}}}}, Edges: []model.Transition{{From: "shell", To: "$end"}}})
+	workflow, err := json.Marshal(model.Workflow{Version: "3", Name: "triggered", Entry: "shell", Nodes: []model.Node{{ID: "shell", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}}}}, Edges: []model.Transition{{From: "shell", To: "$end"}}})
 	if err != nil {
 		t.Fatal(err)
 	}

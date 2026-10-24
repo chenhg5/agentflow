@@ -34,27 +34,27 @@ def generate(directory):
             draft = {
                 "id": "draft",
                 "executor": "codex",
-                "input": {
-                    "prompt": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result."
+                "config": {
+                    "instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result."
                     + feedback
                     + " }}"
                 },
-                "inputSchema": schema({"prompt": S}),
+                "inputSchema": {"type": "object"},
                 "outputSchema": DRAFT,
             }
             final = {
                 "id": "finalize",
                 "executor": "codex",
-                "input": {
-                    "prompt": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result."
+                "config": {
+                    "instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result."
                     + feedback
                     + " }}"
                 },
-                "inputSchema": schema({"prompt": S}),
+                "inputSchema": {"type": "object"},
                 "outputSchema": FINAL,
             }
             flow = {
-                "version": "2",
+                "version": "3",
                 "name": case,
                 "entry": "draft",
                 "inputs": {"topic": {"type": "string", "required": True}},
@@ -66,17 +66,14 @@ def generate(directory):
                 review = {
                     "id": "review",
                     "executor": "channel",
-                    "input": {
+                    "config": {
                         "recipient": "{{ inputs.reviewer }}",
-                        "content": "{{ nodes.draft.result.summary }}",
                         "actions": [
                             {"label": v, "output": {"signal": v, "note": v}}
                             for v in ["happy", "again", "sad"]
                         ],
                     },
-                    "inputSchema": schema(
-                        {"recipient": S, "content": S, "actions": {"type": "array"}}
-                    ),
+                    "inputSchema": DRAFT,
                     "outputSchema": schema(
                         {"signal": {"enum": ["happy", "again", "sad"]}, "note": S}
                     ),
@@ -120,8 +117,7 @@ def generate(directory):
                 review = {
                     "id": "review",
                     "executor": "external",
-                    "input": {},
-                    "inputSchema": schema({}),
+                    "inputSchema": DRAFT,
                     "outputSchema": schema(
                         {
                             "mood": {"enum": ["go", "back", "stop"]},
@@ -161,7 +157,6 @@ def generate(directory):
                 {
                     "id": "measure",
                     "executor": "measure",
-                    "input": {"sample": "{{ inputs.sample }}"},
                     "inputSchema": schema({"sample": S}),
                     "outputSchema": schema(value),
                 }
@@ -171,14 +166,8 @@ def generate(directory):
                     {
                         "id": role,
                         "executor": "finish",
-                        "input": {
-                            "branch": role,
-                            **{
-                                key: "{{ nodes.measure.result." + key + " }}"
-                                for key in value
-                            },
-                        },
-                        "inputSchema": schema({"branch": S, **value}),
+                        "config": {"branch": role},
+                        "inputSchema": schema(value),
                         "outputSchema": schema({"branch": S, **value}),
                     }
                 )
@@ -194,7 +183,7 @@ def generate(directory):
                 },
             }
             flow = {
-                "version": "2",
+                "version": "3",
                 "name": case,
                 "entry": "measure",
                 "inputs": {"sample": {"type": "string", "required": True}},
@@ -234,17 +223,12 @@ def generate(directory):
                 {
                     "id": "collect",
                     "executor": "collect",
-                    "input": {"batch": "{{ inputs.batch }}"},
                     "inputSchema": schema({"batch": S}),
                     "outputSchema": data,
                 },
                 {
                     "id": "report",
                     "executor": "report",
-                    "input": {
-                        key: "{{ nodes.collect.result." + key + " }}"
-                        for key in ["batch", "readings", "meta"]
-                    },
                     "inputSchema": data,
                     "outputSchema": schema(
                         {
@@ -268,7 +252,7 @@ def generate(directory):
                 ]
             }
             flow = {
-                "version": "2",
+                "version": "3",
                 "name": case,
                 "entry": "collect",
                 "inputs": {"batch": {"type": "string", "required": True}},

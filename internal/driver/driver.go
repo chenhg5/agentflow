@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -34,21 +35,23 @@ type Executor struct {
 	ExtraArgs                  []string `json:"extraArgs,omitempty"`
 	// Command starts a new agent session.
 	Command []string `json:"command"`
-	// ResumeCommand sends a prompt to an existing session. It is required when
-	// a workflow node sets session.
+	// ResumeCommand sends a prompt to an existing session.
 	ResumeCommand []string `json:"resumeCommand,omitempty"`
+	// ForkCommand starts a new session from an existing session.
+	ForkCommand []string `json:"forkCommand,omitempty"`
 }
 
 // Request contains the runtime values needed to start or resume a executor
 // session. The workflow engine owns these values; executors only translate
 // them into their native CLI invocation.
 type Request struct {
-	Prompt     string
-	Workspace  string
-	SessionID  string
-	ResultFile string
-	RunID      string
-	NodeID     string
+	Prompt      string
+	SessionMode string
+	Workspace   string
+	SessionID   string
+	ResultFile  string
+	RunID       string
+	NodeID      string
 }
 
 // Status describes whether a executor's executable is available on the host.
@@ -137,7 +140,7 @@ func BuiltInExecutors() map[string]Executor {
 // resolved. It deliberately does not make a network request or consume model
 // quota.
 func CheckExecutor(name string, executor Executor) Status {
-	if executor.Kind == "external" || (executor.Kind == "command" && len(executor.Command) == 0) {
+	if executor.Kind == "external" || (executor.Kind == "command" && len(executor.Command) == 0 && len(executor.ResumeCommand) == 0 && len(executor.ForkCommand) == 0) {
 		return Status{Name: name, Kind: executor.Kind, Available: true}
 	}
 	kind := executor.Kind
@@ -147,6 +150,10 @@ func CheckExecutor(name string, executor Executor) Status {
 	binary := executor.Binary
 	if len(executor.Command) > 0 {
 		binary = executor.Command[0]
+	} else if len(executor.ResumeCommand) > 0 {
+		binary = executor.ResumeCommand[0]
+	} else if len(executor.ForkCommand) > 0 {
+		binary = executor.ForkCommand[0]
 	}
 	if binary == "" {
 		switch kind {
@@ -209,26 +216,33 @@ func merge(base, override Executor) Executor {
 	if len(override.ResumeCommand) > 0 {
 		base.ResumeCommand = override.ResumeCommand
 	}
+	if len(override.ForkCommand) > 0 {
+		base.ForkCommand = override.ForkCommand
+	}
 	return base
 }
 
 // Invocation is the generic JSON/file contract shared by every executor.
 type Invocation struct {
 	Input        map[string]any
+	Config       map[string]any
 	InputSchema  map[string]any
 	OutputSchema map[string]any
+	SessionMode  string
+	SessionID    string
 	ResultFile   string
 	RunID        string
 	NodeID       string
 }
 
 type Prepared struct {
-	Env       map[string]string
-	Command   []string
-	Workspace string
-	SessionID string
-	Stdin     string
-	Waiting   bool
+	Env         map[string]string
+	Command     []string
+	Workspace   string
+	SessionMode string
+	SessionID   string
+	Stdin       string
+	Waiting     bool
 }
 
 // Prepare owns adapter-specific input conventions. The graph engine only
@@ -240,11 +254,11 @@ func Prepare(name string, executor Executor, invocation Invocation) (Prepared, e
 		}
 		return Prepared{Waiting: true}, nil
 	}
-	context := map[string]any{"input": invocation.Input}
+	context := map[string]any{"input": invocation.Input, "config": invocation.Config}
 	workspace := template.Render(executor.Workspace, context)
 	isAgent := executor.Kind == "codex" || executor.Kind == "claude-code"
 	if workspace == "" && isAgent {
-		workspace, _ = invocation.Input["workspace"].(string)
+		workspace, _ = invocation.Config["workspace"].(string)
 	}
 	if workspace == "" {
 		workspace = "."
@@ -261,55 +275,91 @@ func Prepare(name string, executor Executor, invocation Invocation) (Prepared, e
 		if executor.Kind != "command" && executor.Kind != "" {
 			return Prepared{}, fmt.Errorf("executor %s has unsupported kind %q", name, executor.Kind)
 		}
+		prepared.SessionMode = invocation.SessionMode
+		prepared.SessionID = invocation.SessionID
+		if prepared.SessionID != "" {
+			prepared.Command, err = BuildCommand(name, executor, Request{SessionMode: prepared.SessionMode, Workspace: workspace, SessionID: prepared.SessionID, ResultFile: invocation.ResultFile, RunID: invocation.RunID, NodeID: invocation.NodeID})
+			return prepared, err
+		}
 		command := executor.Command
 		if len(command) == 0 {
-			switch values := invocation.Input["command"].(type) {
+			switch values := invocation.Config["command"].(type) {
 			case []string:
 				command = values
 			case []any:
 				for _, value := range values {
 					part, ok := value.(string)
 					if !ok {
-						return Prepared{}, fmt.Errorf("executor %s input.command must contain strings", name)
+						return Prepared{}, fmt.Errorf("executor %s config.command must contain strings", name)
 					}
 					command = append(command, part)
 				}
 			}
 		}
 		if len(command) == 0 {
-			return Prepared{}, fmt.Errorf("executor %s needs a configured command or input.command", name)
+			return Prepared{}, fmt.Errorf("executor %s needs a configured command or config.command", name)
 		}
-		if len(executor.Command) > 0 {
-			prepared.Command = template.RenderArray(command, context)
-		} else {
-			prepared.Command = append([]string(nil), command...)
-		}
+		prepared.Command = template.RenderArray(command, context)
 		return prepared, nil
 	}
-	prompt, _ := invocation.Input["prompt"].(string)
+	prompt := instruction(invocation.Config)
 	if strings.TrimSpace(prompt) == "" {
-		return Prepared{}, fmt.Errorf("executor %s needs input.prompt as a non-empty string", name)
+		prompt = "Process the structured input according to the executor instructions."
 	}
-	prepared.SessionID, _ = invocation.Input["session"].(string)
 	inputJSON, _ := json.Marshal(invocation.Input)
 	inputSchema, _ := json.Marshal(invocation.InputSchema)
 	outputSchema, _ := json.Marshal(invocation.OutputSchema)
 	prompt += fmt.Sprintf("\n\nExecution contract: write one JSON object to AGENTFLOW_RESULT_FILE before exiting successfully. Exact result path: %s. Workspace: %s. Structured input: %s. Input schema: %s. Output schema: %s. stdout and stderr are logs only.", invocation.ResultFile, workspace, inputJSON, inputSchema, outputSchema)
 	prepared.Env["AGENTFLOW_PROMPT"] = prompt
-	prepared.Command, err = BuildCommand(name, executor, Request{Prompt: prompt, Workspace: workspace, SessionID: prepared.SessionID, ResultFile: invocation.ResultFile, RunID: invocation.RunID, NodeID: invocation.NodeID})
+	prepared.SessionMode = invocation.SessionMode
+	prepared.SessionID = invocation.SessionID
+	prepared.Command, err = BuildCommand(name, executor, Request{Prompt: prompt, SessionMode: prepared.SessionMode, Workspace: workspace, SessionID: prepared.SessionID, ResultFile: invocation.ResultFile, RunID: invocation.RunID, NodeID: invocation.NodeID})
 	if executor.PromptMode == "stdin" {
 		prepared.Stdin = prompt
 	}
 	return prepared, err
 }
 
-// SessionFromOutput is metadata owned by the agent adapters, not the graph.
-func SessionFromOutput(executor Executor, output any) string {
-	if executor.Kind != "codex" && executor.Kind != "claude-code" {
-		return ""
+func instruction(config map[string]any) string {
+	for _, key := range []string{"instruction", "instructions"} {
+		if value, ok := config[key].(string); ok {
+			return value
+		}
 	}
-	object, _ := output.(map[string]any)
-	for _, key := range []string{"session_id", "sessionId"} {
+	return ""
+}
+
+// SessionFromLogs extracts adapter metadata from native machine-readable logs.
+// Custom executors may instead write a session ID to AGENTFLOW_SESSION_FILE.
+func SessionFromLogs(executor Executor, logs string) string {
+	if executor.Kind == "claude-code" {
+		var object map[string]any
+		if json.Unmarshal([]byte(logs), &object) == nil {
+			return stringValue(object, "session_id", "sessionId")
+		}
+	}
+	if executor.Kind == "codex" {
+		scanner := bufio.NewScanner(strings.NewReader(logs))
+		for scanner.Scan() {
+			var object map[string]any
+			if json.Unmarshal(scanner.Bytes(), &object) != nil {
+				continue
+			}
+			if id := stringValue(object, "session_id", "sessionId", "thread_id", "threadId"); id != "" {
+				return id
+			}
+			if object["type"] == "thread.started" {
+				if id := stringValue(object, "thread_id", "threadId"); id != "" {
+					return id
+				}
+			}
+		}
+	}
+	return ""
+}
+
+func stringValue(object map[string]any, keys ...string) string {
+	for _, key := range keys {
 		if value, ok := object[key].(string); ok && value != "" {
 			return value
 		}
@@ -321,11 +371,20 @@ func SessionFromOutput(executor Executor, output any) string {
 // Explicit command templates take precedence, which keeps the generic
 // executor useful for custom agent CLIs and test doubles.
 func BuildCommand(name string, executor Executor, request Request) ([]string, error) {
-	if request.SessionID != "" && len(executor.ResumeCommand) > 0 {
+	if executor.Kind == "codex" && executor.Ephemeral && request.SessionID != "" {
+		return nil, fmt.Errorf("executor %s cannot use an existing session while ephemeral is enabled", name)
+	}
+	if request.SessionMode == "fork" && request.SessionID != "" && len(executor.ForkCommand) > 0 {
+		return ExpandCommand(executor.ForkCommand, request.Prompt, request.Workspace, request.SessionID, request.ResultFile, request.RunID, request.NodeID), nil
+	}
+	if request.SessionMode != "fork" && request.SessionID != "" && len(executor.ResumeCommand) > 0 {
 		return ExpandCommand(executor.ResumeCommand, request.Prompt, request.Workspace, request.SessionID, request.ResultFile, request.RunID, request.NodeID), nil
 	}
 	if request.SessionID == "" && len(executor.Command) > 0 {
 		return ExpandCommand(executor.Command, request.Prompt, request.Workspace, request.SessionID, request.ResultFile, request.RunID, request.NodeID), nil
+	}
+	if request.SessionMode == "fork" && request.SessionID != "" && len(executor.ForkCommand) == 0 && len(executor.Command) > 0 {
+		return nil, fmt.Errorf("executor %s does not define forkCommand for session %s; configure a command that forks an existing session", name, request.SessionID)
 	}
 	if request.SessionID != "" && len(executor.ResumeCommand) == 0 && len(executor.Command) > 0 {
 		return nil, fmt.Errorf("executor %s does not define resumeCommand for session %s; configure a command that resumes an existing session", name, request.SessionID)
@@ -364,8 +423,12 @@ func buildClaudeCommand(executor Executor, binary string, request Request) []str
 	command := []string{binary}
 	if request.SessionID != "" {
 		command = append(command, "--resume", request.SessionID)
+		if request.SessionMode == "fork" {
+			command = append(command, "--fork-session")
+		}
 	}
 	command = append(command, "--print")
+	command = append(command, "--output-format", "json")
 	command = append(command, executor.ExtraArgs...)
 	return append(command, request.Prompt)
 }
@@ -373,7 +436,11 @@ func buildClaudeCommand(executor Executor, binary string, request Request) []str
 func buildCodexCommand(executor Executor, binary string, request Request) []string {
 	command := []string{binary, "exec"}
 	if request.SessionID != "" {
-		command = append(command, "resume")
+		if request.SessionMode == "fork" {
+			command = append(command, "fork")
+		} else {
+			command = append(command, "resume")
+		}
 	}
 	if executor.Model != "" {
 		command = append(command, "-m", executor.Model)
@@ -387,12 +454,13 @@ func buildCodexCommand(executor Executor, binary string, request Request) []stri
 	if executor.DangerouslyBypassApprovals {
 		command = append(command, "--dangerously-bypass-approvals-and-sandbox")
 	}
-	if executor.SkipGitRepoCheck && request.SessionID == "" {
+	if executor.SkipGitRepoCheck && (request.SessionID == "" || request.SessionMode == "fork") {
 		command = append(command, "--skip-git-repo-check")
 	}
 	if executor.Ephemeral {
 		command = append(command, "--ephemeral")
 	}
+	command = append(command, "--json")
 	command = append(command, executor.ExtraArgs...)
 	if request.SessionID != "" {
 		command = append(command, request.SessionID)

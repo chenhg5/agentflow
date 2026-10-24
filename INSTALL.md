@@ -44,7 +44,7 @@ The registry is read from the current working directory, then the home directory
 
 Generic programs read `AGENTFLOW_INPUT_FILE`, write JSON to `AGENTFLOW_RESULT_FILE`, and exit with code zero. Logs belong on stdout/stderr. AgentFlow supplies run, node, and invocation identifiers in environment variables; reserved contract variables cannot be overridden with executor `env`.
 
-The built-in `process` executor reads an argument array from `input.command`. The built-in `external` executor waits for `run submit --output JSON`. Codex/Claude Code adapters read `input.prompt`, optional `input.workspace`, and optional `input.session`. Business fields remain inside input/output contracts.
+The built-in `process` executor reads an argument array from `config.command`. The built-in `external` executor waits for `run submit --output JSON`. Codex/Claude Code adapters read `config.instruction` and optional `config.workspace`. Session policy is declared in `execution.session`; business data flows from the run input or previous node output.
 
 ## First workflow
 

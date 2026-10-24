@@ -25,7 +25,7 @@ func validateTransitions(workflow model.Workflow) []string {
 		errors = append(errors, "entry must name a node")
 	}
 	if len(workflow.Edges) == 0 {
-		return append(errors, "version 2 requires edges")
+		return append(errors, "version 3 requires edges")
 	}
 	outgoing := map[string][]model.Transition{}
 	seen := map[string]bool{}

@@ -7,7 +7,7 @@ import (
 )
 
 func TestDescribeAndValidateConditionalCycle(t *testing.T) {
-	workflow := model.Workflow{Version: "2", Name: "graph", Entry: "draft", Nodes: []model.Node{
+	workflow := model.Workflow{Version: "3", Name: "graph", Entry: "draft", Nodes: []model.Node{
 		{ID: "draft", Executor: "codex"}, {ID: "review", Executor: "external"},
 	}, Edges: []model.Transition{
 		{From: "draft", To: "review"},

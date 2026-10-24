@@ -16,39 +16,101 @@
         --text: #e6edf3;
         --muted: #8b949e;
         --accent: #79c0ff;
+        --toolbar-bg: rgba(13, 17, 23, .92);
+        --flow-bg: #0b1016;
+        --flow-grid: #26313d;
+        --node-bg: #18212b;
+        --node-border: #44515f;
+        --node-shadow: rgba(0, 0, 0, .25);
+        --code-bg: #0d1117;
+        --code-text: #c9d1d9;
+        --control-bg: #161b22;
+        --control-icon: #c9d1d9;
+        --minimap-bg: #161b22;
+        --minimap-mask: rgba(13, 17, 23, .7);
+        --edge: #52606d;
+        --edge-condition: #d29922;
+        --edge-label: #9ecbff;
+        --edge-label-bg: #161b22;
+        --active: #1f3346;
+        --active-border: #2f6f9f;
+      }
+      :root[data-theme="light"] {
+        color-scheme: light;
+        --bg: #f4f7fb;
+        --panel: #ffffff;
+        --panel-2: #edf2f7;
+        --border: #d6dee8;
+        --text: #17212b;
+        --muted: #64748b;
+        --accent: #1769aa;
+        --toolbar-bg: rgba(255, 255, 255, .94);
+        --flow-bg: #f8fafc;
+        --flow-grid: #d8e0e9;
+        --node-bg: #ffffff;
+        --node-border: #b8c5d3;
+        --node-shadow: rgba(35, 52, 70, .14);
+        --code-bg: #f6f8fa;
+        --code-text: #243242;
+        --control-bg: #ffffff;
+        --control-icon: #52606d;
+        --minimap-bg: #ffffff;
+        --minimap-mask: rgba(226, 232, 240, .74);
+        --edge: #718096;
+        --edge-condition: #a15c00;
+        --edge-label: #185b91;
+        --edge-label-bg: #ffffff;
+        --active: #e6f1fb;
+        --active-border: #9ac5e7;
       }
       * { box-sizing: border-box; }
       html, body, #root { width: 100%; height: 100%; margin: 0; }
-      body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-      button, input { font: inherit; }
+      body { background: var(--bg); color: var(--text); font-family: ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; transition: background .18s ease, color .18s ease; }
+      body.resizing, body.resizing * { cursor: row-resize !important; user-select: none !important; }
+      button, input, select { font: inherit; }
+      button, select { color: var(--text); }
       .shell { display: grid; grid-template-columns: 290px 1fr; height: 100%; overflow: hidden; }
       .sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
-      .brand { padding: 20px 18px 16px; border-bottom: 1px solid var(--border); }
-      .brand h1 { margin: 0; font-size: 18px; letter-spacing: .02em; }
-      .brand p { color: var(--muted); font-size: 12px; margin: 6px 0 0; }
-      .side-section { padding: 16px 12px 8px; color: var(--muted); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+      .brand { height: 62px; padding: 0 18px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; }
+      .brand h1 { margin: 0; font-size: 16px; line-height: 1.1; letter-spacing: .02em; }
+      .brand p { color: var(--muted); font-size: 11px; line-height: 1.2; margin: 3px 0 0; }
+      .side-section { padding: 14px 12px 7px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
       .run-list { overflow: auto; padding: 0 8px 16px; }
-      .run-item { display: block; color: var(--text); text-decoration: none; padding: 10px; margin: 3px 0; border: 1px solid transparent; border-radius: 8px; }
+      .run-item { display: block; color: var(--text); text-decoration: none; padding: 9px 10px; margin: 3px 0; border: 1px solid transparent; border-radius: 8px; }
       .run-item:hover { background: var(--panel-2); border-color: var(--border); }
-      .run-item.active { background: #1f3346; border-color: #2f6f9f; }
-      .run-name { font-size: 13px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .run-meta { color: var(--muted); font-size: 11px; margin-top: 5px; display: flex; justify-content: space-between; gap: 8px; }
+      .run-item.active { background: var(--active); border-color: var(--active-border); }
+      .run-name { font-size: 12px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .run-meta { color: var(--muted); font-size: 10px; margin-top: 4px; display: flex; justify-content: space-between; gap: 8px; }
       .main { min-width: 0; display: grid; grid-template-rows: auto 1fr; }
-      .toolbar { height: 62px; display: flex; align-items: center; gap: 14px; padding: 0 20px; border-bottom: 1px solid var(--border); background: rgba(13, 17, 23, .92); }
+      .toolbar { min-height: 62px; display: flex; align-items: center; gap: 14px; padding: 9px 20px; border-bottom: 1px solid var(--border); background: var(--toolbar-bg); }
       .title { min-width: 0; flex: 1; }
-      .title h2 { margin: 0; font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .title p { margin: 4px 0 0; color: var(--muted); font-size: 11px; }
-      .toolbar button { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); padding: 7px 10px; cursor: pointer; }
-      .toolbar button:hover { border-color: var(--accent); }
-      .content { min-height: 0; display: grid; grid-template-rows: 1fr auto auto; }
-      .flow { min-height: 0; background: #0b1016; }
-      .react-flow__node { border: 1px solid #44515f; border-radius: 10px; background: #18212b; color: var(--text); box-shadow: 0 4px 16px rgba(0,0,0,.25); padding: 0; width: 210px; overflow: hidden; }
-      .react-flow__node.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 18px rgba(0,0,0,.3); }
-      .node-card { padding: 12px 14px; }
-      .node-head { display: flex; align-items: center; gap: 8px; }
-      .node-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; background: #8b949e; }
-      .node-name { font-size: 13px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-      .node-type { color: var(--muted); font-size: 11px; margin-top: 5px; }
+      .title h2 { margin: 0; font-size: 14px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .title p { margin: 3px 0 0; color: var(--muted); font-size: 10px; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .toolbar-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
+      .toolbar button, .toolbar select { border: 1px solid var(--border); border-radius: 6px; background: var(--panel); color: var(--text); padding: 6px 9px; font-size: 11px; line-height: 1.2; cursor: pointer; }
+      .toolbar button:hover, .toolbar select:hover, .toolbar button:focus-visible, .toolbar select:focus-visible { border-color: var(--accent); outline: none; }
+      .select-wrap { position: relative; display: inline-flex; }
+      .select-wrap::after { content: "⌄"; position: absolute; right: 9px; top: 50%; transform: translateY(-55%); color: var(--muted); font-size: 13px; pointer-events: none; }
+      .toolbar select.language-select { min-width: 108px; appearance: none; padding-right: 26px; }
+      .content { min-height: 0; display: flex; flex-direction: column; }
+      .flow { min-height: 160px; flex: 1 1 auto; background: var(--flow-bg); }
+      .react-flow__node { border: 1px solid var(--node-border); border-radius: 10px; background: var(--node-bg); color: var(--text); box-shadow: 0 4px 16px var(--node-shadow); padding: 0; width: 210px; overflow: hidden; }
+      .react-flow__node.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent), 0 4px 18px var(--node-shadow); }
+      .react-flow__controls { border: 1px solid var(--border); border-radius: 7px; overflow: hidden; box-shadow: 0 4px 14px var(--node-shadow); }
+      .react-flow__controls-button { width: 28px; height: 28px; border-bottom: 1px solid var(--border); background: var(--control-bg); color: var(--control-icon); }
+      .react-flow__controls-button:last-child { border-bottom: 0; }
+      .react-flow__controls-button:hover { background: var(--panel-2); }
+      .react-flow__controls-button svg { fill: currentColor; }
+      .react-flow__minimap { background: var(--minimap-bg); border: 1px solid var(--border); box-shadow: 0 4px 14px var(--node-shadow); }
+      .react-flow__minimap-mask { fill: var(--minimap-mask); }
+      .react-flow__edge-text { fill: var(--edge-label); }
+      .react-flow__edge-textbg { fill: var(--edge-label-bg); }
+      .react-flow__attribution { background: var(--panel); color: var(--muted); }
+      .node-card { padding: 11px 13px; }
+      .node-head { display: flex; align-items: center; gap: 7px; }
+      .node-dot { width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; background: #8b949e; }
+      .node-name { font-size: 12px; font-weight: 700; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      .node-type { color: var(--muted); font-size: 10px; margin-top: 4px; }
       .node-stats { display: flex; gap: 8px; color: var(--muted); font-size: 10px; margin-top: 10px; }
       .status-succeeded { background: #238636; }
       .status-running { background: #1f6feb; }
@@ -56,31 +118,45 @@
       .status-failed { background: #f85149; }
       .status-skipped { background: #8b949e; }
       .status-pending { background: #484f58; }
-      .summary { border-top: 1px solid var(--border); background: var(--panel); padding: 12px 18px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
+      .lower-panel { min-height: 160px; max-height: calc(100% - 160px); display: flex; flex-direction: column; overflow: hidden; }
+      .resize-handle { flex: 0 0 10px; position: relative; z-index: 2; background: var(--panel); border-top: 1px solid var(--border); border-bottom: 1px solid var(--border); cursor: row-resize; }
+      .resize-handle::before { content: ""; position: absolute; left: 50%; top: 4px; width: 42px; height: 2px; border-radius: 999px; transform: translateX(-50%); background: var(--muted); opacity: .65; }
+      .resize-handle:hover, .resize-handle.dragging, .resize-handle:focus-visible { background: var(--panel-2); outline: none; }
+      .resize-handle:hover::before, .resize-handle.dragging::before, .resize-handle:focus-visible::before { background: var(--accent); opacity: 1; }
+      .summary { flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--panel); padding: 12px 18px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
       .metric { min-width: 90px; }
       .metric-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
-      .metric-value { font-size: 14px; margin-top: 3px; }
-      .empty, .loading, .error { padding: 32px; color: var(--muted); }
-      .error { color: #ff7b72; }
+      .metric-value { font-size: 13px; margin-top: 3px; }
+      .comparison { flex: 0 0 auto; max-height: 100px; overflow: auto; border-bottom: 1px solid var(--border); background: var(--panel); padding: 9px 18px; }
+      .comparison-title { color: var(--muted); font-size: 11px; margin-bottom: 7px; }
+      .comparison-grid { display: flex; flex-wrap: wrap; gap: 12px 22px; }
+      .empty, .loading, .error { padding: 20px; color: var(--muted); font-size: 12px; line-height: 1.45; }
+      .summary .empty { padding: 0; font-size: 11px; line-height: 1.3; }
+      .content > .empty { padding: 24px; }
+      .error { color: #d93025; }
+      :root:not([data-theme="light"]) .error { color: #ff7b72; }
       .legend { margin-left: auto; display: flex; gap: 12px; flex-wrap: wrap; }
       .legend span { color: var(--muted); font-size: 11px; display: inline-flex; align-items: center; gap: 5px; }
       .legend i { width: 8px; height: 8px; display: inline-block; border-radius: 50%; }
-      .inspector { max-height: 260px; overflow: auto; border-top: 1px solid var(--border); background: #111820; padding: 14px 18px; }
+      .inspector { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--panel); padding: 14px 18px; }
       .inspector-empty { color: var(--muted); font-size: 12px; }
       .inspector-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
-      .inspector-head strong { font-size: 14px; }
-      .inspector-head span { color: var(--muted); font-size: 11px; }
+      .inspector-head strong { font-size: 13px; }
+      .inspector-head span { color: var(--muted); font-size: 10px; }
       .inspector-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
       .inspector-section { min-width: 0; }
       .inspector-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 5px; }
-      .inspector pre { margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: #0d1117; color: #c9d1d9; font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 150px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
-      .edge-chip { display: inline-block; color: #9ecbff; border: 1px solid #315d85; border-radius: 999px; padding: 2px 6px; margin: 0 4px 4px 0; font-size: 10px; }
-      .graph-warning { color: #d29922; font-size: 11px; margin-top: 8px; }
+      .inspector pre { margin: 0; padding: 8px; border: 1px solid var(--border); border-radius: 6px; background: var(--code-bg); color: var(--code-text); font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; max-height: 150px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+      .edge-chip { display: inline-block; color: var(--edge-label); border: 1px solid var(--active-border); border-radius: 999px; padding: 2px 6px; margin: 0 4px 4px 0; font-size: 10px; }
+      .graph-warning { color: var(--edge-condition); font-size: 11px; margin-top: 8px; }
+      .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
       @media (max-width: 760px) {
         .shell { grid-template-columns: 1fr; grid-template-rows: auto 1fr; }
         .sidebar { max-height: 220px; border-right: 0; border-bottom: 1px solid var(--border); }
         .run-list { display: flex; overflow-x: auto; }
         .run-item { min-width: 190px; }
+        .toolbar { align-items: flex-start; flex-wrap: wrap; }
+        .toolbar-actions { width: 100%; justify-content: flex-start; }
         .legend { margin-left: 0; }
         .inspector-grid { grid-template-columns: 1fr; }
       }
@@ -89,11 +165,40 @@
   <body>
     <div id="root"><div class="loading">Loading AgentFlow visualization…</div></div>
     <script type="module">
-      import React, { useEffect, useMemo, useState } from "https://esm.sh/react@18.3.1";
+      import React, { useEffect, useMemo, useRef, useState } from "https://esm.sh/react@18.3.1";
       import { createRoot } from "https://esm.sh/react-dom@18.3.1/client";
       import ReactFlow, { Background, Controls, MiniMap, MarkerType, Position } from "https://esm.sh/reactflow@11.11.4?deps=react@18.3.1,react-dom@18.3.1";
 
       const h = React.createElement;
+      const languageTags = { en: "en-US", "zh-CN": "zh-CN", "zh-TW": "zh-TW" };
+      const languageOptions = [
+        { value: "en", label: "English" },
+        { value: "zh-CN", label: "简体中文" },
+        { value: "zh-TW", label: "繁體中文" },
+      ];
+      const messages = {
+        en: {
+          loading: "Loading AgentFlow visualization…", unable: "Unable to load visualization: {error}", language: "Language", light: "Light", dark: "Dark", switchToLight: "Switch to light mode", switchToDark: "Switch to dark mode", refresh: "Refresh", visualization: "Workflow visualization", recentRuns: "Recent runs", noRuns: "No runs yet", selectRun: "Select a run from the sidebar to inspect its graph", chooseRun: "Choose a run to open its workflow graph.", definitionPreview: "Workflow definition preview · no run attached", selectNode: "Select a node to inspect its executor, contract, artifacts, and runtime state.", inputSchema: "Input schema", outputSchema: "Output schema", config: "Executor config", sessionPolicy: "Session policy", sessionId: "Session ID", runtimeInput: "Runtime input", runtimeResult: "Runtime result", artifacts: "Artifacts", edges: "Edges", status: "Status", duration: "Duration", attempts: "Attempts", input: "Input", output: "Output", logs: "Logs", comparison: "Compared with previous run", baseline: "Baseline", change: "Change", improved: "improved", regressed: "regressed", unchanged: "unchanged", resizeInspector: "Drag to resize the graph and details panels", loopMax: "loop ≤ {value}", statusSucceeded: "succeeded", statusRunning: "running", statusWaitingInput: "waiting for input", statusFailed: "failed", statusSkipped: "skipped", statusPending: "pending", attemptsValue: "{value} attempts", end: "end", updated: "updated"
+        },
+        "zh-CN": {
+          loading: "正在加载 AgentFlow 可视化…", unable: "无法加载可视化页面：{error}", language: "语言", light: "浅色", dark: "深色", switchToLight: "切换到浅色模式", switchToDark: "切换到深色模式", refresh: "刷新", visualization: "工作流可视化", recentRuns: "最近运行", noRuns: "暂无运行记录", selectRun: "从左侧选择一次运行来查看图", chooseRun: "请选择一次运行来打开工作流图。", definitionPreview: "工作流定义预览 · 尚未关联运行", selectNode: "选择一个节点，查看它的执行器、契约、产物和运行状态。", inputSchema: "输入 schema", outputSchema: "输出 schema", config: "执行器配置", sessionPolicy: "Session 策略", sessionId: "Session ID", runtimeInput: "实际输入", runtimeResult: "运行结果", artifacts: "产物", edges: "边", status: "状态", duration: "耗时", attempts: "尝试次数", input: "输入", output: "输出", logs: "日志", comparison: "与上一次运行对比", baseline: "基线", change: "变化", improved: "提升", regressed: "下降", unchanged: "不变", resizeInspector: "拖动调整画布和详情面板的高度", loopMax: "循环 ≤ {value}", statusSucceeded: "成功", statusRunning: "运行中", statusWaitingInput: "等待输入", statusFailed: "失败", statusSkipped: "已跳过", statusPending: "待处理", attemptsValue: "{value} 次尝试", end: "结束", updated: "更新时间"
+        },
+        "zh-TW": {
+          loading: "正在載入 AgentFlow 視覺化…", unable: "無法載入視覺化頁面：{error}", language: "語言", light: "淺色", dark: "深色", switchToLight: "切換到淺色模式", switchToDark: "切換到深色模式", refresh: "重新整理", visualization: "工作流視覺化", recentRuns: "最近執行", noRuns: "尚無執行記錄", selectRun: "從左側選擇一次執行來查看圖形", chooseRun: "請選擇一次執行來開啟工作流圖。", definitionPreview: "工作流定義預覽 · 尚未關聯執行", selectNode: "選擇一個節點，查看它的執行器、契約、產物和執行狀態。", inputSchema: "輸入 schema", outputSchema: "輸出 schema", config: "執行器設定", sessionPolicy: "Session 策略", sessionId: "Session ID", runtimeInput: "實際輸入", runtimeResult: "執行結果", artifacts: "產物", edges: "邊", status: "狀態", duration: "耗時", attempts: "嘗試次數", input: "輸入", output: "輸出", logs: "日誌", comparison: "與上一次執行對比", baseline: "基線", change: "變化", improved: "提升", regressed: "下降", unchanged: "不變", resizeInspector: "拖動調整畫布和詳細資訊面板的高度", loopMax: "循環 ≤ {value}", statusSucceeded: "成功", statusRunning: "執行中", statusWaitingInput: "等待輸入", statusFailed: "失敗", statusSkipped: "已跳過", statusPending: "待處理", attemptsValue: "{value} 次嘗試", end: "結束", updated: "更新時間"
+        }
+      };
+      const statusMessageKeys = { succeeded: "statusSucceeded", running: "statusRunning", waiting_input: "statusWaitingInput", failed: "statusFailed", skipped: "statusSkipped", pending: "statusPending" };
+      const themePalettes = {
+        dark: { grid: "#26313d", edge: "#52606d", condition: "#d29922", label: "#79c0ff", labelBackground: "#161b22" },
+        light: { grid: "#d8e0e9", edge: "#718096", condition: "#a15c00", label: "#185b91", labelBackground: "#ffffff" },
+      };
+      const t = (language, key, values = {}) => {
+        const table = messages[language] || messages.en;
+        let value = table[key] || messages.en[key] || key;
+        Object.entries(values).forEach(([name, replacement]) => { value = value.replace("{" + name + "}", String(replacement)); });
+        return value;
+      };
+      const statusLabel = (language, status) => t(language, statusMessageKeys[status] || status);
       const statusClass = (status) => "status-" + (status || "pending");
       const formatMs = (value) => {
         if (!value) return "0 ms";
@@ -106,14 +211,16 @@
         if (value < 1024 * 1024) return (value / 1024).toFixed(1) + " KB";
         return (value / 1024 / 1024).toFixed(1) + " MB";
       };
-      const formatTime = (value) => value ? new Date(value).toLocaleString() : "";
+      const formatTime = (value, language) => value ? new Date(value).toLocaleString(languageTags[language] || languageTags.en) : "";
+      const readPreference = (key, fallback) => {
+        try { return localStorage.getItem(key) || fallback; } catch (_) { return fallback; }
+      };
 
-      function nodeLayout(workflow, state, description) {
+      function nodeLayout(workflow, state, description, language, theme, selectedNodeID) {
         const graphEdges = description?.edges || [];
         const definitions = [...(workflow?.nodes || [])];
         if (graphEdges.some((edge) => edge.target === "$end")) definitions.push({ id: "$end", executor: "end" });
         const levels = new Map();
-        const byID = new Map(definitions.map((node) => [node.id, node]));
         const levelOf = (id, trail = new Set()) => {
           if (levels.has(id)) return levels.get(id);
           if (trail.has(id)) return 0;
@@ -130,6 +237,7 @@
         };
         definitions.forEach((node) => levelOf(node.id));
         const rows = new Map();
+        const palette = themePalettes[theme] || themePalettes.dark;
         return {
           nodes: definitions.map((definition) => {
             const nodeState = definition.id === "$end" ? { status: state?.status === "succeeded" ? "succeeded" : "pending" } : (state?.nodes?.[definition.id] || {});
@@ -140,10 +248,11 @@
             return {
               id: definition.id,
               type: "default",
+              selected: definition.id === selectedNodeID,
               position: { x: level * 280 + 50, y: row * 150 + 50 },
               sourcePosition: Position.Right,
               targetPosition: Position.Left,
-              data: { label: h(NodeCard, { definition, state: nodeState, status }), definition, state: nodeState },
+              data: { label: h(NodeCard, { definition, state: nodeState, status, language }), definition, state: nodeState },
             };
           }),
           edges: graphEdges.map((edge) => {
@@ -155,39 +264,41 @@
               source: edge.source,
               target: edge.target,
               animated: (state?.nodes?.[edge.target]?.status === "running"),
-              label: hasCondition ? edge.condition : (edge.maxIterations ? "loop ≤ " + edge.maxIterations : undefined),
-              labelStyle: { fill: hasCondition ? "#d29922" : "#79c0ff", fontSize: 10 },
+              label: hasCondition ? edge.condition : (edge.maxIterations ? t(language, "loopMax", { value: edge.maxIterations }) : undefined),
+              labelStyle: { fill: hasCondition ? palette.condition : palette.label, fontSize: 10 },
+              labelBgStyle: { fill: palette.labelBackground, fillOpacity: 1 },
               markerEnd: { type: MarkerType.ArrowClosed },
-              style: { stroke: hasCondition ? "#d29922" : "#52606d", strokeWidth: 1.5, strokeDasharray: hasCondition ? "5 4" : undefined },
+              style: { stroke: hasCondition ? palette.condition : palette.edge, strokeWidth: 1.5, strokeDasharray: hasCondition ? "5 4" : undefined },
             };
           }),
         };
       }
 
-      function NodeCard({ definition, state, status }) {
+      function NodeCard({ definition, state, status, language }) {
         return h("div", { className: "node-card" },
           h("div", { className: "node-head" },
             h("i", { className: "node-dot " + statusClass(status) }),
             h("span", { className: "node-name", title: definition.id }, definition.id),
           ),
-          h("div", { className: "node-type" }, definition.executor + " · " + status),
+          h("div", { className: "node-type" }, (definition.executor || t(language, "end")) + " · " + statusLabel(language, status)),
           state && (state.durationMs || state.attempts || state.outputBytes) ? h("div", { className: "node-stats" },
             h("span", null, formatMs(state.durationMs)),
-            h("span", null, (state.attempts || 0) + " attempts"),
+            h("span", null, t(language, "attemptsValue", { value: state.attempts || 0 })),
             h("span", null, formatBytes(state.outputBytes || 0)),
           ) : null,
         );
       }
 
-      function Flow({ workflow, state, description, onSelect }) {
-        const graph = useMemo(() => nodeLayout(workflow, state, description), [workflow, state, description]);
+      function Flow({ workflow, state, description, language, theme, selectedNodeID, onSelect }) {
+        const graph = useMemo(() => nodeLayout(workflow, state, description, language, theme, selectedNodeID), [workflow, state, description, language, theme, selectedNodeID]);
+        const palette = themePalettes[theme] || themePalettes.dark;
         return h("div", { className: "flow" },
-          h(ReactFlow, { nodes: graph.nodes, edges: graph.edges, fitView: true, minZoom: 0.2, maxZoom: 1.8, attributionPosition: "bottom-left", onNodeClick: (_event, node) => onSelect(node.data.definition) },
-            h(Background, { color: "#26313d", gap: 24, size: 1 }),
+          h(ReactFlow, { nodes: graph.nodes, edges: graph.edges, fitView: true, minZoom: 0.2, maxZoom: 1.8, attributionPosition: "bottom-left", onNodeClick: (_event, node) => onSelect(node.data.definition), onPaneClick: () => onSelect(null) },
+            h(Background, { color: palette.grid, gap: 24, size: 1 }),
             h(Controls, null),
             h(MiniMap, { nodeColor: (node) => {
               const value = node?.data?.state?.status || "pending";
-              return value === "succeeded" ? "#238636" : value === "failed" ? "#f85149" : value === "running" ? "#1f6feb" : "#8b949e";
+              return value === "succeeded" ? "#238636" : value === "failed" ? "#f85149" : value === "running" ? "#1f6feb" : theme === "light" ? "#94a3b8" : "#8b949e";
             }}),
           ),
         );
@@ -201,20 +312,22 @@
         );
       }
 
-      function Inspector({ definition, state, description }) {
-        if (!definition) return h("div", { className: "inspector" }, h("div", { className: "inspector-empty" }, "Select a node to inspect its executor, contract, artifacts, and runtime state."));
+      function Inspector({ definition, state, description, language }) {
+        if (!definition) return h("div", { className: "inspector" }, h("div", { className: "inspector-empty" }, t(language, "selectNode")));
         const edges = (description?.edges || []).filter((edge) => edge.source === definition.id || edge.target === definition.id);
         return h("div", { className: "inspector" },
-          h("div", { className: "inspector-head" }, h("strong", null, definition.id), h("span", null, definition.executor + (state?.status ? " · " + state.status : ""))),
+          h("div", { className: "inspector-head" }, h("strong", null, definition.id), h("span", null, definition.executor + (state?.status ? " · " + statusLabel(language, state.status) : ""))),
           h("div", { className: "inspector-grid" },
-            h(JsonBlock, { label: "Input schema", value: definition.inputSchema }),
-            h(JsonBlock, { label: "Output schema", value: definition.outputSchema }),
-            h(JsonBlock, { label: "Input template", value: definition.input }),
-            h(JsonBlock, { label: "Runtime input", value: state?.input }),
-            h(JsonBlock, { label: "Runtime result", value: state?.result }),
-            h(JsonBlock, { label: "Artifacts", value: state?.artifacts }),
+            h(JsonBlock, { label: t(language, "inputSchema"), value: definition.inputSchema }),
+            h(JsonBlock, { label: t(language, "outputSchema"), value: definition.outputSchema }),
+            h(JsonBlock, { label: t(language, "config"), value: definition.config }),
+            h(JsonBlock, { label: t(language, "sessionPolicy"), value: definition.execution?.session }),
+            h(JsonBlock, { label: t(language, "sessionId"), value: state?.sessionId }),
+            h(JsonBlock, { label: t(language, "runtimeInput"), value: state?.input }),
+            h(JsonBlock, { label: t(language, "runtimeResult"), value: state?.result }),
+            h(JsonBlock, { label: t(language, "artifacts"), value: state?.artifacts }),
           ),
-          edges.length ? h("div", { className: "graph-warning" }, "Edges: ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id }, edge.source + " → " + edge.target + (edge.condition ? " · " + edge.condition : "") + (edge.maxIterations ? " · max " + edge.maxIterations : "")))) : null,
+          edges.length ? h("div", { className: "graph-warning" }, t(language, "edges") + ": ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id }, edge.source + " → " + edge.target + (edge.condition ? " · " + edge.condition : "") + (edge.maxIterations ? " · max " + edge.maxIterations : "")))) : null,
         );
       }
 
@@ -222,39 +335,112 @@
         return h("div", { className: "metric" }, h("div", { className: "metric-label" }, label), h("div", { className: "metric-value" }, value));
       }
 
-      function Summary({ view }) {
-        if (view.mode !== "run") return h("div", { className: "summary" }, h("span", { className: "empty" }, "Workflow definition preview · no run attached"));
+      function Comparison({ comparison, language }) {
+        if (!comparison) return null;
+        const runtime = comparison.runtime || {};
+        const rows = [...Object.entries(runtime), ...Object.entries(comparison.measurements || {})];
+        const label = (key) => key.replaceAll("_", " ");
+        const value = (metric) => {
+          const percent = metric.change_percent === undefined ? "" : ` (${metric.change_percent >= 0 ? "+" : ""}${metric.change_percent.toFixed(1)}%)`;
+          const state = metric.delta === 0 ? " · " + t(language, "unchanged") : metric.improved === undefined ? "" : metric.improved ? " · " + t(language, "improved") : " · " + t(language, "regressed");
+          return `${metric.delta >= 0 ? "+" : ""}${metric.delta}${percent}${state}`;
+        };
+        return h("div", { className: "comparison" },
+          h("div", { className: "comparison-title" }, t(language, "comparison") + " · " + (comparison.baseline?.run_id || "") + (comparison.same_version ? "" : " · Δ version")),
+          h("div", { className: "comparison-grid" }, rows.map(([name, metric]) => h(Metric, { key: name, label: label(name), value: value(metric) }))),
+        );
+      }
+
+      function Summary({ view, language }) {
+        if (view.mode !== "run") return null;
         const run = view.run;
         const snapshot = run.metrics || {};
         return h("div", { className: "summary" },
-          h(Metric, { label: "Status", value: run.status }),
-          h(Metric, { label: "Duration", value: formatMs(snapshot.duration_ms) }),
-          h(Metric, { label: "Attempts", value: snapshot.totals?.attempts || 0 }),
-          h(Metric, { label: "Input", value: formatBytes(snapshot.totals?.input_bytes || 0) }),
-          h(Metric, { label: "Output", value: formatBytes(snapshot.totals?.output_bytes || 0) }),
-          h(Metric, { label: "Logs", value: formatBytes((snapshot.totals?.stdout_bytes || 0) + (snapshot.totals?.stderr_bytes || 0)) }),
+          h(Metric, { label: t(language, "status"), value: statusLabel(language, run.status) }),
+          h(Metric, { label: t(language, "duration"), value: formatMs(snapshot.duration_ms) }),
+          h(Metric, { label: t(language, "attempts"), value: snapshot.totals?.attempts || 0 }),
+          h(Metric, { label: t(language, "input"), value: formatBytes(snapshot.totals?.input_bytes || 0) }),
+          h(Metric, { label: t(language, "output"), value: formatBytes(snapshot.totals?.output_bytes || 0) }),
+          h(Metric, { label: t(language, "logs"), value: formatBytes((snapshot.totals?.stdout_bytes || 0) + (snapshot.totals?.stderr_bytes || 0)) }),
           h("div", { className: "legend" },
-            ["succeeded", "running", "waiting_input", "failed", "pending"].map((status) => h("span", { key: status }, h("i", { className: statusClass(status) }), status)),
+            ["succeeded", "running", "waiting_input", "failed", "pending"].map((status) => h("span", { key: status }, h("i", { className: statusClass(status) }), statusLabel(language, status))),
           ),
         );
       }
 
-      function Sidebar({ view }) {
+      function Sidebar({ view, language }) {
         const runs = view.mode === "dashboard" ? view.runs : view.runs || [];
         return h("aside", { className: "sidebar" },
-          h("div", { className: "brand" }, h("h1", null, "AgentFlow"), h("p", null, "Workflow visualization")),
-          h("div", { className: "side-section" }, "Recent runs"),
+          h("div", { className: "brand" }, h("h1", null, "AgentFlow"), h("p", null, t(language, "visualization"))),
+          h("div", { className: "side-section" }, t(language, "recentRuns")),
           h("div", { className: "run-list" }, runs.length ? runs.map((run) => h("a", { className: "run-item" + (view.run?.run_id === run.run_id ? " active" : ""), href: "?run=" + encodeURIComponent(run.run_id), key: run.run_id },
             h("div", { className: "run-name" }, run.workflow),
-            h("div", { className: "run-meta" }, h("span", null, run.status), h("span", null, formatTime(run.updated_at))),
-          )) : h("div", { className: "empty" }, "No runs yet")),
+            h("div", { className: "run-meta" }, h("span", null, statusLabel(language, run.status)), h("span", null, formatTime(run.updated_at, language))),
+          )) : h("div", { className: "empty" }, t(language, "noRuns"))),
         );
+      }
+
+      function ViewControls({ language, setLanguage, theme, setTheme, onRefresh }) {
+        return h("div", { className: "toolbar-actions" },
+          h("label", { className: "select-wrap" }, h("span", { className: "sr-only" }, t(language, "language")), h("select", { className: "language-select", value: language, onChange: (event) => setLanguage(event.target.value), "aria-label": t(language, "language") }, languageOptions.map((option) => h("option", { value: option.value, key: option.value }, option.label)))),
+          h("button", { onClick: () => setTheme(theme === "dark" ? "light" : "dark"), "aria-label": theme === "dark" ? t(language, "switchToLight") : t(language, "switchToDark"), title: theme === "dark" ? t(language, "switchToLight") : t(language, "switchToDark") }, (theme === "dark" ? "☀ " + t(language, "light") : "☾ " + t(language, "dark"))),
+          h("button", { onClick: onRefresh }, t(language, "refresh")),
+        );
+      }
+
+      function ResizeHandle({ height, setHeight, language }) {
+        const [dragging, setDragging] = useState(false);
+        const start = useRef(null);
+        const clamp = (value) => {
+          const viewport = document.documentElement.clientHeight || window.innerHeight || 900;
+          return Math.round(Math.max(160, Math.min(viewport - 160, value)));
+        };
+        useEffect(() => {
+          if (!dragging) return undefined;
+          const move = (event) => {
+            if (!start.current) return;
+            setHeight(clamp(start.current.height + start.current.y - event.clientY));
+          };
+          const stop = () => { setDragging(false); start.current = null; document.body.classList.remove("resizing"); };
+          window.addEventListener("pointermove", move);
+          window.addEventListener("pointerup", stop, { once: true });
+          return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); };
+        }, [dragging]);
+        const begin = (event) => {
+          event.preventDefault();
+          start.current = { y: event.clientY, height };
+          setDragging(true);
+          document.body.classList.add("resizing");
+        };
+        const onKeyDown = (event) => {
+          const step = 32;
+          if (event.key === "ArrowUp") { event.preventDefault(); setHeight(clamp(height + step)); }
+          if (event.key === "ArrowDown") { event.preventDefault(); setHeight(clamp(height - step)); }
+          if (event.key === "Home") { event.preventDefault(); setHeight(clamp(160)); }
+          if (event.key === "End") { event.preventDefault(); setHeight(clamp((document.documentElement.clientHeight || window.innerHeight || 900) - 160)); }
+        };
+        return h("div", { className: "resize-handle" + (dragging ? " dragging" : ""), role: "separator", "aria-orientation": "horizontal", "aria-label": t(language, "resizeInspector"), "aria-valuenow": height, tabIndex: 0, title: t(language, "resizeInspector"), onPointerDown: begin, onKeyDown, onDoubleClick: () => setHeight(280) });
       }
 
       function App() {
         const [view, setView] = useState(null);
         const [selectedNode, setSelectedNode] = useState(null);
         const [error, setError] = useState("");
+        const [language, setLanguage] = useState(() => readPreference("agentflow-language", "en"));
+        const [theme, setTheme] = useState(() => readPreference("agentflow-theme", "dark"));
+        const [lowerPanelHeight, setLowerPanelHeight] = useState(() => Number(readPreference("agentflow-lower-panel-height", "280")) || 280);
+        useEffect(() => {
+          document.documentElement.dataset.theme = theme;
+          document.documentElement.style.colorScheme = theme;
+          try { localStorage.setItem("agentflow-theme", theme); } catch (_) {}
+        }, [theme]);
+        useEffect(() => {
+          document.documentElement.lang = languageTags[language] || languageTags.en;
+          try { localStorage.setItem("agentflow-language", language); } catch (_) {}
+        }, [language]);
+        useEffect(() => {
+          try { localStorage.setItem("agentflow-lower-panel-height", String(lowerPanelHeight)); } catch (_) {}
+        }, [lowerPanelHeight]);
         const load = async () => {
           try {
             const response = await fetch(window.location.search ? "/api/state" + window.location.search : "/api/state");
@@ -272,24 +458,34 @@
           const timer = setInterval(load, 2000);
           return () => clearInterval(timer);
         }, []);
-        if (error) return h("div", { className: "error" }, "Unable to load visualization: " + error);
-        if (!view) return h("div", { className: "loading" }, "Loading AgentFlow visualization…");
-        if (view.mode === "dashboard") return h("div", { className: "shell" }, h(Sidebar, { view }), h("main", { className: "main" }, h("div", { className: "toolbar" }, h("div", { className: "title" }, h("h2", null, "AgentFlow runs"), h("p", null, "Select a run from the sidebar to inspect its graph"))), h("div", { className: "content" }, h("div", { className: "empty" }, "Choose a run to open its workflow graph."))));
+        if (error) return h("div", { className: "error" }, t(language, "unable", { error }));
+        if (!view) return h("div", { className: "loading" }, t(language, "loading"));
+        if (view.mode === "dashboard") return h("div", { className: "shell" },
+          h(Sidebar, { view, language }),
+          h("main", { className: "main" },
+            h("div", { className: "toolbar" }, h("div", { className: "title" }, h("h2", null, "AgentFlow"), h("p", null, t(language, "selectRun"))), h(ViewControls, { language, setLanguage, theme, setTheme, onRefresh: load })),
+            h("div", { className: "content" }, h("div", { className: "empty" }, t(language, "chooseRun"))),
+          ),
+        );
         const state = view.mode === "run" ? view.run.state : null;
         return h("div", { className: "shell" },
-          h(Sidebar, { view }),
+          h(Sidebar, { view, language }),
           h("main", { className: "main" },
             h("div", { className: "toolbar" },
               h("div", { className: "title" },
                 h("h2", null, view.workflow.name),
-                h("p", null, view.mode === "run" ? view.run.run_id + " · updated " + formatTime(state.updatedAt) : view.source),
+                h("p", null, view.mode === "run" ? view.run.run_id + " · " + t(language, "updated") + " " + formatTime(state.updatedAt, language) : view.source),
               ),
-              h("button", { onClick: load }, "Refresh"),
+              h(ViewControls, { language, setLanguage, theme, setTheme, onRefresh: load }),
             ),
             h("div", { className: "content" },
-              h(Flow, { workflow: view.workflow, state, description: view.graph, onSelect: setSelectedNode }),
-              h(Summary, { view }),
-              h(Inspector, { definition: selectedNode, state: selectedNode && state?.nodes?.[selectedNode.id], description: view.graph }),
+              h(Flow, { workflow: view.workflow, state, description: view.graph, language, theme, selectedNodeID: selectedNode?.id, onSelect: setSelectedNode }),
+              h(ResizeHandle, { height: lowerPanelHeight, setHeight: setLowerPanelHeight, language }),
+              h("div", { className: "lower-panel", style: { height: lowerPanelHeight + "px" } },
+                h(Summary, { view, language }),
+                h(Comparison, { comparison: view.comparison, language }),
+                h(Inspector, { definition: selectedNode, state: selectedNode && state?.nodes?.[selectedNode.id], description: view.graph, language }),
+              ),
             ),
           ),
         );

@@ -137,8 +137,8 @@ class Grade:
                 definition = self.registry.get(node["executor"], {})
                 self.check(role + "_uses_codex", definition.get("kind") == "codex")
                 self.check(
-                    role + "_prompt_is_input",
-                    isinstance(node.get("input", {}).get("prompt"), str),
+                    role + "_instruction_in_config",
+                    isinstance(node.get("config", {}).get("instruction"), str),
                 )
             if self.case["id"] == "scheduled-review":
                 self.check(
@@ -148,7 +148,7 @@ class Grade:
             self.check(
                 "programs_do_not_require_prompt",
                 all(
-                    "prompt" not in self.nodes[self.roles[role]].get("input", {})
+                    "instruction" not in self.nodes[self.roles[role]].get("config", {})
                     for role in self.case["roles"]
                 ),
             )
@@ -167,7 +167,7 @@ class Grade:
                 "interaction_entry_registered",
                 bool(self.registry.get(role["executor"], {}).get("command")),
             )
-            actions = role.get("input", {}).get("actions", [])
+            actions = role.get("config", {}).get("actions", [])
             self.check(
                 "interaction_actions_complete",
                 isinstance(actions, list)
@@ -357,13 +357,19 @@ class Grade:
                 return
             if self.roles["finalize"] in actual:
                 final_input = state["nodes"][self.roles["finalize"]].get("input")
+                config_artifact = state["nodes"][self.roles["finalize"]].get("artifacts", {}).get("config")
+                final_config = {}
+                if config_artifact and state.get("run_id"):
+                    path = root / ".agentflow" / "runs" / state["run_id"] / config_artifact
+                    if path.exists():
+                        final_config = json.loads(path.read_text())
                 drafts = actual.count(self.roles["draft"])
                 self.check(
                     label + "_latest_proposal",
-                    includes(final_input, f"proposal-round-{drafts}"),
+                    includes(final_input, f"proposal-round-{drafts}") or includes(final_config, f"proposal-round-{drafts}"),
                 )
                 feedback = responses[-1].get("note", responses[-1].get("feedback"))
-                self.check(label + "_final_feedback", includes(final_input, feedback))
+                self.check(label + "_final_feedback", includes(final_input, feedback) or includes(final_config, feedback))
             if actual.count(self.roles["draft"]) > 1:
                 draft_input = state["nodes"][self.roles["draft"]].get("input")
                 feedback = responses[-2].get("note", responses[-2].get("feedback"))
@@ -374,13 +380,14 @@ class Grade:
                 self.roles["review"], {}
             ).get("input"):
                 request = state["nodes"][self.roles["review"]]["input"]
+                config = self.nodes[self.roles["review"]].get("config", {})
                 self.check(
-                    label + "_recipient", request.get("recipient") == "ou_benchmark"
+                    label + "_recipient", config.get("recipient") == "{{ inputs.reviewer }}"
                 )
                 self.check(
                     label + "_review_content",
                     includes(
-                        request.get("content"),
+                        request,
                         f"proposal-round-{actual.count(self.roles['draft'])}",
                     ),
                 )

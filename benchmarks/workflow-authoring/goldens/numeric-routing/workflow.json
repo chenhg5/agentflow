@@ -1,5 +1,5 @@
 {
-  "version": "2",
+  "version": "3",
   "name": "numeric-routing",
   "entry": "measure",
   "inputs": {
@@ -12,9 +12,6 @@
     {
       "id": "measure",
       "executor": "measure",
-      "input": {
-        "sample": "{{ inputs.sample }}"
-      },
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -54,18 +51,12 @@
     {
       "id": "accept",
       "executor": "finish",
-      "input": {
-        "branch": "accept",
-        "score": "{{ nodes.measure.result.score }}",
-        "defects": "{{ nodes.measure.result.defects }}",
-        "urgent": "{{ nodes.measure.result.urgent }}"
+      "config": {
+        "branch": "accept"
       },
       "inputSchema": {
         "type": "object",
         "properties": {
-          "branch": {
-            "type": "string"
-          },
           "score": {
             "type": "number"
           },
@@ -80,7 +71,6 @@
           }
         },
         "required": [
-          "branch",
           "score",
           "defects",
           "urgent"
@@ -118,18 +108,12 @@
     {
       "id": "recheck",
       "executor": "finish",
-      "input": {
-        "branch": "recheck",
-        "score": "{{ nodes.measure.result.score }}",
-        "defects": "{{ nodes.measure.result.defects }}",
-        "urgent": "{{ nodes.measure.result.urgent }}"
+      "config": {
+        "branch": "recheck"
       },
       "inputSchema": {
         "type": "object",
         "properties": {
-          "branch": {
-            "type": "string"
-          },
           "score": {
             "type": "number"
           },
@@ -144,7 +128,6 @@
           }
         },
         "required": [
-          "branch",
           "score",
           "defects",
           "urgent"

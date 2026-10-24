@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agentflow.dev/schema/workflow-v2.json",
+  "$id": "https://agentflow.dev/schema/workflow-v3.json",
   "title": "AgentFlow Workflow",
   "type": "object",
   "required": [
@@ -10,7 +10,7 @@
   ],
   "properties": {
     "version": {
-      "const": "2"
+      "const": "3"
     },
     "name": {
       "type": "string",
@@ -31,14 +31,14 @@
     },
     "entry": {
       "type": "string",
-      "description": "Version 2 entry node"
+      "description": "Version 3 entry node"
     },
     "edges": {
       "type": "array",
       "items": {
         "$ref": "#/$defs/edge"
       },
-      "description": "Version 2 control transitions; $end is terminal"
+      "description": "Version 3 control transitions; $end is terminal"
     }
   },
   "$defs": {
@@ -97,10 +97,6 @@
           "type": "string",
           "minLength": 1
         },
-        "input": {
-          "type": "object",
-          "description": "Structured input template passed to this node"
-        },
         "inputSchema": {
           "$ref": "#/$defs/contract",
           "description": "Runtime JSON contract for the rendered node input"
@@ -127,6 +123,37 @@
           "type": "string",
           "minLength": 1,
           "description": "Name of the executor registered in .agentflow/executors.json or a built-in executor"
+        },
+        "config": {
+          "type": "object",
+          "description": "Opaque executor configuration. The graph engine does not assign business meaning to its keys."
+        },
+        "execution": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "session": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "mode": {
+                  "type": "string",
+                  "enum": [
+                    "new",
+                    "fixed",
+                    "inherit",
+                    "fork"
+                  ]
+                },
+                "id": {
+                  "type": "string"
+                },
+                "from": {
+                  "type": "string"
+                }
+              }
+            }
+          }
         }
       },
       "additionalProperties": false

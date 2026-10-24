@@ -1,5 +1,5 @@
 {
-  "version": "2",
+  "version": "3",
   "name": "external-loop",
   "entry": "draft",
   "inputs": {
@@ -12,20 +12,11 @@
     {
       "id": "draft",
       "executor": "codex",
-      "input": {
-        "prompt": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.feedback }}"
+      "config": {
+        "instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.feedback }}"
       },
       "inputSchema": {
-        "type": "object",
-        "properties": {
-          "prompt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "prompt"
-        ],
-        "additionalProperties": false
+        "type": "object"
       },
       "outputSchema": {
         "type": "object",
@@ -47,11 +38,20 @@
     {
       "id": "review",
       "executor": "external",
-      "input": {},
       "inputSchema": {
         "type": "object",
-        "properties": {},
-        "required": [],
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "check"
+        ],
         "additionalProperties": false
       },
       "outputSchema": {
@@ -84,20 +84,11 @@
     {
       "id": "finalize",
       "executor": "codex",
-      "input": {
-        "prompt": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.feedback }}"
+      "config": {
+        "instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.feedback }}"
       },
       "inputSchema": {
-        "type": "object",
-        "properties": {
-          "prompt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "prompt"
-        ],
-        "additionalProperties": false
+        "type": "object"
       },
       "outputSchema": {
         "type": "object",

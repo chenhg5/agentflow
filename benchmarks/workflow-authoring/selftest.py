@@ -73,8 +73,8 @@ class EvaluatorTest(unittest.TestCase):
         defects = [
             ("numeric-routing", "boundary"),
             ("numeric-routing", "unregistered"),
-            ("numeric-routing", "type-erasure"),
-            ("scheduled-review", "missing-feedback"),
+            ("numeric-routing", "missing-branch-config"),
+            ("scheduled-review", "missing-instruction"),
             ("scheduled-review", "stop-routes-forward"),
             ("scheduled-review", "unbounded"),
             ("mixed-language", "missing-environment"),
@@ -90,12 +90,10 @@ class EvaluatorTest(unittest.TestCase):
                         )
                     if defect == "unregistered":
                         flow["nodes"][0]["executor"] = "missing-executor"
-                    if defect == "type-erasure":
-                        flow["nodes"][1]["input"]["score"] = (
-                            "score={{ nodes.measure.result.score }}"
-                        )
-                    if defect == "missing-feedback":
-                        flow["nodes"][0]["input"]["prompt"] = "Topic={{ inputs.topic }}"
+                    if defect == "missing-branch-config":
+                        flow["nodes"][1]["config"].pop("branch")
+                    if defect == "missing-instruction":
+                        flow["nodes"][0]["config"].pop("instruction")
                     if defect == "stop-routes-forward":
                         flow["edges"][3]["to"] = "finalize"
                     if defect == "unbounded":

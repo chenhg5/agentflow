@@ -25,7 +25,6 @@ import (
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
-	"github.com/chenhg5/agentflow/internal/template"
 	"github.com/chenhg5/agentflow/internal/trigger"
 	"github.com/chenhg5/agentflow/internal/version"
 	"github.com/chenhg5/agentflow/internal/web"
@@ -333,6 +332,10 @@ func runCommand(args []string, root, cwd string) error {
 		return runMetrics(parsed, root)
 	case "stats":
 		return runStats(parsed, root)
+	case "evaluate":
+		return runEvaluate(parsed, root)
+	case "compare":
+		return runCompare(parsed, root)
 	case "latest":
 		return runLatest(parsed, root)
 	case "submit":
@@ -367,10 +370,9 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 		}
 	}
 	if parsed.DryRun {
-		runContext := map[string]any{"inputs": parsed.Inputs}
 		nodes := make([]map[string]any, 0, len(workflow.Nodes))
 		for _, node := range workflow.Nodes {
-			plan := map[string]any{"id": node.ID, "executor": node.Executor, "input": template.RenderValue(node.Input, runContext)}
+			plan := map[string]any{"id": node.ID, "executor": node.Executor, "inputSource": "run-input-or-incoming-edge", "config": node.Config, "execution": node.Execution}
 			nodes = append(nodes, plan)
 		}
 		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.start", "workflow": workflow.Name, "inputs": parsed.Inputs, "entry": workflow.Entry, "nodes": nodes, "edges": workflow.Edges}, parsed.Output()); err != nil {
@@ -529,6 +531,102 @@ func runMetrics(parsed parsedArgs, root string) error {
 		return notFoundError("run", parsed.Positionals[0], parsed.Format)
 	}
 	return writeData(metrics.Snapshot(run, time.Now().UTC()), parsed.Output())
+}
+
+func runEvaluate(parsed parsedArgs, root string) error {
+	if len(parsed.Positionals) != 1 || parsed.EvaluationJSON == "" {
+		return usageError("usage: agentflow run evaluate <run-id> --evaluation '{...}'", "Provide numeric measurements with optional direction, unit, labels, and notes.", "evaluation_arguments")
+	}
+	run, err := store.LoadRun(root, parsed.Positionals[0])
+	if err != nil {
+		return notFoundError("run", parsed.Positionals[0], parsed.Format)
+	}
+	var evaluation model.Evaluation
+	decoder := json.NewDecoder(strings.NewReader(parsed.EvaluationJSON))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&evaluation); err != nil {
+		return usageError(fmt.Sprintf("--evaluation must be a JSON object: %v", err), "Use {\"measurements\":{\"quality\":{\"value\":0.9,\"direction\":\"higher\"}}}.", "invalid_evaluation")
+	}
+	if evaluation.EvaluatedAt == "" {
+		evaluation.EvaluatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	}
+	if len(evaluation.Measurements) == 0 {
+		return usageError("evaluation must contain at least one measurement", "Add a numeric measurements entry with value and optional direction/unit.", "empty_evaluation")
+	}
+	if err := metrics.ValidateEvaluation(evaluation); err != nil {
+		return usageError(err.Error(), "Measurement directions are higher, lower, or neutral.", "invalid_evaluation")
+	}
+	release, _, err := store.AcquireRunLock(run.RunDir)
+	if err != nil {
+		if errors.Is(err, store.ErrRunBusy) {
+			return conflictError(err.Error(), "Wait for the run to pause before recording an evaluation.", parsed.Format)
+		}
+		return internalError(err)
+	}
+	defer release()
+	run.State.Evaluation = &evaluation
+	run.State.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if err := store.SaveEvaluation(run); err != nil {
+		return internalError(err)
+	}
+	if err := store.SaveState(run); err != nil {
+		return internalError(err)
+	}
+	names := make([]string, 0, len(evaluation.Measurements))
+	for name := range evaluation.Measurements {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	if err := store.AppendEvent(run.RunDir, map[string]any{"type": "run.evaluated", "runId": run.RunID, "source": evaluation.Source, "measurements": names}); err != nil {
+		return internalError(err)
+	}
+	return writeData(runPayload(run), parsed.Output())
+}
+
+func runCompare(parsed parsedArgs, root string) error {
+	if len(parsed.Positionals) < 1 || len(parsed.Positionals) > 2 {
+		return usageError("usage: agentflow run compare <run-id> [baseline-run-id]", "Omit the baseline id to compare with the previous finished run of the same workflow.", "compare_arguments")
+	}
+	current, err := store.LoadRun(root, parsed.Positionals[0])
+	if err != nil {
+		return notFoundError("run", parsed.Positionals[0], parsed.Format)
+	}
+	var baseline *model.Run
+	if len(parsed.Positionals) == 2 {
+		baseline, err = store.LoadRun(root, parsed.Positionals[1])
+		if err != nil {
+			return notFoundError("baseline run", parsed.Positionals[1], parsed.Format)
+		}
+	} else {
+		runs, loadErr := loadRuns(root)
+		if loadErr != nil {
+			return loadErr
+		}
+		baseline = previousFinishedRun(current, runs)
+		if baseline == nil {
+			return notFoundError("previous finished run for workflow", current.State.WorkflowName, parsed.Format)
+		}
+	}
+	return writeData(metrics.Compare(current, baseline, time.Now().UTC()), parsed.Output())
+}
+
+func previousFinishedRun(current *model.Run, runs []*model.Run) *model.Run {
+	var previous *model.Run
+	for _, candidate := range runs {
+		if candidate == nil || candidate.RunID == current.RunID || candidate.State.WorkflowName != current.State.WorkflowName {
+			continue
+		}
+		if candidate.State.Status != "succeeded" && candidate.State.Status != "failed" && candidate.State.Status != "cancelled" {
+			continue
+		}
+		if current.State.CreatedAt != "" && candidate.State.CreatedAt >= current.State.CreatedAt {
+			continue
+		}
+		if previous == nil || candidate.State.CreatedAt > previous.State.CreatedAt {
+			previous = candidate
+		}
+	}
+	return previous
 }
 
 func runStats(parsed parsedArgs, root string) error {
@@ -914,6 +1012,8 @@ func parseArgs(args []string) (parsedArgs, error) {
 			parsed.Inputs[name] = input
 		case "--output":
 			parsed.SubmittedOutput = value
+		case "--evaluation":
+			parsed.EvaluationJSON = value
 		case "--workflow":
 			parsed.Workflow = value
 		case "--status":
@@ -983,6 +1083,7 @@ type parsedArgs struct {
 	Inputs          map[string]string
 	Format          string
 	SubmittedOutput string
+	EvaluationJSON  string
 	Workflow        string
 	Statuses        []string
 	Digest          string
@@ -1106,6 +1207,9 @@ func runPayload(run *model.Run) map[string]any {
 	if run.State.Trigger != nil {
 		payload["trigger"] = run.State.Trigger
 	}
+	if run.State.Evaluation != nil {
+		payload["evaluation"] = run.State.Evaluation
+	}
 	return payload
 }
 
@@ -1134,6 +1238,8 @@ func commandSchema() map[string]any {
 		{"name": "run get", "description": "Get one run and its node states.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run logs", "description": "Read the append-only event log.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run metrics", "description": "Get one run's timing, attempts, and byte metrics.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
+		{"name": "run evaluate", "description": "Record user-defined numeric measurements for a run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--evaluation", "JSON", "Evaluation object with measurements, labels, and notes", true), formatFlag}},
+		{"name": "run compare", "description": "Compare a run with a baseline or the previous finished run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "baseline-run-id", "required": false, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run stats", "description": "Aggregate metrics across runs, optionally filtered by workflow name and version. Run-level distributions cover finished runs and split wall-clock time into active and input waiting time.", "arguments": []map[string]any{{"name": "workflow-name", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--digest", "string", "Only runs of this workflow version", false), flag("--by-version", "boolean", "Return one aggregate per workflow version, oldest first", false), formatFlag}},
 		{"name": "run submit", "description": "Submit structured JSON output to a waiting node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--output", "string", "JSON output object", true), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run resume", "description": "Resume a persisted run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview pending nodes without executing them", false), formatFlag}},
@@ -1154,7 +1260,7 @@ func commandSchema() map[string]any {
 
 func isRunVerb(value string) bool {
 	switch value {
-	case "start", "list", "latest", "get", "logs", "metrics", "stats", "submit", "resume", "retry", "cancel":
+	case "start", "list", "latest", "get", "logs", "metrics", "stats", "evaluate", "compare", "submit", "resume", "retry", "cancel":
 		return true
 	default:
 		return false
@@ -1202,6 +1308,10 @@ Commands:
   run list           List runs
   run get            Get one run
   run logs           Read run events
+  run metrics        Show timing and size metrics
+  run stats          Aggregate run metrics
+  run evaluate       Record user-defined evaluation measurements
+  run compare        Compare a run with its previous run or a baseline
   run submit        Submit JSON output to a waiting node
   run resume        Resume a persisted run
   run cancel        Cancel a run
@@ -1248,6 +1358,10 @@ Verbs:
   logs <run-id>           Read events
   metrics <run-id>        Show timing and size metrics
   stats [workflow-name]   Aggregate metrics (--digest, --by-version)
+  evaluate <run-id> --evaluation JSON
+                            Record numeric measurements for a run
+  compare <run-id> [baseline-run-id]
+                            Compare runtime and evaluation measurements
   submit <run-id> <node-id> --output JSON
   resume <run-id>         Continue pending nodes (also recovers nodes orphaned by a crash)
   retry <run-id>          Re-run the active failed node (--from node-id)

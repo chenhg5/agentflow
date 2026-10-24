@@ -1,5 +1,5 @@
 {
-  "version": "2",
+  "version": "3",
   "name": "scheduled-review",
   "entry": "draft",
   "inputs": {
@@ -16,20 +16,11 @@
     {
       "id": "draft",
       "executor": "codex",
-      "input": {
-        "prompt": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.note }}"
+      "config": {
+        "instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.note }}"
       },
       "inputSchema": {
-        "type": "object",
-        "properties": {
-          "prompt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "prompt"
-        ],
-        "additionalProperties": false
+        "type": "object"
       },
       "outputSchema": {
         "type": "object",
@@ -51,9 +42,8 @@
     {
       "id": "review",
       "executor": "channel",
-      "input": {
+      "config": {
         "recipient": "{{ inputs.reviewer }}",
-        "content": "{{ nodes.draft.result.summary }}",
         "actions": [
           {
             "label": "happy",
@@ -81,20 +71,16 @@
       "inputSchema": {
         "type": "object",
         "properties": {
-          "recipient": {
+          "summary": {
             "type": "string"
           },
-          "content": {
+          "check": {
             "type": "string"
-          },
-          "actions": {
-            "type": "array"
           }
         },
         "required": [
-          "recipient",
-          "content",
-          "actions"
+          "summary",
+          "check"
         ],
         "additionalProperties": false
       },
@@ -122,20 +108,11 @@
     {
       "id": "finalize",
       "executor": "codex",
-      "input": {
-        "prompt": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.note }}"
+      "config": {
+        "instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.note }}"
       },
       "inputSchema": {
-        "type": "object",
-        "properties": {
-          "prompt": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "prompt"
-        ],
-        "additionalProperties": false
+        "type": "object"
       },
       "outputSchema": {
         "type": "object",

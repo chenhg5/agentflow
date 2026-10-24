@@ -63,6 +63,18 @@ The default test removes the temporary workspace on exit. The model calls can ta
 - The result-file contract, including agents that cannot inspect process environment variables.
 - Durable run state, log artifacts, and per-node observability metrics.
 
+## Measuring a change in a flow
+
+Run the same workflow against a defined baseline cohort, then attach evaluator-owned measurements to finished runs:
+
+```bash
+agentflow run evaluate <run-id> --evaluation '{"measurements":{"quality":{"value":0.9,"direction":"higher"},"cost":{"value":12,"unit":"USD","direction":"lower"}}}' --format json
+agentflow run compare <run-id> <baseline-run-id> --format json
+agentflow run stats <workflow-name> --by-version --format json
+```
+
+Use the comparison for a run-level explanation and `stats` for a cohort report. Runtime timing is collected automatically; quality and other business outcomes need an explicit evaluator and should include sample size and coverage in the report.
+
 If a real run fails, preserve the workspace and inspect the exact run:
 
 ```bash

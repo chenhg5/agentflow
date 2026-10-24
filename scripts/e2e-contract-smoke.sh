@@ -26,20 +26,13 @@ trap cleanup EXIT
 
 cat > "$WORKSPACE/contracts.json" <<'JSON'
 {
-  "version": "2",
+  "version": "3",
   "name": "e2e-contracts",
   "entry": "produce",
   "nodes": [
     {
       "id": "produce",
       "executor": "process",
-      "input": {
-        "command": [
-          "sh",
-          "-c",
-          "printf '{\"summary\":\"fixture ok\",\"count\":2}' > \"$AGENTFLOW_RESULT_FILE\""
-        ]
-      },
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -55,20 +48,18 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
           "count"
         ],
         "additionalProperties": false
+      },
+      "config": {
+        "command": [
+          "sh",
+          "-c",
+          "printf '{\"summary\":\"fixture ok\",\"count\":2}' > \"$AGENTFLOW_RESULT_FILE\""
+        ]
       }
     },
     {
       "id": "verify",
       "executor": "process",
-      "input": {
-        "command": [
-          "sh",
-          "-c",
-          "printf '{\"verified\":true}' > \"$AGENTFLOW_RESULT_FILE\""
-        ],
-        "summary": "{{ nodes.produce.result.summary }}",
-        "count": "{{ nodes.produce.result.count }}"
-      },
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -84,9 +75,6 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
       "inputSchema": {
         "type": "object",
         "properties": {
-          "command": {
-            "type": "array"
-          },
           "summary": {
             "type": "string"
           },
@@ -95,19 +83,22 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
           }
         },
         "required": [
-          "command",
           "summary",
           "count"
         ],
         "additionalProperties": false
+      },
+      "config": {
+        "command": [
+          "sh",
+          "-c",
+          "printf '{\"verified\":true}' > \"$AGENTFLOW_RESULT_FILE\""
+        ]
       }
     },
     {
       "id": "approval",
       "executor": "external",
-      "input": {
-        "verified": "{{ nodes.verify.result.verified }}"
-      },
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -128,14 +119,12 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
     {
       "id": "finish",
       "executor": "process",
-      "input": {
+      "config": {
         "command": [
           "sh",
           "-c",
           "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""
-        ],
-        "choice": "{{ nodes.approval.result.choice }}",
-        "note": "{{ nodes.approval.result.note }}"
+        ]
       }
     }
   ],
@@ -166,20 +155,13 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
 JSON
 cat > "$WORKSPACE/invalid.json" <<'JSON'
 {
-  "version": "2",
+  "version": "3",
   "name": "e2e-invalid-contract",
   "entry": "bad",
   "nodes": [
     {
       "id": "bad",
       "executor": "process",
-      "input": {
-        "command": [
-          "sh",
-          "-c",
-          "printf '{\"slug\":\"NOT-valid\"}' > \"$AGENTFLOW_RESULT_FILE\""
-        ]
-      },
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -192,6 +174,13 @@ cat > "$WORKSPACE/invalid.json" <<'JSON'
           "slug"
         ],
         "additionalProperties": false
+      },
+      "config": {
+        "command": [
+          "sh",
+          "-c",
+          "printf '{\"slug\":\"NOT-valid\"}' > \"$AGENTFLOW_RESULT_FILE\""
+        ]
       }
     }
   ],

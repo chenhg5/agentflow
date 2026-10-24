@@ -16,8 +16,8 @@ import (
 // Execute is the sole writer of run state. Controls are queued if another
 // process owns the run lock.
 func Execute(run *model.Run, executors map[string]driver.Executor) error {
-	if run.Workflow.Version != "2" {
-		return fmt.Errorf("only version 2 edge workflows can execute")
+	if run.Workflow.Version != "3" {
+		return fmt.Errorf("only version 3 edge workflows can execute")
 	}
 	resolved := driver.BuiltInExecutors()
 	for name, executor := range executors {
@@ -52,7 +52,7 @@ func nodeByID(workflow model.Workflow, id string) model.Node {
 func recoverOrphans(run *model.Run) {
 	for id, node := range run.State.Nodes {
 		if node.Status == "running" {
-			*node = model.NodeState{Status: "pending", Artifacts: map[string]string{}}
+			*node = model.NodeState{Status: "pending", Input: node.Input, IncomingNode: node.IncomingNode, IncomingSessionID: node.IncomingSessionID, Artifacts: map[string]string{}}
 			_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.orphaned", "nodeId": id})
 		}
 	}
@@ -195,7 +195,7 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 		}
 		run.State.ActiveNode = selected.To
 		run.State.Visits[selected.To]++
-		*run.State.Nodes[selected.To] = model.NodeState{Status: "pending", Artifacts: map[string]string{}}
+		*run.State.Nodes[selected.To] = model.NodeState{Status: "pending", Input: cloneValue(state.Result), IncomingNode: id, IncomingSessionID: state.SessionID, Artifacts: map[string]string{}}
 		if err := store.SaveState(run); err != nil {
 			return err
 		}
