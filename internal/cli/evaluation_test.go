@@ -88,17 +88,22 @@ func chdirForTest(t *testing.T, directory string) (string, func()) {
 
 func captureRunOutput(t *testing.T, args []string) ([]byte, error) {
 	t.Helper()
-	reader, writer, err := os.Pipe()
+	// Run writes synchronously. A file avoids blocking on a full pipe before
+	// the test has begun reading, especially with Windows' smaller pipe buffer.
+	output, err := os.CreateTemp(t.TempDir(), "stdout")
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer output.Close()
 	previous := os.Stdout
-	os.Stdout = writer
+	defer func() { os.Stdout = previous }()
+	os.Stdout = output
 	runErr := Run(args)
-	_ = writer.Close()
 	os.Stdout = previous
-	data, readErr := io.ReadAll(reader)
-	_ = reader.Close()
+	if _, err := output.Seek(0, io.SeekStart); err != nil {
+		t.Fatal(err)
+	}
+	data, readErr := io.ReadAll(output)
 	if readErr != nil {
 		t.Fatal(readErr)
 	}

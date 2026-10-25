@@ -1,6 +1,7 @@
 package workspace
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -162,7 +163,7 @@ func TestValidationRejectsUnreachableFallbackPolicy(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	registry := `{"executors":{"worker":{"kind":"command","command":["` + filepath.Join(root, "not-installed") + `"]}}}`
+	registry := `{"executors":{"worker":{"kind":"command","command":[` + jsonFixtureString(filepath.Join(root, "not-installed")) + `]}}}`
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -192,7 +193,7 @@ func TestValidationModelsRuntimeFailureFieldsForReachability(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		registry := `{"executors":{"worker":{"kind":"command","command":["` + filepath.Join(root, "not-installed") + `"]}}}`
+		registry := `{"executors":{"worker":{"kind":"command","command":[` + jsonFixtureString(filepath.Join(root, "not-installed")) + `]}}}`
 		if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -220,7 +221,7 @@ func TestValidationCountsAttemptsFromStaticallyAvailableCandidates(t *testing.T)
 			t.Fatal(err)
 		}
 		command := `["sh","-c","printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]`
-		registry := `{"executors":{"first":{"kind":"command","command":` + command + `},"worker":{"kind":"command","command":["` + filepath.Join(root, "not-installed") + `"]},"third":{"kind":"command","command":` + command + `}}}`
+		registry := `{"executors":{"first":{"kind":"command","command":` + command + `},"worker":{"kind":"command","command":[` + jsonFixtureString(filepath.Join(root, "not-installed")) + `]},"third":{"kind":"command","command":` + command + `}}}`
 		if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -510,7 +511,7 @@ func TestValidationResolvesSessionConfigurationBeforeWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	registry := `{"executors":{"worker":{"kind":"command","workspace":"` + missing + `","command":["sh","-c","exit 0"]}}}`
+	registry := `{"executors":{"worker":{"kind":"command","workspace":` + jsonFixtureString(missing) + `,"command":["sh","-c","exit 0"]}}}`
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -540,7 +541,7 @@ func TestValidationTreatsMessageDependentFallbackAsInconclusive(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	registry := `{"executors":{"worker":{"kind":"command","command":["` + filepath.Join(root, "not-installed") + `"]}}}`
+	registry := `{"executors":{"worker":{"kind":"command","command":[` + jsonFixtureString(filepath.Join(root, "not-installed")) + `]}}}`
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -569,7 +570,7 @@ func TestValidationTreatsWholeFailureFallbackAsInconclusive(t *testing.T) {
 		if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 			t.Fatal(err)
 		}
-		registry := `{"executors":{"worker":{"kind":"command","command":["` + filepath.Join(root, "not-installed") + `"]}}}`
+		registry := `{"executors":{"worker":{"kind":"command","command":[` + jsonFixtureString(filepath.Join(root, "not-installed")) + `]}}}`
 		if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 			t.Fatal(err)
 		}
@@ -600,7 +601,7 @@ func TestValidationRejectsEntrySessionInheritanceBeforeWorkspace(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	registry := `{"executors":{"agent":{"kind":"codex","workspace":"` + missing + `","command":["sh","-c","exit 0"]}}}`
+	registry := `{"executors":{"agent":{"kind":"codex","workspace":` + jsonFixtureString(missing) + `,"command":["sh","-c","exit 0"]}}}`
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -656,8 +657,8 @@ func TestValidationModelsInheritSourcePresenceAndProtocol(t *testing.T) {
 	workspace := t.TempDir()
 	command := `"command":["sh","-c","exit 0"],"resumeCommand":["sh","-c","exit 0"],"forkCommand":["sh","-c","exit 0"]`
 	registry := `{"executors":{` +
-		`"source":{"kind":"codex","workspace":"` + workspace + `",` + command + `},` +
-		`"other":{"kind":"claude-code","workspace":"` + workspace + `",` + command + `}}}`
+		`"source":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,` + command + `},` +
+		`"other":{"kind":"claude-code","workspace":` + jsonFixtureString(workspace) + `,` + command + `}}}`
 
 	// The explicit source is absent from the workflow, so no session can exist.
 	flow := `{"version":"3","name":"missing","entry":"source","nodes":[{"id":"source","execution":{"candidates":[{"executor":"external"}]}},{"id":"target","execution":{"candidates":[{"executor":"external","session":{"mode":"inherit","from":"ghost"}}]}}],"edges":[{"from":"source","to":"target"},{"from":"target","to":"$end"}]}`
@@ -729,7 +730,7 @@ func TestValidationUsesOnlyReachableSuccessfulSourceCandidates(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	registry := `{"executors":{"worker":{"kind":"command","command":["` + missing + `"],"resumeCommand":["sh","-c","exit 0"]}}}`
+	registry := `{"executors":{"worker":{"kind":"command","command":[` + jsonFixtureString(missing) + `],"resumeCommand":["sh","-c","exit 0"]}}}`
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -872,7 +873,7 @@ func TestValidationDoesNotInferMessageDependenceFromAStringLiteral(t *testing.T)
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	registry := `{"executors":{"worker":{"kind":"command","command":["` + filepath.Join(root, "not-installed") + `"]}}}`
+	registry := `{"executors":{"worker":{"kind":"command","command":[` + jsonFixtureString(filepath.Join(root, "not-installed")) + `]}}}`
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -917,8 +918,8 @@ func TestValidationUsesTheNativeCommandSelectedForTheSessionMode(t *testing.T) {
 	for _, kind := range []string{"codex", "claude-code"} {
 		// A base command without resumeCommand is a deterministic configuration
 		// failure, even when the configured base command exists or is missing.
-		for _, base := range []string{`"` + missingBinary + `"`, `"sh"`} {
-			registry := `{"executors":{"native":{"kind":"` + kind + `","workspace":"` + workspace + `","command":[` + base + `]}}}`
+		for _, base := range []string{jsonFixtureString(missingBinary), `"sh"`} {
+			registry := `{"executors":{"native":{"kind":"` + kind + `","workspace":` + jsonFixtureString(workspace) + `,"command":[` + base + `]}}}`
 			result := setup(fixedFlow, registry)
 			if result.Valid {
 				t.Fatalf("%s fixed session with only a base command validated: %+v", kind, result.Issues)
@@ -939,7 +940,7 @@ func TestValidationUsesTheNativeCommandSelectedForTheSessionMode(t *testing.T) {
 
 		// The base command may be unavailable when resumeCommand exists; only
 		// the launched command is checked.
-		registry := `{"executors":{"native":{"kind":"` + kind + `","workspace":"` + workspace + `","command":["` + missingBinary + `"],"resumeCommand":["sh","-c","exit 0"]}}}`
+		registry := `{"executors":{"native":{"kind":"` + kind + `","workspace":` + jsonFixtureString(workspace) + `,"command":[` + jsonFixtureString(missingBinary) + `],"resumeCommand":["sh","-c","exit 0"]}}}`
 		result := setup(fixedFlow, registry)
 		if !result.Valid {
 			t.Fatalf("%s rejected an available resumeCommand because the unused base command is missing: %+v", kind, result.Issues)
@@ -948,7 +949,7 @@ func TestValidationUsesTheNativeCommandSelectedForTheSessionMode(t *testing.T) {
 		// Without an explicit id, the first visit is fresh. With no configured
 		// base command, BuildCommand launches the native binary even when a
 		// resumeCommand is present.
-		registry = `{"executors":{"native":{"kind":"` + kind + `","workspace":"` + workspace + `","binary":"` + missingBinary + `","resumeCommand":["sh","-c","exit 0"]}}}`
+		registry = `{"executors":{"native":{"kind":"` + kind + `","workspace":` + jsonFixtureString(workspace) + `,"binary":` + jsonFixtureString(missingBinary) + `,"resumeCommand":["sh","-c","exit 0"]}}}`
 		result = setup(freshFixedFlow, registry)
 		if result.Valid {
 			t.Fatalf("%s fixed first visit checked resumeCommand instead of the missing native binary: %+v", kind, result.Issues)
@@ -956,7 +957,7 @@ func TestValidationUsesTheNativeCommandSelectedForTheSessionMode(t *testing.T) {
 
 		// Conversely, an available fresh native command is enough for an
 		// acyclic first visit; an unused future resumeCommand is not launched.
-		registry = `{"executors":{"native":{"kind":"` + kind + `","workspace":"` + workspace + `","command":["sh","-c","exit 0"],"resumeCommand":["` + missingBinary + `"]}}}`
+		registry = `{"executors":{"native":{"kind":"` + kind + `","workspace":` + jsonFixtureString(workspace) + `,"command":["sh","-c","exit 0"],"resumeCommand":[` + jsonFixtureString(missingBinary) + `]}}}`
 		result = setup(freshFixedFlow, registry)
 		if !result.Valid {
 			t.Fatalf("%s rejected the available fresh command because a future resumeCommand is missing: %+v", kind, result.Issues)
@@ -965,7 +966,7 @@ func TestValidationUsesTheNativeCommandSelectedForTheSessionMode(t *testing.T) {
 
 	// Generic commands have no native binary fallback. A resumeCommand alone
 	// cannot bootstrap a fixed session because the first visit has no id.
-	registry := `{"executors":{"native":{"kind":"command","workspace":"` + workspace + `","resumeCommand":["sh","-c","exit 0"]}}}`
+	registry := `{"executors":{"native":{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"resumeCommand":["sh","-c","exit 0"]}}}`
 	result := setup(freshFixedFlow, registry)
 	if result.Valid {
 		t.Fatalf("command fixed first visit validated without a fresh command: %+v", result.Issues)
@@ -982,7 +983,7 @@ func TestValidationUsesTheNativeCommandSelectedForTheSessionMode(t *testing.T) {
 
 	// Codex rejects any existing session while ephemeral is enabled. The
 	// configuration error precedes the missing executable.
-	registry = `{"executors":{"native":{"kind":"codex","ephemeral":true,"workspace":"` + workspace + `","binary":"` + missingBinary + `"}}}`
+	registry = `{"executors":{"native":{"kind":"codex","ephemeral":true,"workspace":` + jsonFixtureString(workspace) + `,"binary":` + jsonFixtureString(missingBinary) + `}}}`
 	result = setup(fixedFlow, registry)
 	if result.Valid {
 		t.Fatalf("ephemeral codex accepted an existing session: %+v", result.Issues)
@@ -1008,7 +1009,7 @@ func TestValidationModelsExplicitSourceOrdering(t *testing.T) {
 	setup := func(flow string) Validation {
 		root := t.TempDir()
 		workspace := t.TempDir()
-		command := `{"kind":"command","workspace":"` + workspace + `","command":["sh","-c","exit 0"],"resumeCommand":["sh","-c","exit 0"],"forkCommand":["sh","-c","exit 0"]}`
+		command := `{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"command":["sh","-c","exit 0"],"resumeCommand":["sh","-c","exit 0"],"forkCommand":["sh","-c","exit 0"]}`
 		registry := `{"executors":{"worker":` + command + `,"bootstrap":` + command + `}}`
 		if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 			t.Fatal(err)
@@ -1130,7 +1131,7 @@ func TestValidationModelsExplicitSourceOrdering(t *testing.T) {
 func TestValidationUsesSelectedRouteForExplicitSourceOrdering(t *testing.T) {
 	root := t.TempDir()
 	workspace := t.TempDir()
-	command := `{"kind":"command","workspace":"` + workspace + `","command":["sh","-c","exit 0"],"resumeCommand":["sh","-c","exit 0"]}`
+	command := `{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"command":["sh","-c","exit 0"],"resumeCommand":["sh","-c","exit 0"]}`
 	registry := `{"executors":{"worker":` + command + `}}`
 	flow := `{"version":"3","name":"selected-source","inputs":{"route":{"required":true}},"entry":"router","nodes":[` +
 		`{"id":"router","execution":{"candidates":[{"executor":"worker"}]}},` +
@@ -1157,7 +1158,7 @@ func TestValidationUsesSelectedRouteForExplicitSourceOrdering(t *testing.T) {
 func TestValidationPropagatesSelectedRouteThroughExplicitSessionSource(t *testing.T) {
 	root := t.TempDir()
 	workspace := t.TempDir()
-	command := `{"kind":"command","workspace":"` + workspace + `","command":["sh","-c","exit 0"],"resumeCommand":["sh","-c","exit 0"]}`
+	command := `{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"command":["sh","-c","exit 0"],"resumeCommand":["sh","-c","exit 0"]}`
 	registry := `{"executors":{"worker":` + command + `}}`
 	flow := `{"version":"3","name":"transitive-explicit-route","inputs":{"route":{"required":true}},"entry":"router","nodes":[` +
 		`{"id":"router","execution":{"candidates":[{"executor":"worker"}]}},` +
@@ -1227,7 +1228,7 @@ func TestValidationRejectsExternalSessionPolicies(t *testing.T) {
 func TestValidationReportsAttemptSensitiveGuaranteedRevisit(t *testing.T) {
 	root := t.TempDir()
 	workspace := t.TempDir()
-	registry := `{"executors":{"missing":{"kind":"command","workspace":"` + workspace + `","command":["` + filepath.Join(workspace, "missing") + `"]},"worker":{"kind":"command","workspace":"` + workspace + `","command":["sh","-c","exit 0"]}}}`
+	registry := `{"executors":{"missing":{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"command":[` + jsonFixtureString(filepath.Join(workspace, "missing")) + `]},"worker":{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"command":["sh","-c","exit 0"]}}}`
 	flow := `{"version":"3","name":"attempt-revisit","entry":"work","nodes":[{"id":"work","execution":{"fallback":{"when":"let f = failure; f.kind == 'start_failed' && f.attempt == 1"},"candidates":[{"executor":"missing"},{"executor":"worker"}]}}],"edges":[{"from":"work","to":"work","when":"true","maxIterations":1},{"from":"work","to":"$end"}]}`
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), []byte(registry), 0o644); err != nil {
 		t.Fatal(err)
@@ -1256,7 +1257,7 @@ func TestValidationUsesSelectedImplicitSessionRoute(t *testing.T) {
 		root := t.TempDir()
 		workspace := t.TempDir()
 		command := `["sh","-c","exit 0"]`
-		registry := `{"executors":{"router":{"kind":"command","workspace":"` + workspace + `","command":` + command + `},"a":{"kind":"codex","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"b":{"kind":"claude-code","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"target-codex":{"kind":"codex","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"target-claude":{"kind":"claude-code","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `}}}`
+		registry := `{"executors":{"router":{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `},"a":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"b":{"kind":"claude-code","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"target-codex":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"target-claude":{"kind":"claude-code","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `}}}`
 		candidates := `[{"executor":"target-codex","session":{"mode":"inherit"}}]`
 		fallback := ""
 		if pool {
@@ -1307,7 +1308,7 @@ func TestValidationPropagatesSelectedRouteThroughSessionSources(t *testing.T) {
 		root := t.TempDir()
 		workspace := t.TempDir()
 		command := `["sh","-c","exit 0"]`
-		registry := `{"executors":{"router":{"kind":"command","workspace":"` + workspace + `","command":` + command + `},"a":{"kind":"codex","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"b":{"kind":"claude-code","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"source-codex":{"kind":"codex","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"source-claude":{"kind":"claude-code","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"target":{"kind":"codex","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `}}}`
+		registry := `{"executors":{"router":{"kind":"command","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `},"a":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"b":{"kind":"claude-code","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"source-codex":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"source-claude":{"kind":"claude-code","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"target":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `}}}`
 		targetExecution := `{"candidates":[{"executor":"target","session":{"mode":"inherit","from":"source"}}]}`
 		if targetFallback {
 			targetExecution = `{"fallback":{"when":"failure.kind == 'session_incompatible'"},"candidates":[{"executor":"target","session":{"mode":"inherit","from":"source"}},{"executor":"source-claude","session":{"mode":"inherit","from":"source"}}]}`
@@ -1340,7 +1341,7 @@ func TestValidationChecksImplicitSessionRoutesOnRevisit(t *testing.T) {
 		root := t.TempDir()
 		workspace := t.TempDir()
 		command := `["sh","-c","exit 0"]`
-		registry := `{"executors":{"a":{"kind":"codex","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"b":{"kind":"claude-code","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"work-codex":{"kind":"codex","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `},"work-claude":{"kind":"claude-code","workspace":"` + workspace + `","command":` + command + `,"resumeCommand":` + command + `}}}`
+		registry := `{"executors":{"a":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"b":{"kind":"claude-code","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"work-codex":{"kind":"codex","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `},"work-claude":{"kind":"claude-code","workspace":` + jsonFixtureString(workspace) + `,"command":` + command + `,"resumeCommand":` + command + `}}}`
 		candidates := `[{"executor":"work-codex","session":{"mode":"inherit"}}]`
 		fallback := ""
 		if withFallback {
@@ -1378,4 +1379,9 @@ func TestValidationUsesEntryInputAliasesForRevisits(t *testing.T) {
 			}
 		}
 	}
+}
+
+func jsonFixtureString(value string) string {
+	data, _ := json.Marshal(value)
+	return string(data)
 }
