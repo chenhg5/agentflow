@@ -11,8 +11,7 @@
   "nodes": [
     {
       "id": "greet",
-      "executor": "process",
-      "config": {
+      "execution": {"candidates": [{"executor": "process", "config": {
         "command": [
           "sh",
           "-c",
@@ -20,23 +19,22 @@
           "sh",
           "{{ inputs.name }}"
         ]
-      }
+      }}]}
     },
     {
       "id": "approve",
-      "executor": "external"
+      "execution": {"candidates": [{"executor": "external"}]}
     },
     {
       "id": "finish",
-      "executor": "process",
-      "config": {
+      "execution": {"candidates": [{"executor": "process", "config": {
         "command": [
           "sh",
           "-c",
           "printf 'workflow complete\\n'; printf '{\"done\":true}\\n' > \"$AGENTFLOW_RESULT_FILE\"",
           "sh"
         ]
-      }
+      }}]}
     }
   ],
   "edges": [

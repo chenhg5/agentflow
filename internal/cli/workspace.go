@@ -40,7 +40,7 @@ func workspaceCommand(args []string, cwd string) error {
 		if len(parsed.Positionals) != 0 {
 			return usageError("use --workflow to select another graph", "Use workspace validate [--workflow path].", "workspace_path")
 		}
-		report := workspace.Validate(cwd, parsed.Workflow)
+		report := workspace.ValidateWithInputs(cwd, parsed.Workflow, parsed.Inputs)
 		if err := writeData(report, parsed.Output()); err != nil {
 			return err
 		}
@@ -67,7 +67,7 @@ func executorCommand(args []string, cwd string) error {
 		return nil
 	}
 	if len(parsed.Positionals) != 1 || parsed.Kind == "" {
-		return usageError("executor name and --kind are required", "Use executor init <name> --kind codex|command, or executor add <name> --kind <kind> --workspace <directory>.", "executor_configuration")
+		return usageError("executor name and --kind are required", "Use executor init <name> --kind codex|claude-code|command, or executor add <name> --kind <kind> --workspace <directory>.", "executor_configuration")
 	}
 	var change workspace.Change
 	switch args[0] {
@@ -109,19 +109,21 @@ func writeWorkspaceChange(change workspace.Change, err error, parsed parsedArgs)
 func printWorkspaceHelp() {
 	fmt.Println(`Usage:
   agentflow workspace init [directory] [--dry-run]
-  agentflow workspace validate [--workflow workflow.json]
+  agentflow workspace validate [--workflow workflow.json] [--input key=value]
 
 Initialize a standalone layout-v1 workspace with a runnable program, or inspect
-graph/config/workspace bindings. Validation does not execute programs or models.`)
+graph/config/workspace bindings and discover agent instructions, skills and tool
+configuration. Supply representative inputs to resolve templated paths. Discovery
+does not verify provider loading, role quality or actual execution.`)
 }
 
 func printExecutorHelp() {
 	fmt.Println(`Usage:
-  agentflow executor init <name> --kind codex|command [--model MODEL] [--dry-run]
+  agentflow executor init <name> --kind codex|claude-code|command [--model MODEL] [--dry-run]
   agentflow executor add <name> --kind codex|claude-code|command|external
       [--workspace existing-directory] [--command JSON-array] [--model MODEL] [--dry-run]
 
 init creates a new owned directory and registers it. add only registers an
 existing directory (including a symlink); it does not modify its contents.
-Choose new/fixed/inherit/fork on the graph node's execution.session separately.`)
+Choose new/fixed/inherit/fork on each graph execution candidate separately.`)
 }

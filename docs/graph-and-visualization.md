@@ -8,8 +8,8 @@ Workflow version `3` uses `entry`, `nodes`, and `edges`. The edge list is the so
   "name": "review-demo",
   "entry": "draft",
   "nodes": [
-    { "id": "draft", "executor": "codex", "config": { "instruction": "Draft a proposal" } },
-    { "id": "review", "executor": "external" }
+    { "id": "draft", "execution": { "candidates": [{ "executor": "codex", "config": { "instruction": "Draft a proposal" } }] } },
+    { "id": "review", "execution": { "candidates": [{ "executor": "external" }] } }
   ],
   "edges": [
     { "from": "draft", "to": "review" },
@@ -25,9 +25,9 @@ Cycles must contain a bounded edge by default. `maxIterations` limits how many t
 
 The Web API exposes the same edges in `graph.edges`, including `condition`, `map`, and `maxIterations`. The Web UI draws these edges, including the return path and `$end`. The graph view does not add routing rules of its own.
 
-Nodes reference a named executor. Registration lives in `executors.json`; command programs may be written in any language. The graph only validates JSON input/output and follows its edges. Removed workflow fields are rejected.
+Nodes contain ordered executor candidates. Registration lives in `executors.json`; command programs may be written in any language. Candidate failures and fallback remain inside the logical node, so the graph only validates the successful JSON output and follows its edges. Removed top-level node `executor`, `config`, and `execution.session` fields are rejected.
 
-The entry node receives the run input. Every selected edge carries its source node JSON result into the target node as input by default. An optional edge `map` can project fields from the source input, output, run inputs, and prior node results; `{}` sends an empty object. Nodes do not declare an input template. Executor-specific settings live in opaque `config`; `execution.session` selects new, fixed, inherited, or forked agent sessions.
+The entry node receives the run input. Every selected edge carries its source node JSON result into the target node as input by default. An optional edge `map` can project fields from the source input, output, run inputs, and prior node results; `{}` sends an empty object. Nodes do not declare an input template. Executor-specific settings live in candidate `config`; candidate `session` selects new, fixed, inherited, or forked agent sessions.
 
 ## Parallel nodes and joins
 
@@ -35,7 +35,7 @@ The default `dispatch` is `first`: evaluate outgoing edges in order and follow t
 
 A join node declares immediate predecessors with `"join":{"from":["left","right"]}`. It waits for one edge payload from each listed predecessor, then starts with a JSON object keyed by predecessor ID. An incoming edge's `map` controls that predecessor's payload. All incoming edges must come from listed predecessors. A human/external branch may wait while another branch finishes; completed payloads survive process restarts. If the run has no active node and a join still lacks inputs, it fails with `join_incomplete` rather than appearing to finish.
 
-`$end` finishes one active branch; the run succeeds after every active branch has finished and no join is waiting. A failed branch fails the run after already-started sibling commands finish. `run retry` can restart the failed branch without rerunning successful siblings. The run state and CLI expose `activeNodes`/`active_nodes`; `activeNode`/`active_node` is populated only when exactly one node is active. A join using `execution.session.mode` `inherit` or `fork` must set `execution.session.from` to choose a source session.
+`$end` finishes one active branch; the run succeeds after every active branch has finished and no join is waiting. A failed branch fails the run after already-started sibling commands finish. `run retry` can restart the failed branch without rerunning successful siblings. The run state and CLI expose `activeNodes`/`active_nodes`; `activeNode`/`active_node` is populated only when exactly one node is active. A join candidate using session mode `inherit` or `fork` must set its `session.from` to choose a source predecessor.
 
 ```sh
 agentflow workflow validate examples/parallel.json

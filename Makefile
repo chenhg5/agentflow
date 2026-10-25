@@ -1,7 +1,7 @@
 APP        := agentflow
 CMD        := ./cmd/agentflow
 DIST       := dist
-VERSION    := v0.2.0
+VERSION    := v0.3.0
 COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
@@ -42,6 +42,7 @@ test-e2e-triggers: build
 test-benchmark: build
 	python3 benchmarks/workflow-authoring/selftest.py
 	python3 benchmarks/workspace-authoring/suite.py selftest
+	python3 benchmarks/workspace-authoring/migration_selftest.py
 
 vet:
 	test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
@@ -62,7 +63,7 @@ release-all: release-preflight clean check
 		echo "Building $(NAME)" && \
 		mkdir -p $(DIST)/$(NAME) && \
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
-		git archive HEAD README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json examples skills docs scripts benchmarks | tar -x -C $(DIST)/$(NAME) && \
+		git archive HEAD README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json examples skills docs scripts benchmarks changelogs | tar -x -C $(DIST)/$(NAME) && \
 		$(if $(EXT),(cd $(DIST) && zip -Xqr $(NAME).zip $(NAME)),COPYFILE_DISABLE=1 tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
 		rm -rf $(DIST)/$(NAME) && \
 	) true

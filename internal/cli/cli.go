@@ -297,8 +297,10 @@ func workflowCommand(args []string) error {
 			return usageError(err.Error(), "Correct executors.json.", "invalid_executor_config")
 		}
 		for _, node := range workflow.Nodes {
-			if _, ok := executors[node.Executor]; !ok {
-				return usageError(fmt.Sprintf("node %s references unregistered executor %q", node.ID, node.Executor), "Register its command in executors.json or choose a built-in executor.", "unregistered_executor")
+			for index, candidate := range node.Execution.Candidates {
+				if _, ok := executors[candidate.Executor]; !ok {
+					return usageError(fmt.Sprintf("node %s candidate %d references unregistered executor %q", node.ID, index+1, candidate.Executor), "Register its command in executors.json or choose a built-in executor.", "unregistered_executor")
+				}
 			}
 		}
 	}
@@ -378,10 +380,17 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 			}
 		}
 	}
+	executors, err := driver.LoadExecutors(cwd)
+	if err != nil {
+		return internalError(err)
+	}
+	if err := engine.ValidateExecutors(workflow, executors); err != nil {
+		return usageError(err.Error(), "Register every candidate in executors.json or use a built-in executor.", "unregistered_executor")
+	}
 	if parsed.DryRun {
 		nodes := make([]map[string]any, 0, len(workflow.Nodes))
 		for _, node := range workflow.Nodes {
-			plan := map[string]any{"id": node.ID, "executor": node.Executor, "inputSource": "run-input-or-incoming-edge", "config": node.Config, "execution": node.Execution}
+			plan := map[string]any{"id": node.ID, "inputSource": "run-input-or-incoming-edge", "execution": node.Execution}
 			nodes = append(nodes, plan)
 		}
 		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.start", "workflow": workflow.Name, "inputs": parsed.Inputs, "entry": workflow.Entry, "nodes": nodes, "edges": workflow.Edges}, parsed.Output()); err != nil {
@@ -405,10 +414,6 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 			payload["idempotent_reused"] = true
 			return writeData(payload, parsed.Output())
 		}
-	}
-	executors, err := driver.LoadExecutors(cwd)
-	if err != nil {
-		return internalError(err)
 	}
 	run, err := store.CreateRun(root, workflow, parsed.Inputs, parsed.IdempotencyKey)
 	if err != nil {
@@ -686,12 +691,18 @@ func runSubmit(parsed parsedArgs, root, cwd string) error {
 		return notFoundError("run", parsed.Positionals[0], parsed.Format)
 	}
 	nodeID := parsed.Positionals[1]
+	if run.State.Status == "cancelled" || run.State.Status == "succeeded" || run.State.Status == "failed" {
+		return conflictError("cannot submit output to a terminal run", "Inspect the run before submitting.", parsed.Format)
+	}
 	node, ok := run.State.Nodes[nodeID]
 	if !ok {
 		return notFoundError("node", nodeID, parsed.Format)
 	}
 	if node.Status != "waiting_input" {
 		return conflictError(fmt.Sprintf("node %s is not waiting for input", nodeID), "Inspect the run before submitting.", parsed.Format)
+	}
+	if parsed.SubmissionToken != "" && parsed.SubmissionToken != node.LeaseToken {
+		return conflictError("submission token does not match the current invocation", "Read the current node leaseToken before submitting.", parsed.Format)
 	}
 	for _, definition := range run.Workflow.Nodes {
 		if definition.ID == nodeID {
@@ -707,7 +718,9 @@ func runSubmit(parsed parsedArgs, root, cwd string) error {
 		}
 		return &CommandError{Code: ExitDryRunPassed, Kind: "dry_run_passed", Message: "dry run passed", Format: parsed.Format, Silent: true}
 	}
-	return enqueueAndExecute(run, model.Control{Kind: engine.ControlSubmit, NodeID: nodeID, Output: output}, parsed, cwd)
+	// Bind even interactive submissions to the invocation observed above. A queued
+	// control must not affect a later visit of the same node.
+	return enqueueAndExecute(run, model.Control{Kind: engine.ControlSubmit, NodeID: nodeID, Token: node.LeaseToken, Output: output}, parsed, cwd)
 }
 
 // enqueueAndExecute hands a request to the run's executor. When another
@@ -801,6 +814,9 @@ func runCancel(parsed parsedArgs, root, cwd string) error {
 	run, err := store.LoadRun(root, parsed.Positionals[0])
 	if err != nil {
 		return notFoundError("run", parsed.Positionals[0], parsed.Format)
+	}
+	if run.State.Status == "succeeded" || run.State.Status == "failed" || run.State.Status == "cancelled" {
+		return conflictError("run is already terminal", "Inspect the completed run instead of cancelling it.", parsed.Format)
 	}
 	if parsed.DryRun {
 		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "run.cancel", "run_id": run.RunID, "current_status": run.State.Status}, parsed.Output()); err != nil {
@@ -940,6 +956,9 @@ func readWorkflow(file, format string) (model.Workflow, error) {
 	if err := decoder.Decode(&workflow); err != nil {
 		return workflow, &CommandError{Code: ExitUsageError, Kind: "invalid_json", Message: fmt.Sprintf("invalid workflow JSON: %v", err), Suggestion: "Fix the JSON and validate it again.", Retryable: false, Format: format}
 	}
+	if problems := schema.ValidateWorkflowJSON(data); len(problems) > 0 {
+		return workflow, &CommandError{Code: ExitUsageError, Kind: "invalid_workflow", Message: strings.Join(problems, "; "), Suggestion: "Run `agentflow schema workflow` and correct the definition.", Retryable: false, Format: format, Input: workflow.Name}
+	}
 	return workflow, nil
 }
 
@@ -1025,6 +1044,11 @@ func parseArgs(args []string) (parsedArgs, error) {
 			parsed.Inputs[name] = input
 		case "--output":
 			parsed.SubmittedOutput = value
+		case "--token":
+			if strings.TrimSpace(value) == "" {
+				return parsed, usageError("--token cannot be empty", "Use the waiting node leaseToken.", "invalid_token")
+			}
+			parsed.SubmissionToken = value
 		case "--evaluation":
 			parsed.EvaluationJSON = value
 		case "--workflow":
@@ -1100,6 +1124,7 @@ type parsedArgs struct {
 	Inputs            map[string]string
 	Format            string
 	SubmittedOutput   string
+	SubmissionToken   string
 	EvaluationJSON    string
 	Workflow          string
 	Statuses          []string
@@ -1256,8 +1281,8 @@ func commandSchema() map[string]any {
 	formatFlag := map[string]any{"name": "--format", "type": "enum", "enum": []string{"json", "table", "ndjson"}, "default": "json_when_piped_table_when_tty", "description": "Output format", "required": false}
 	commands := []map[string]any{
 		{"name": "workspace init", "description": "Create a standalone layout-v1 workspace with a runnable program; never overwrite files.", "arguments": []map[string]any{{"name": "directory", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview file creation", false), formatFlag}},
-		{"name": "workspace validate", "description": "Check graph, trigger targets, executor bindings and workspace paths without executing programs.", "flags": []map[string]any{flag("--workflow", "path", "Graph path; default workflow.json", false), formatFlag}},
-		{"name": "executor init", "description": "Create and register an owned Codex agent or program in the layout-v1 directories.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|command", "Scaffold kind", true), flag("--model", "string", "Optional Codex model", false), flag("--dry-run", "boolean", "Preview creation", false), formatFlag}},
+		{"name": "workspace validate", "description": "Check graph, trigger targets and executor paths; discover workspace-local agent instructions, skills and tool configuration without executing them.", "flags": []map[string]any{flag("--workflow", "path", "Graph path; default workflow.json", false), flag("--input", "key=value", "Representative run input for resolving candidate paths; repeatable", false), formatFlag}},
+		{"name": "executor init", "description": "Create and register an owned Codex or Claude agent or a program in the layout-v1 directories.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|claude-code|command", "Scaffold kind", true), flag("--model", "string", "Optional agent model", false), flag("--dry-run", "boolean", "Preview creation", false), formatFlag}},
 		{"name": "executor add", "description": "Register an existing directory or symlink without creating or modifying agent files.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|claude-code|command|external", "Executor kind", true), flag("--workspace", "path", "Existing working directory", false), flag("--command", "JSON-array", "Command executor argument array", false), flag("--model", "string", "Optional model", false), flag("--dry-run", "boolean", "Preview registration", false), formatFlag}},
 		{"name": "workflow validate", "description": "Validate a workflow JSON definition.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--check-executors", "boolean", "Check named executor registrations in this working directory", false), formatFlag}, "examples": []string{"agentflow workflow validate workflow.json --check-executors --format json"}},
 		{"name": "run start", "description": "Create and execute a workflow run.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--input", "key=value", "Workflow input; repeat for multiple inputs", false), flag("--idempotency-key", "string", "Stable request token used to safely retry a start", false), flag("--dry-run", "boolean", "Preview without creating or executing a run", false), formatFlag}, "examples": []string{"agentflow run start workflow.json --input issue=ABC-123 --idempotency-key 7f9c2b1e-4d9c-4f4e-8bb2-8b3d7d6d0a11"}},
@@ -1269,7 +1294,7 @@ func commandSchema() map[string]any {
 		{"name": "run evaluate", "description": "Record user-defined numeric measurements for a run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--evaluation", "JSON", "Evaluation object with measurements, labels, and notes", true), formatFlag}},
 		{"name": "run compare", "description": "Compare a run with a baseline or the previous finished run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "baseline-run-id", "required": false, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run stats", "description": "Aggregate metrics across runs, optionally filtered by workflow name and version. Run-level distributions cover finished runs and split wall-clock time into active and input waiting time.", "arguments": []map[string]any{{"name": "workflow-name", "required": false, "type": "string"}}, "flags": []map[string]any{flag("--digest", "string", "Only runs of this workflow version", false), flag("--by-version", "boolean", "Return one aggregate per workflow version, oldest first", false), formatFlag}},
-		{"name": "run submit", "description": "Submit structured JSON output to a waiting node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--output", "string", "JSON output object", true), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
+		{"name": "run submit", "description": "Submit structured JSON output to a waiting node.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--output", "string", "JSON output object", true), flag("--token", "string", "Expected waiting invocation leaseToken; rejects stale submissions", false), flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},
 		{"name": "run resume", "description": "Resume a persisted run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview pending nodes without executing them", false), formatFlag}},
 		{"name": "run retry", "description": "Reset failed nodes (or --from nodes) and everything downstream, keep other results, and continue the run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--from", "comma-separated", "Nodes to restart from; default is every failed node", false), flag("--dry-run", "boolean", "List the nodes that would be reset", false), formatFlag}},
 		{"name": "run cancel", "description": "Cancel a run.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without changing the run", false), formatFlag}},

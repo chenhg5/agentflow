@@ -32,7 +32,9 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
   "nodes": [
     {
       "id": "produce",
-      "executor": "process",
+      "execution": {"candidates": [{"executor": "process", "config": {
+		"command": ["sh", "-c", "printf '{\"summary\":\"fixture ok\",\"count\":2}' > \"$AGENTFLOW_RESULT_FILE\""]
+	  }}]},
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -48,18 +50,13 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
           "count"
         ],
         "additionalProperties": false
-      },
-      "config": {
-        "command": [
-          "sh",
-          "-c",
-          "printf '{\"summary\":\"fixture ok\",\"count\":2}' > \"$AGENTFLOW_RESULT_FILE\""
-        ]
-      }
+	  }
     },
     {
       "id": "verify",
-      "executor": "process",
+      "execution": {"candidates": [{"executor": "process", "config": {
+		"command": ["sh", "-c", "printf '{\"verified\":true}' > \"$AGENTFLOW_RESULT_FILE\""]
+	  }}]},
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -87,18 +84,11 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
           "count"
         ],
         "additionalProperties": false
-      },
-      "config": {
-        "command": [
-          "sh",
-          "-c",
-          "printf '{\"verified\":true}' > \"$AGENTFLOW_RESULT_FILE\""
-        ]
-      }
+	  }
     },
     {
       "id": "approval",
-      "executor": "external",
+      "execution": {"candidates": [{"executor": "external"}]},
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -118,14 +108,9 @@ cat > "$WORKSPACE/contracts.json" <<'JSON'
     },
     {
       "id": "finish",
-      "executor": "process",
-      "config": {
-        "command": [
-          "sh",
-          "-c",
-          "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""
-        ]
-      }
+      "execution": {"candidates": [{"executor": "process", "config": {
+		"command": ["sh", "-c", "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""]
+	  }}]}
     }
   ],
   "edges": [
@@ -161,7 +146,9 @@ cat > "$WORKSPACE/invalid.json" <<'JSON'
   "nodes": [
     {
       "id": "bad",
-      "executor": "process",
+      "execution": {"candidates": [{"executor": "process", "config": {
+		"command": ["sh", "-c", "printf '{\"slug\":\"NOT-valid\"}' > \"$AGENTFLOW_RESULT_FILE\""]
+	  }}]},
       "outputSchema": {
         "type": "object",
         "properties": {
@@ -174,14 +161,7 @@ cat > "$WORKSPACE/invalid.json" <<'JSON'
           "slug"
         ],
         "additionalProperties": false
-      },
-      "config": {
-        "command": [
-          "sh",
-          "-c",
-          "printf '{\"slug\":\"NOT-valid\"}' > \"$AGENTFLOW_RESULT_FILE\""
-        ]
-      }
+	  }
     }
   ],
   "edges": [
@@ -201,9 +181,9 @@ jq -e '.valid == true' validate.json >/dev/null
 RUN_ID=$(jq -r '.run_id' waiting.json)
 jq -e '.status == "waiting_input" and .nodes.produce.status == "succeeded" and .nodes.verify.status == "succeeded" and .nodes.approval.status == "waiting_input"' waiting.json >/dev/null
 
-INPUT_ARTIFACT="runs/$RUN_ID/artifacts/verify.1.input.json"
+INPUT_ARTIFACT="runs/$RUN_ID/artifacts/verify.1.candidate-1.attempt-1.input.json"
 jq -e '.summary == "fixture ok" and .count == 2' "$INPUT_ARTIFACT" >/dev/null
-jq -e '.nodes.verify.artifacts.input == "artifacts/verify.1.input.json"' waiting.json >/dev/null
+jq -e '.nodes.verify.artifacts.input == "artifacts/verify.1.candidate-1.attempt-1.input.json"' waiting.json >/dev/null
 
 "$AGENTFLOW_BIN" run submit "$RUN_ID" approval --output '{"choice":"happy","note":"e2e approved"}' --format json > succeeded.json
 jq -e '.status == "succeeded" and .nodes.finish.status == "succeeded" and .nodes.finish.result.done == true' succeeded.json >/dev/null

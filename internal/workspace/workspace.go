@@ -44,12 +44,12 @@ func Contract() map[string]any {
 	return map[string]any{
 		"layout_version": LayoutVersion,
 		"root":           "Invoke commands from the standalone workflow workspace root.",
-		"files":          map[string]string{"workflow.json": "Default single graph; explicit other paths are supported.", "executors.json": "Named executor registrations.", "triggers.json": "Optional cron/webhook triggers."},
+		"files":          map[string]string{"workflow.json": "Default single graph; explicit other paths are supported.", "executors.json": "Named executor registrations.", "triggers.json": "Optional cron/webhook triggers.", "DESIGN.md": "Authoring notes for contracts, roles/context/tools, transitions, human participation and verification; not an engine schema."},
 		"directories":    map[string]string{"executors/agents/<name>": "Owned agent workspaces or symlinks; external paths also work.", "executors/programs/<name>": "Program executor source and working directory.", "workflows": "Optional organization for multiple graphs.", "runs/<run-id>": "Generated workflow snapshot, state, events and node artifacts.", "output": "Optional user program outputs; not the engine result store."},
-		"node_artifacts": "runs/<run-id>/artifacts/<node-id>.<visit>.{input,config,result}.json; logs under artifacts/logs/",
+		"node_artifacts": "runs/<run-id>/artifacts/<node-id>.<visit>.candidate-<n>.attempt-<n>.{input,config,result}.json; per-attempt logs live under artifacts/logs/",
 		"environment":    map[string]string{"AGENTFLOW_ROOT": "Workflow workspace root.", "AGENTFLOW_WORKSPACE": "Executor working directory.", "AGENTFLOW_INPUT_FILE": "Absolute JSON input path.", "AGENTFLOW_CONFIG_FILE": "Absolute executor config path.", "AGENTFLOW_RESULT_FILE": "Absolute JSON result path."},
 		"commands":       []string{"workspace init", "executor init", "executor add", "workspace validate"},
-		"session_policy": "Bind a directory with executor.workspace; choose the session with node.execution.session.",
+		"session_policy": "Bind a directory with executor.workspace; each node.execution.candidates item owns its session policy.",
 	}
 }
 
@@ -63,10 +63,15 @@ func Init(root string, dryRun bool) (Change, error) {
 		return Change{}, err
 	}
 	registry, _ := json.MarshalIndent(Registry{Executors: map[string]driver.Executor{"step": entry}}, "", "  ")
-	flow := model.Workflow{Version: "3", Name: filepath.Base(root), Entry: "step", Nodes: []model.Node{{ID: "step", Executor: "step", InputSchema: map[string]any{"type": "object"}, OutputSchema: map[string]any{"type": "object"}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
+	flow := model.Workflow{Version: "3", Name: filepath.Base(root), Entry: "step", Nodes: []model.Node{{ID: "step", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "step"}}}, InputSchema: map[string]any{"type": "object"}, OutputSchema: map[string]any{"type": "object"}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
 	workflow, _ := json.MarshalIndent(flow, "", "  ")
 	files["executors.json"], files["workflow.json"], files[".gitignore"] = string(registry)+"\n", string(workflow)+"\n", Ignore
-	files["README.md"] = "# Workflow workspace\n\nLayout version 1. Run commands from this directory.\n\n```sh\nagentflow workspace validate\nagentflow run start workflow.json\n```\n\nThe starter program passes incoming JSON through. Adapt the graph and executor to your task. Add an owned agent with `agentflow executor init <name> --kind codex`, or bind an existing directory with `agentflow executor add <name> --kind codex --workspace /existing/path`. Session policy belongs to the graph node. Generated evidence lives in runs/; inspect it with run get/logs/metrics.\n"
+	design, err := templates.ReadFile("templates/DESIGN.md")
+	if err != nil {
+		return Change{}, err
+	}
+	files["DESIGN.md"] = string(design)
+	files["README.md"] = "# Workflow workspace\n\nLayout version 1. Run commands from this directory.\n\n```sh\nagentflow workspace validate\nagentflow run start workflow.json\n```\n\nThe starter program passes incoming JSON through. Adapt the graph and executor to your task. Add an owned agent with `agentflow executor init <name> --kind codex`, or bind an existing directory with `agentflow executor add <name> --kind codex --workspace /existing/path`. Each ordered execution candidate owns its config and session policy. Generated per-attempt evidence lives in runs/; inspect it with run get/logs/metrics.\n"
 	created, err := createFiles(root, files, dryRun)
 	return Change{Root: root, LayoutVersion: LayoutVersion, Created: created}, err
 }
@@ -160,10 +165,16 @@ func executorFiles(name, kind, modelName string) (map[string]string, driver.Exec
 		files[directory+"/main.py"] = read("program.py")
 		return files, driver.Executor{Kind: kind, Workspace: directory, Command: []string{"python3", "main.py"}}, nil
 	}
-	if kind != "codex" {
-		return nil, driver.Executor{}, fmt.Errorf("executor init scaffolds codex or command; use executor add to bind another existing executor")
+	if kind != "codex" && kind != "claude-code" {
+		return nil, driver.Executor{}, fmt.Errorf("executor init scaffolds codex, claude-code or command; use executor add to bind another existing executor")
 	}
 	directory := "executors/agents/" + name
+	if kind == "claude-code" {
+		for target, source := range map[string]string{"CLAUDE.md": "CLAUDE.md", ".claude/skills/workflow-contract/SKILL.md": "SKILL.md", ".mcp.json": "claude-mcp.json", "tools/manifest.json": "manifest.json", "tools/read_input.py": "read_input.py", "tools/mcp_server.py": "mcp_server.py"} {
+			files[directory+"/"+target] = read(source)
+		}
+		return files, driver.Executor{Kind: kind, Workspace: directory, Model: modelName}, nil
+	}
 	for target, source := range map[string]string{"AGENTS.md": "AGENTS.md", ".agents/skills/workflow-contract/SKILL.md": "SKILL.md", ".codex/config.toml": "codex.toml", "tools/manifest.json": "manifest.json", "tools/read_input.py": "read_input.py", "tools/mcp_server.py": "mcp_server.py"} {
 		files[directory+"/"+target] = read(source)
 	}

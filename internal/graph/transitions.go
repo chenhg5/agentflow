@@ -114,11 +114,13 @@ func validateTransitions(workflow model.Workflow) []string {
 					errors = append(errors, fmt.Sprintf("node %s incoming edge from %s is missing from join.from", node.ID, edge.From))
 				}
 			}
-			mode := node.Execution.Session.Mode
-			if (mode == "inherit" || mode == "fork") && node.Execution.Session.From == "" {
-				errors = append(errors, fmt.Sprintf("node %s join execution.session.from must identify a predecessor", node.ID))
-			} else if (mode == "inherit" || mode == "fork") && !seenSources[node.Execution.Session.From] {
-				errors = append(errors, fmt.Sprintf("node %s join execution.session.from %s is not a join predecessor", node.ID, node.Execution.Session.From))
+			for index, candidate := range node.Execution.Candidates {
+				mode := candidate.Session.Mode
+				if (mode == "inherit" || mode == "fork") && candidate.Session.From == "" {
+					errors = append(errors, fmt.Sprintf("node %s join candidate %d session.from must identify a predecessor", node.ID, index+1))
+				} else if (mode == "inherit" || mode == "fork") && !seenSources[candidate.Session.From] {
+					errors = append(errors, fmt.Sprintf("node %s join candidate %d session.from %s is not a join predecessor", node.ID, index+1, candidate.Session.From))
+				}
 			}
 		}
 	}

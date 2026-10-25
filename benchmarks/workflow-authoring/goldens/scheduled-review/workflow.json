@@ -15,10 +15,7 @@
   "nodes": [
     {
       "id": "draft",
-      "executor": "codex",
-      "config": {
-        "instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.note }}"
-      },
+      "execution": {"candidates": [{"executor": "codex", "config": {"instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.note }}"}}]},
       "inputSchema": {
         "type": "object"
       },
@@ -41,8 +38,7 @@
     },
     {
       "id": "review",
-      "executor": "channel",
-      "config": {
+      "execution": {"candidates": [{"executor": "channel", "config": {
         "recipient": "{{ inputs.reviewer }}",
         "actions": [
           {
@@ -67,7 +63,7 @@
             }
           }
         ]
-      },
+      }}]},
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -107,10 +103,7 @@
     },
     {
       "id": "finalize",
-      "executor": "codex",
-      "config": {
-        "instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.note }}"
-      },
+      "execution": {"candidates": [{"executor": "codex", "config": {"instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.note }}"}}]},
       "inputSchema": {
         "type": "object"
       },

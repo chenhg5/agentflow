@@ -75,8 +75,14 @@ func (r *Runtime) Start(_ context.Context, command StartRunCommand) (RunRef, err
 	if err := decoder.Decode(&workflow); err != nil {
 		return RunRef{}, fmt.Errorf("invalid workflow JSON: %w", err)
 	}
+	if problems := schema.ValidateWorkflowJSON(data); len(problems) > 0 {
+		return RunRef{}, fmt.Errorf("invalid workflow: %v", problems)
+	}
 	if problems := schema.Validate(workflow); len(problems) > 0 {
 		return RunRef{}, fmt.Errorf("invalid workflow: %v", problems)
+	}
+	if err := engine.ValidateExecutors(workflow, r.Executors); err != nil {
+		return RunRef{}, err
 	}
 	for name, definition := range workflow.Inputs {
 		if definition.Required && command.Inputs[name] == "" {

@@ -1,0 +1,194 @@
+{
+  "version": "3",
+  "name": "proposal-with-lark",
+  "entry": "draft",
+  "inputs": {
+    "topic": {
+      "type": "string",
+      "required": true
+    },
+    "reviewer": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "draft",
+      "execution": {
+        "candidates": [
+          {
+            "executor": "codex",
+            "config": {
+              "instruction": "根据主题 {{ inputs.topic }} 生成简短方案及验收标准。上一轮反馈：{{ nodes.review.result }}。只在 AGENTFLOW_RESULT_FILE 写入 JSON 对象，字段 summary、check；不要发送消息或执行方案。"
+            }
+          }
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "summary",
+          "check"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "check": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "timeoutMs": 180000
+    },
+    {
+      "id": "review",
+      "execution": {
+        "candidates": [
+          {
+            "executor": "lark-review",
+            "config": {
+              "profile": "my-bot",
+              "recipient": "{{ inputs.reviewer }}",
+              "title": "这个方案是否继续？",
+              "subtitle": "方案确认",
+              "sections": [
+                {
+                  "title": "方案",
+                  "content": "{{ input.summary }}"
+                },
+                {
+                  "title": "验收方式",
+                  "content": "{{ input.check }}"
+                }
+              ],
+              "hint": "继续将整理行动方案；修改将重新起草；结束将关闭本次流程。",
+              "actions": [
+                {
+                  "label": "满意，继续",
+                  "style": "primary_filled",
+                  "color": "green",
+                  "output": {
+                    "mood": "happy",
+                    "score": 90
+                  },
+                  "confirmation": "结果已接收，将继续整理行动方案。"
+                },
+                {
+                  "label": "需要调整",
+                  "style": "default",
+                  "color": "orange",
+                  "output": {
+                    "mood": "sad",
+                    "score": 40
+                  },
+                  "confirmation": "结果已接收，将重新起草方案。"
+                },
+                {
+                  "label": "结束本次",
+                  "style": "danger",
+                  "color": "red",
+                  "confirm": "确定结束本次流程？",
+                  "output": {
+                    "mood": "sad",
+                    "score": 0
+                  },
+                  "confirmation": "结果已接收，将结束本次流程。"
+                }
+              ]
+            }
+          }
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "summary",
+          "check"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "check": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "mood",
+          "score"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "mood": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          }
+        }
+      }
+    },
+    {
+      "id": "finalize",
+      "execution": {
+        "candidates": [
+          {
+            "executor": "codex",
+            "config": {
+              "instruction": "方案 {{ nodes.draft.result.summary }} 已得到审核结果 {{ input }}。把一条后续行动写入 AGENTFLOW_RESULT_FILE 的 next_step 字段；不实施方案。"
+            }
+          }
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "next_step"
+        ],
+        "properties": {
+          "next_step": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      },
+      "timeoutMs": 180000
+    }
+  ],
+  "edges": [
+    {
+      "from": "draft",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "finalize",
+      "when": "output.score > 80"
+    },
+    {
+      "from": "review",
+      "to": "draft",
+      "when": "output.score > 0",
+      "maxIterations": 2
+    },
+    {
+      "from": "review",
+      "to": "$end"
+    },
+    {
+      "from": "finalize",
+      "to": "$end"
+    }
+  ]
+}

@@ -12,10 +12,10 @@ import (
 
 func parallelWorkflowFixture(workspace string, second model.Node) model.Workflow {
 	return model.Workflow{Version: "3", Name: "parallel", Entry: "start", Nodes: []model.Node{
-		{ID: "start", Executor: "process", Dispatch: "all", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"seed":"ok"}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "a", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `touch "$AGENTFLOW_WORKSPACE/a.ready"; i=0; while [ ! -f "$AGENTFLOW_WORKSPACE/b.ready" ] && [ "$i" -lt 100 ]; do sleep 0.02; i=$((i+1)); done; test -f "$AGENTFLOW_WORKSPACE/b.ready" || exit 4; printf '{"value":"a"}' > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "start", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{"seed":"ok"}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Dispatch: "all"},
+		{ID: "a", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `touch "$AGENTFLOW_WORKSPACE/a.ready"; i=0; while [ ! -f "$AGENTFLOW_WORKSPACE/b.ready" ] && [ "$i" -lt 100 ]; do sleep 0.02; i=$((i+1)); done; test -f "$AGENTFLOW_WORKSPACE/b.ready" || exit 4; printf '{"value":"a"}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
 		second,
-		{ID: "join", Executor: "process", Join: &model.JoinSpec{From: []string{"a", "b"}}, Config: map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "join", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Join: &model.JoinSpec{From: []string{"a", "b"}}},
 	}, Edges: []model.Transition{
 		{From: "start", To: "a", Map: testEdgeMap(map[string]any{"seed": "{{ output.seed }}"})},
 		{From: "start", To: "b", Map: testEdgeMap(map[string]any{"seed": "{{ output.seed }}"})},
@@ -25,7 +25,7 @@ func parallelWorkflowFixture(workspace string, second model.Node) model.Workflow
 
 func TestParallelNodesRunConcurrentlyAndJoinInputs(t *testing.T) {
 	workspace := t.TempDir()
-	second := model.Node{ID: "b", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `touch "$AGENTFLOW_WORKSPACE/b.ready"; i=0; while [ ! -f "$AGENTFLOW_WORKSPACE/a.ready" ] && [ "$i" -lt 100 ]; do sleep 0.02; i=$((i+1)); done; test -f "$AGENTFLOW_WORKSPACE/a.ready" || exit 4; printf '{"value":"b"}' > "$AGENTFLOW_RESULT_FILE"`}}}
+	second := model.Node{ID: "b", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `touch "$AGENTFLOW_WORKSPACE/b.ready"; i=0; while [ ! -f "$AGENTFLOW_WORKSPACE/a.ready" ] && [ "$i" -lt 100 ]; do sleep 0.02; i=$((i+1)); done; test -f "$AGENTFLOW_WORKSPACE/a.ready" || exit 4; printf '{"value":"b"}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})}
 	workflow := parallelWorkflowFixture(workspace, second)
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
@@ -48,9 +48,9 @@ func TestParallelNodesRunConcurrentlyAndJoinInputs(t *testing.T) {
 
 func TestParallelWaitPersistsPartialJoinAndResumes(t *testing.T) {
 	workspace := t.TempDir()
-	second := model.Node{ID: "b", Executor: "external"}
+	second := model.Node{ID: "b", Execution: testExecution("external", nil, model.SessionSpec{})}
 	workflow := parallelWorkflowFixture(workspace, second)
-	workflow.Nodes[1].Config = map[string]any{"command": []string{"sh", "-c", `printf '{"value":"a"}' > "$AGENTFLOW_RESULT_FILE"`}}
+	workflow.Nodes[1].Execution.Candidates[0].Config = map[string]any{"command": []string{"sh", "-c", `printf '{"value":"a"}' > "$AGENTFLOW_RESULT_FILE"`}}
 	workflow.Edges[1].Map = testEdgeMap(map[string]any{"seed": "{{ output.seed }}"})
 	root := t.TempDir()
 	run, err := store.CreateRun(root, workflow, nil, "")
@@ -81,9 +81,9 @@ func TestParallelWaitPersistsPartialJoinAndResumes(t *testing.T) {
 
 func TestParallelRetryOnlyFailedBranch(t *testing.T) {
 	workspace := t.TempDir()
-	second := model.Node{ID: "b", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `if [ ! -f "$AGENTFLOW_WORKSPACE/attempted" ]; then touch "$AGENTFLOW_WORKSPACE/attempted"; exit 5; fi; printf '{"value":"b"}' > "$AGENTFLOW_RESULT_FILE"`}}}
+	second := model.Node{ID: "b", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `if [ ! -f "$AGENTFLOW_WORKSPACE/attempted" ]; then touch "$AGENTFLOW_WORKSPACE/attempted"; exit 5; fi; printf '{"value":"b"}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})}
 	workflow := parallelWorkflowFixture(workspace, second)
-	workflow.Nodes[1].Config = map[string]any{"command": []string{"sh", "-c", `touch "$AGENTFLOW_WORKSPACE/a.once"; printf '{"value":"a"}' > "$AGENTFLOW_RESULT_FILE"`}}
+	workflow.Nodes[1].Execution.Candidates[0].Config = map[string]any{"command": []string{"sh", "-c", `touch "$AGENTFLOW_WORKSPACE/a.once"; printf '{"value":"a"}' > "$AGENTFLOW_RESULT_FILE"`}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -109,13 +109,54 @@ func TestParallelRetryOnlyFailedBranch(t *testing.T) {
 	}
 }
 
+func TestParallelRetryCompletesPriorWaveBeforeAdvancingSibling(t *testing.T) {
+	workspace := t.TempDir()
+	workflow := model.Workflow{Version: "3", Name: "retry-wave-session", Entry: "seed", Nodes: []model.Node{
+		{ID: "seed", Dispatch: "all", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "later", Execution: testExecution("worker", nil, model.SessionSpec{Mode: "fixed"})},
+		{ID: "other", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "work", Execution: testExecution("worker", nil, model.SessionSpec{Mode: "inherit", From: "later"})},
+	}, Edges: []model.Transition{
+		{From: "seed", To: "later"}, {From: "seed", To: "other"},
+		{From: "later", To: "$end"}, {From: "other", To: "work"}, {From: "work", To: "$end"},
+	}}
+	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	executors := map[string]driver.Executor{
+		"process": {Kind: "command", Workspace: workspace},
+		"worker": {
+			Kind: "command", Workspace: workspace,
+			Command:       []string{"sh", "-c", `printf 'later-session' > "$AGENTFLOW_SESSION_FILE"; exit 75`},
+			ResumeCommand: []string{"sh", "-c", `test "$AGENTFLOW_SESSION_ID" = later-session; printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`},
+		},
+	}
+	if err := Execute(run, executors); err != nil {
+		t.Fatal(err)
+	}
+	if run.State.Status != "failed" || run.State.Nodes["later"].Status != "failed" || run.State.Nodes["other"].Status != "succeeded" {
+		t.Fatalf("expected a failed source and completed sibling: %+v", run.State)
+	}
+	if err := store.EnqueueControl(run.RunDir, model.Control{Kind: ControlRetry}); err != nil {
+		t.Fatal(err)
+	}
+	if err := Execute(run, executors); err != nil {
+		t.Fatal(err)
+	}
+	work := run.State.Nodes["work"]
+	if run.State.Status != "succeeded" || work.Status != "succeeded" || work.SessionID != "later-session" {
+		t.Fatalf("retried prior-wave source was not visible to its successor: %+v", run.State)
+	}
+}
+
 func TestParallelJoinCanRunAgainAfterLoop(t *testing.T) {
 	workspace := t.TempDir()
 	workflow := model.Workflow{Version: "3", Name: "repeated-fork", Entry: "start", Nodes: []model.Node{
-		{ID: "start", Executor: "process", Dispatch: "all", Config: map[string]any{"command": []string{"sh", "-c", `file="$AGENTFLOW_WORKSPACE/count"; n=0; if [ -f "$file" ]; then n=$(cat "$file"); fi; n=$((n+1)); printf '%s' "$n" > "$file"; printf '{"n":%s}' "$n" > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "a", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "b", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "join", Executor: "process", Join: &model.JoinSpec{From: []string{"a", "b"}}, Config: map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "start", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `file="$AGENTFLOW_WORKSPACE/count"; n=0; if [ -f "$file" ]; then n=$(cat "$file"); fi; n=$((n+1)); printf '%s' "$n" > "$file"; printf '{"n":%s}' "$n" > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Dispatch: "all"},
+		{ID: "a", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "b", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "join", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Join: &model.JoinSpec{From: []string{"a", "b"}}},
 	}, Edges: []model.Transition{
 		{From: "start", To: "a"}, {From: "start", To: "b"},
 		{From: "a", To: "join"}, {From: "b", To: "join"},
@@ -136,9 +177,9 @@ func TestParallelJoinCanRunAgainAfterLoop(t *testing.T) {
 
 func TestParallelExternalBranchesAcceptIndependentSubmissions(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "two-reviews", Entry: "start", Nodes: []model.Node{
-		{ID: "start", Executor: "process", Dispatch: "all", Config: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "a", Executor: "external"}, {ID: "b", Executor: "external"},
-		{ID: "join", Executor: "process", Join: &model.JoinSpec{From: []string{"a", "b"}}, Config: map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "start", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Dispatch: "all"},
+		{ID: "a", Execution: testExecution("external", nil, model.SessionSpec{})}, {ID: "b", Execution: testExecution("external", nil, model.SessionSpec{})},
+		{ID: "join", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `cat "$AGENTFLOW_INPUT_FILE" > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Join: &model.JoinSpec{From: []string{"a", "b"}}},
 	}, Edges: []model.Transition{{From: "start", To: "a"}, {From: "start", To: "b"}, {From: "a", To: "join"}, {From: "b", To: "join"}, {From: "join", To: "$end"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {
@@ -172,10 +213,10 @@ func TestParallelExternalBranchesAcceptIndependentSubmissions(t *testing.T) {
 
 func TestParallelJoinFailsWhenRequiredBranchWasNotSelected(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "incomplete", Entry: "start", Nodes: []model.Node{
-		{ID: "start", Executor: "process", Dispatch: "all", Config: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "a", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "b", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "join", Executor: "process", Join: &model.JoinSpec{From: []string{"a", "b"}}, Config: map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}},
+		{ID: "start", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Dispatch: "all"},
+		{ID: "a", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "b", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "join", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), Join: &model.JoinSpec{From: []string{"a", "b"}}},
 	}, Edges: []model.Transition{{From: "start", To: "a"}, {From: "start", To: "b", When: "false"}, {From: "a", To: "join"}, {From: "b", To: "join"}, {From: "join", To: "$end"}}}
 	run, err := store.CreateRun(t.TempDir(), workflow, nil, "")
 	if err != nil {

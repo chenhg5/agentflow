@@ -2,7 +2,7 @@
 
 AgentFlow records two kinds of evidence for every run:
 
-1. **Runtime facts** are produced by the engine: wall-clock duration, active time, time waiting for input, attempts, bytes, node status, and append-only events.
+1. **Runtime facts** are produced by the engine: wall-clock duration, active time, time waiting for input, selected executor, ordered candidate attempts, structured failures, per-attempt artifacts, bytes, node status, and append-only events.
 2. **Evaluations** are measurements supplied after a run by a person, a program, or another agent. Their names and units are user-defined. AgentFlow does not assume that a field means quality, approval, cost, or any other business concept.
 
 ## Record an evaluation
@@ -48,6 +48,10 @@ The result contains:
 
 Runtime facts and external evaluations are intentionally separate. A run can be faster while its evaluated quality falls, or slower while quality improves. The comparison output makes that trade-off visible instead of collapsing it into one score.
 
+For a fallback chain that eventually selects the built-in `external` executor, active time includes all earlier candidate work and waiting time begins at the external attempt's persisted `waiting_started_at`. Submitting output freezes that wait duration; bytes written by the submission are added to any result bytes already produced by failed candidates.
+
+Run-level waiting time is the union of persisted waiting intervals, bounded by the run interval. Parallel branches that wait at the same time are therefore counted once rather than added together, and a finished or cancelled run keeps the same duration, active time, and waiting time on every later read. Cancellation freezes every started, unfinished node and attempt at the durable run finish time, including a continuation-pending node that recovery had not restarted yet, and node durations are capped at the run finish for a terminal run so snapshots do not keep growing with the read time. A terminal snapshot also caps any attempt evidence left unfinished by a parallel sibling branch, so per-attempt timings are stable even when another branch ended the run.
+
 ## Aggregate a cohort
 
 ```bash
@@ -55,7 +59,7 @@ agentflow run stats WORKFLOW_NAME --format json
 agentflow run stats WORKFLOW_NAME --by-version --format json
 ```
 
-Finished-run distributions include duration, active time, waiting time, and node metrics. When evaluations exist, `measurements` contains count, total, average, min, max, p50, and p95 for each measurement name, unit, and direction. Unevaluated and unfinished runs do not enter these measurement distributions. Use `--by-version` when a workflow definition changed and the versions should be reported separately.
+Finished-run distributions include duration, active time, waiting time, and node metrics. Node metrics contain one row per unique visit, including visits archived by a manual retry or interrupted-attempt recovery; the latest visit's duplicate history record is counted only once. Attempts, bytes, duration, and waiting time therefore remain cumulative across a run's visits. When evaluations exist, `measurements` contains count, total, average, min, max, p50, and p95 for each measurement name, unit, and direction. Unevaluated and unfinished runs do not enter these measurement distributions. Use `--by-version` when a workflow definition changed and the versions should be reported separately.
 
 ## Reporting efficiency and quality
 

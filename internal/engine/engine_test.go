@@ -13,7 +13,7 @@ import (
 )
 
 func TestAgentRequiresStructuredResult(t *testing.T) {
-	workflow := model.Workflow{Version: "3", Name: "result", Nodes: []model.Node{{ID: "agent", Config: map[string]any{"instruction": "work"}, Executor: "fake"}}}
+	workflow := model.Workflow{Version: "3", Name: "result", Nodes: []model.Node{{ID: "agent", Execution: testExecution("fake", map[string]any{"instruction": "work"}, model.SessionSpec{})}}}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -28,7 +28,7 @@ func TestAgentRequiresStructuredResult(t *testing.T) {
 }
 
 func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
-	workflow := model.Workflow{Version: "3", Name: "result", Nodes: []model.Node{{ID: "agent", Config: map[string]any{"instruction": "work"}, Executor: "fake"}}}
+	workflow := model.Workflow{Version: "3", Name: "result", Nodes: []model.Node{{ID: "agent", Execution: testExecution("fake", map[string]any{"instruction": "work"}, model.SessionSpec{})}}}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -55,7 +55,7 @@ func TestAgentStoresStructuredResultSeparatelyFromLogs(t *testing.T) {
 
 func TestAgentPromptIncludesExactResultPath(t *testing.T) {
 	workspace := t.TempDir()
-	workflow := model.Workflow{Version: "3", Name: "contract", Nodes: []model.Node{{ID: "agent", Config: map[string]any{"instruction": "work", "workspace": workspace}, Executor: "fake"}}}
+	workflow := model.Workflow{Version: "3", Name: "contract", Nodes: []model.Node{{ID: "agent", Execution: testExecution("fake", map[string]any{"instruction": "work", "workspace": workspace}, model.SessionSpec{})}}}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -71,7 +71,7 @@ func TestAgentPromptIncludesExactResultPath(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	expected := filepath.Join(run.RunDir, "artifacts", "agent.1.result.json")
+	expected := filepath.Join(run.RunDir, "artifacts", "agent.1.candidate-1.attempt-1.result.json")
 	if !strings.Contains(string(prompt), expected) {
 		t.Fatalf("prompt did not include exact result path %q: %s", expected, prompt)
 	}
@@ -79,7 +79,7 @@ func TestAgentPromptIncludesExactResultPath(t *testing.T) {
 
 func TestAgentResumesSessionInWorkspace(t *testing.T) {
 	workspace := t.TempDir()
-	workflow := model.Workflow{Version: "3", Name: "session", Nodes: []model.Node{{ID: "agent", Config: map[string]any{"instruction": "continue", "workspace": workspace}, Execution: model.Execution{Session: model.SessionSpec{Mode: "fixed", ID: "session-123"}}, Executor: "fake"}}}
+	workflow := model.Workflow{Version: "3", Name: "session", Nodes: []model.Node{{ID: "agent", Execution: testExecution("fake", map[string]any{"instruction": "continue", "workspace": workspace}, model.SessionSpec{Mode: "fixed", ID: "session-123"})}}}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -102,7 +102,7 @@ func TestAgentResumesSessionInWorkspace(t *testing.T) {
 }
 
 func TestAgentSessionRequiresResumeCommand(t *testing.T) {
-	workflow := model.Workflow{Version: "3", Name: "session", Nodes: []model.Node{{ID: "agent", Config: map[string]any{"instruction": "continue"}, Execution: model.Execution{Session: model.SessionSpec{Mode: "fixed", ID: "session-123"}}, Executor: "fake"}}}
+	workflow := model.Workflow{Version: "3", Name: "session", Nodes: []model.Node{{ID: "agent", Execution: testExecution("fake", map[string]any{"instruction": "continue"}, model.SessionSpec{Mode: "fixed", ID: "session-123"})}}}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), nil, "")
 	if err != nil {
 		t.Fatal(err)
@@ -119,9 +119,9 @@ func TestAgentSessionRequiresResumeCommand(t *testing.T) {
 func TestNodeContractsPersistInputAndValidateOutput(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "contracts", Inputs: map[string]model.InputDefinition{"name": {Required: true}}, Nodes: []model.Node{{
 		ID:           "step",
-		Config:       map[string]any{"command": []string{"sh", "-c", `printf '{"greeting":"hello"}' > "$AGENTFLOW_RESULT_FILE"`}},
+		Execution:    testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{"greeting":"hello"}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}),
 		InputSchema:  map[string]any{"type": "object", "required": []any{"name"}, "properties": map[string]any{"name": map[string]any{"type": "string"}}},
-		OutputSchema: map[string]any{"type": "object", "required": []any{"greeting"}, "properties": map[string]any{"greeting": map[string]any{"type": "string"}}}, Executor: "process",
+		OutputSchema: map[string]any{"type": "object", "required": []any{"greeting"}, "properties": map[string]any{"greeting": map[string]any{"type": "string"}}},
 	}},
 	}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), map[string]string{"name": "Ada"}, "")
@@ -139,8 +139,8 @@ func TestNodeContractsPersistInputAndValidateOutput(t *testing.T) {
 func TestExplicitInputPersistsArtifact(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "handoff"}
 	workflow.Nodes = []model.Node{
-		{ID: "produce", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"summary":"ok","count":2,"ignored":true}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "consume", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"done":true}' > "$AGENTFLOW_RESULT_FILE"`}}, Executor: "process"},
+		{ID: "produce", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{"summary":"ok","count":2,"ignored":true}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "consume", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{"done":true}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
 	}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), nil, "")
 	if err != nil {
@@ -156,7 +156,7 @@ func TestExplicitInputPersistsArtifact(t *testing.T) {
 	if !ok || input["summary"] != "ok" || input["count"] != float64(2) || input["ignored"] != true {
 		t.Fatalf("unexpected propagated input: %#v", run.State.Nodes["consume"].Input)
 	}
-	data, err := os.ReadFile(filepath.Join(run.RunDir, "artifacts", "consume.1.input.json"))
+	data, err := os.ReadFile(filepath.Join(run.RunDir, "artifacts", "consume.1.candidate-1.attempt-1.input.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -169,8 +169,8 @@ func TestExplicitInputPersistsArtifact(t *testing.T) {
 func TestExplicitInputPreservesTypes(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "mapping"}
 	workflow.Nodes = []model.Node{
-		{ID: "produce", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"count":3}' > "$AGENTFLOW_RESULT_FILE"`}}},
-		{ID: "consume", Config: map[string]any{"count": "{{ input.count }}", "command": []string{"sh", "-c", `printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}}, InputSchema: map[string]any{"type": "object", "required": []any{"count"}, "properties": map[string]any{"count": map[string]any{"type": "integer"}}}, Executor: "process"},
+		{ID: "produce", Execution: testExecution("process", map[string]any{"command": []string{"sh", "-c", `printf '{"count":3}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{})},
+		{ID: "consume", Execution: testExecution("process", map[string]any{"count": "{{ input.count }}", "command": []string{"sh", "-c", `printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}}, model.SessionSpec{}), InputSchema: map[string]any{"type": "object", "required": []any{"count"}, "properties": map[string]any{"count": map[string]any{"type": "integer"}}}},
 	}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), nil, "")
 	if err != nil {
@@ -185,7 +185,7 @@ func TestExplicitInputPreservesTypes(t *testing.T) {
 	if got := run.State.Nodes["consume"].Input.(map[string]any)["count"]; got != float64(3) {
 		t.Fatalf("mapping changed type: %#v", got)
 	}
-	configBytes, err := os.ReadFile(filepath.Join(run.RunDir, "artifacts", "consume.1.config.json"))
+	configBytes, err := os.ReadFile(filepath.Join(run.RunDir, "artifacts", "consume.1.candidate-1.attempt-1.config.json"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -197,18 +197,20 @@ func TestExplicitInputPreservesTypes(t *testing.T) {
 
 func TestSessionPolicyAndEdgeDataflow(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "sessions", Nodes: []model.Node{
-		{ID: "start", Executor: "starter", Execution: model.Execution{Session: model.SessionSpec{Mode: "new"}}},
-		{ID: "branch", Executor: "brancher", Execution: model.Execution{Session: model.SessionSpec{Mode: "fork"}}},
-		{ID: "continue", Executor: "resumer", Execution: model.Execution{Session: model.SessionSpec{Mode: "inherit"}}},
+		{ID: "start", Execution: testExecution("session-program", nil, model.SessionSpec{Mode: "new"})},
+		{ID: "branch", Execution: testExecution("session-program", nil, model.SessionSpec{Mode: "fork"})},
+		{ID: "continue", Execution: testExecution("session-program", nil, model.SessionSpec{Mode: "inherit"})},
 	}}
 	run, err := store.CreateRun(t.TempDir(), linearWorkflow(workflow), map[string]string{"topic": "test"}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
 	executors := map[string]driver.Executor{
-		"starter":  {Kind: "command", Command: []string{"sh", "-c", `printf 'parent-session' > "$AGENTFLOW_SESSION_FILE"; printf '{"stage":"start"}' > "$AGENTFLOW_RESULT_FILE"`}},
-		"brancher": {Kind: "command", Command: []string{"sh", "-c", "exit 8"}, ForkCommand: []string{"sh", "-c", `test "$AGENTFLOW_SESSION_ID" = parent-session; printf 'child-session' > "$AGENTFLOW_SESSION_FILE"; printf '{"stage":"branch"}' > "$AGENTFLOW_RESULT_FILE"`}},
-		"resumer":  {Kind: "command", Command: []string{"sh", "-c", "exit 8"}, ResumeCommand: []string{"sh", "-c", `test "$AGENTFLOW_SESSION_ID" = child-session; printf '{"stage":"continue"}' > "$AGENTFLOW_RESULT_FILE"`}},
+		"session-program": {
+			Kind: "command", Command: []string{"sh", "-c", `printf 'parent-session' > "$AGENTFLOW_SESSION_FILE"; printf '{"stage":"start"}' > "$AGENTFLOW_RESULT_FILE"`},
+			ForkCommand:   []string{"sh", "-c", `test "$AGENTFLOW_SESSION_ID" = parent-session; printf 'child-session' > "$AGENTFLOW_SESSION_FILE"; printf '{"stage":"branch"}' > "$AGENTFLOW_RESULT_FILE"`},
+			ResumeCommand: []string{"sh", "-c", `test "$AGENTFLOW_SESSION_ID" = child-session; printf '{"stage":"continue"}' > "$AGENTFLOW_RESULT_FILE"`},
+		},
 	}
 	if err := Execute(run, executors); err != nil {
 		t.Fatal(err)
@@ -225,7 +227,7 @@ func TestSessionPolicyAndEdgeDataflow(t *testing.T) {
 }
 
 func TestFixedSessionCreatesOnceAndResumesOnRevisit(t *testing.T) {
-	workflow := model.Workflow{Version: "3", Name: "fixed", Entry: "agent", Nodes: []model.Node{{ID: "agent", Executor: "session-program", Execution: model.Execution{Session: model.SessionSpec{Mode: "fixed"}}}}, Edges: []model.Transition{
+	workflow := model.Workflow{Version: "3", Name: "fixed", Entry: "agent", Nodes: []model.Node{{ID: "agent", Execution: testExecution("session-program", nil, model.SessionSpec{Mode: "fixed"})}}, Edges: []model.Transition{
 		{From: "agent", To: "agent", When: "nodes.agent.result.again", MaxIterations: 1},
 		{From: "agent", To: "$end"},
 	}}
@@ -257,4 +259,8 @@ func linearWorkflow(workflow model.Workflow) model.Workflow {
 		workflow.Edges = append(workflow.Edges, model.Transition{From: node.ID, To: target})
 	}
 	return workflow
+}
+
+func testExecution(executor string, config map[string]any, session model.SessionSpec) model.Execution {
+	return model.Execution{Candidates: []model.ExecutorCandidate{{Executor: executor, Config: config, Session: session}}}
 }

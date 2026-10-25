@@ -98,7 +98,7 @@
       "type": "object",
       "required": [
         "id",
-        "executor"
+        "execution"
       ],
       "properties": {
         "id": {
@@ -145,6 +145,35 @@
           },
           "additionalProperties": false
         },
+        "execution": {
+          "type": "object",
+          "required": ["candidates"],
+          "additionalProperties": false,
+          "properties": {
+            "candidates": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"$ref": "#/$defs/candidate"},
+              "description": "Ordered executor choices. Retries are exhausted for one candidate before fallback selects the next."
+            },
+            "fallback": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "when": {"type": "string", "description": "Boolean Expr evaluated against the structured failure. Omitted means failure.kind == 'start_failed'."}
+              },
+              "description": "Policy permitting selection of the next candidate."
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["executor"],
+      "additionalProperties": false,
+      "properties": {
         "executor": {
           "type": "string",
           "minLength": 1,
@@ -154,35 +183,17 @@
           "type": "object",
           "description": "Opaque executor configuration. The graph engine does not assign business meaning to its keys."
         },
-        "execution": {
-          "type": "object",
-          "additionalProperties": false,
-          "properties": {
-            "session": {
-              "type": "object",
-              "additionalProperties": false,
-              "properties": {
-                "mode": {
-                  "type": "string",
-                  "enum": [
-                    "new",
-                    "fixed",
-                    "inherit",
-                    "fork"
-                  ]
-                },
-                "id": {
-                  "type": "string"
-                },
-                "from": {
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
-      },
-      "additionalProperties": false
+        "session": {"$ref": "#/$defs/session"}
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"type": "string", "enum": ["new", "fixed", "inherit", "fork"]},
+        "id": {"type": "string"},
+        "from": {"type": "string"}
+      }
     },
     "contract": {
       "type": "object",

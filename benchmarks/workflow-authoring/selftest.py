@@ -60,17 +60,19 @@ class EvaluatorTest(unittest.TestCase):
             # Equivalent data/config bindings and file-based role instructions
             # must not be rejected for differing from the reference syntax.
             review = next(n for n in flow["nodes"] if n["id"] == rename["review"])
-            actions = review["config"]["actions"]
-            review["config"]["recipient"] = "{{ input.recipient }}"
-            review["config"]["actions"] = "{{ input.actions }}"
+            review_config = review["execution"]["candidates"][0]["config"]
+            actions = review_config["actions"]
+            review_config["recipient"] = "{{ input.recipient }}"
+            review_config["actions"] = "{{ input.actions }}"
             review["inputSchema"] = {"type": "object"}
             next(e for e in flow["edges"] if e["from"] == rename["draft"] and e["to"] == rename["review"])["map"] = {
                 "recipient": "{{ inputs.reviewer }}", "actions": actions,
                 "summary": "{{ output.summary }}", "check": "{{ output.check }}",
             }
             draft = next(n for n in flow["nodes"] if n["id"] == rename["draft"])
-            draft["config"].pop("instruction")
-            draft["executor"] = "owned-author"
+            draft_candidate = draft["execution"]["candidates"][0]
+            draft_candidate["config"].pop("instruction")
+            draft_candidate["executor"] = "owned-author"
             directory = root / "executors/agents/author"
             directory.mkdir(parents=True)
             (directory / "AGENTS.md").write_text("Produce summary/check from the workflow input and any returned review note.\n")
@@ -105,11 +107,11 @@ class EvaluatorTest(unittest.TestCase):
                             "> 80", ">= 80"
                         )
                     if defect == "unregistered":
-                        flow["nodes"][0]["executor"] = "missing-executor"
+                        flow["nodes"][0]["execution"]["candidates"][0]["executor"] = "missing-executor"
                     if defect == "missing-branch-config":
-                        flow["nodes"][1]["config"].pop("branch")
+                        flow["nodes"][1]["execution"]["candidates"][0]["config"].pop("branch")
                     if defect == "missing-instruction":
-                        flow["nodes"][0]["config"].pop("instruction")
+                        flow["nodes"][0]["execution"]["candidates"][0]["config"].pop("instruction")
                     if defect == "stop-routes-forward":
                         flow["edges"][3]["to"] = "finalize"
                     if defect == "unbounded":

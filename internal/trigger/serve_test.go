@@ -82,7 +82,7 @@ func TestWebhookPortFailureDoesNotStartQueuedWork(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "triggers.json"), []byte(config), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "queued", Entry: "wait", Nodes: []model.Node{{ID: "wait", Executor: "external"}}, Edges: []model.Transition{{From: "wait", To: "$end"}}}, nil, "")
+	run, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "queued", Entry: "wait", Nodes: []model.Node{{ID: "wait", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "external"}}}}}, Edges: []model.Transition{{From: "wait", To: "$end"}}}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}

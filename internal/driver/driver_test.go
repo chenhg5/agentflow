@@ -26,7 +26,7 @@ func TestBuildClaudeCommand(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []string{"claude", "--resume", "session-1", "--print", "--output-format", "json", "--permission-mode", "acceptEdits", "inspect"}
+	want := []string{"claude", "--resume", "session-1", "--print", "--output-format", "json", "--permission-mode", "acceptEdits", "--", "inspect"}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("got %v, want %v", got, want)
 	}
@@ -71,7 +71,7 @@ func TestSessionModesSelectNativeAndCustomForkCommands(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(claude, []string{"claude", "--resume", "parent", "--fork-session", "--print", "--output-format", "json", "continue"}) {
+	if !reflect.DeepEqual(claude, []string{"claude", "--resume", "parent", "--fork-session", "--print", "--output-format", "json", "--", "continue"}) {
 		t.Fatalf("claude fork command = %v", claude)
 	}
 	custom := Executor{Kind: "command", Command: []string{"tool", "new"}, ResumeCommand: []string{"tool", "resume"}, ForkCommand: []string{"tool", "fork", "{{session_id}}"}}
@@ -160,5 +160,43 @@ func TestCustomExecutorEntryDoesNotInferBehaviorFromItsName(t *testing.T) {
 	}
 	if _, present := prepared.Env["AGENTFLOW_PROMPT"]; present {
 		t.Fatal("generic program unexpectedly required agent prompt semantics")
+	}
+}
+
+func TestRunCommandClassifiesStartExitAndTimeout(t *testing.T) {
+	missing := RunCommand([]string{"agentflow-command-that-does-not-exist"}, CommandOptions{Dir: t.TempDir()})
+	if missing.Started || missing.Code != -1 || missing.Error == "" {
+		t.Fatalf("missing executable = %+v", missing)
+	}
+	missingDirectory := RunCommand([]string{"sh", "-c", "exit 0"}, CommandOptions{Dir: filepath.Join(t.TempDir(), "missing")})
+	if missingDirectory.Started || missingDirectory.Error == "" {
+		t.Fatalf("missing cwd = %+v", missingDirectory)
+	}
+	exited := RunCommand([]string{"sh", "-c", "exit 75"}, CommandOptions{Dir: t.TempDir()})
+	if !exited.Started || exited.Code != 75 || exited.TimedOut {
+		t.Fatalf("nonzero exit = %+v", exited)
+	}
+	timedOut := RunCommand([]string{"sh", "-c", "sleep 1"}, CommandOptions{Dir: t.TempDir(), TimeoutMs: 20})
+	if !timedOut.Started || !timedOut.TimedOut || timedOut.Code != 124 {
+		t.Fatalf("timeout = %+v", timedOut)
+	}
+}
+
+func TestSessionCompatibility(t *testing.T) {
+	if !SessionCompatible("codex-a", Executor{Kind: "codex"}, "codex-b", Executor{Kind: "codex"}) {
+		t.Fatal("native aliases of one provider should be compatible")
+	}
+	if SessionCompatible("codex", Executor{Kind: "codex"}, "claude", Executor{Kind: "claude-code"}) {
+		t.Fatal("different native providers must be isolated")
+	}
+	if !SessionCompatible("custom", Executor{Kind: "command"}, "custom", Executor{Kind: "command"}) || SessionCompatible("custom-a", Executor{Kind: "command"}, "custom-b", Executor{Kind: "command"}) {
+		t.Fatal("custom sessions require the same registration identity")
+	}
+	persisted := SessionProtocol("source", Executor{Kind: "codex"})
+	if !SessionProtocolCompatible("target", Executor{Kind: "codex"}, persisted) {
+		t.Fatal("persisted native protocol should allow another alias of the same provider")
+	}
+	if SessionProtocolCompatible("target", Executor{Kind: "claude-code"}, persisted) {
+		t.Fatal("the target must not reinterpret a persisted session after source registry drift")
 	}
 }

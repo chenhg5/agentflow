@@ -8,7 +8,7 @@ import (
 
 func TestDescribeAndValidateConditionalCycle(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "graph", Entry: "draft", Nodes: []model.Node{
-		{ID: "draft", Executor: "codex"}, {ID: "review", Executor: "external"},
+		{ID: "draft", Execution: oneCandidate("codex")}, {ID: "review", Execution: oneCandidate("external")},
 	}, Edges: []model.Transition{
 		{From: "draft", To: "review", Map: &map[string]any{"summary": "{{ output.summary }}"}},
 		{From: "review", To: "draft", When: "nodes.review.result.decision == 'again'", MaxIterations: 2},
@@ -33,10 +33,10 @@ func TestDescribeAndValidateConditionalCycle(t *testing.T) {
 
 func TestParallelDispatchAndJoinValidation(t *testing.T) {
 	workflow := model.Workflow{Version: "3", Name: "parallel", Entry: "start", Nodes: []model.Node{
-		{ID: "start", Executor: "process", Dispatch: "all"},
-		{ID: "left", Executor: "process"},
-		{ID: "right", Executor: "process"},
-		{ID: "join", Executor: "process", Join: &model.JoinSpec{From: []string{"left", "right"}}},
+		{ID: "start", Execution: oneCandidate("process"), Dispatch: "all"},
+		{ID: "left", Execution: oneCandidate("process")},
+		{ID: "right", Execution: oneCandidate("process")},
+		{ID: "join", Execution: oneCandidate("process"), Join: &model.JoinSpec{From: []string{"left", "right"}}},
 	}, Edges: []model.Transition{
 		{From: "start", To: "left"}, {From: "start", To: "right"},
 		{From: "left", To: "join"}, {From: "right", To: "join"}, {From: "join", To: End},
@@ -52,14 +52,18 @@ func TestParallelDispatchAndJoinValidation(t *testing.T) {
 		t.Fatal("serial dispatch must reject multiple defaults")
 	}
 	workflow.Nodes[0].Dispatch = "all"
-	workflow.Nodes[3].Execution.Session.Mode = "inherit"
-	workflow.Nodes[3].Execution.Session.From = "start"
+	workflow.Nodes[3].Execution.Candidates[0].Session.Mode = "inherit"
+	workflow.Nodes[3].Execution.Candidates[0].Session.From = "start"
 	if problems := Validate(workflow); len(problems) == 0 {
 		t.Fatal("join session source must be a declared predecessor")
 	}
-	workflow.Nodes[3].Execution.Session = model.SessionSpec{}
+	workflow.Nodes[3].Execution.Candidates[0].Session = model.SessionSpec{}
 	workflow.Nodes[3].Join.From = []string{"left", "unknown"}
 	if problems := Validate(workflow); len(problems) == 0 {
 		t.Fatal("join must reject non-incoming predecessor")
 	}
+}
+
+func oneCandidate(executor string) model.Execution {
+	return model.Execution{Candidates: []model.ExecutorCandidate{{Executor: executor}}}
 }

@@ -11,7 +11,7 @@
   "nodes": [
     {
       "id": "collect",
-      "executor": "collect",
+      "execution": {"candidates": [{"executor": "collect"}]},
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -63,7 +63,7 @@
     },
     {
       "id": "report",
-      "executor": "report",
+      "execution": {"candidates": [{"executor": "report"}]},
       "inputSchema": {
         "type": "object",
         "properties": {

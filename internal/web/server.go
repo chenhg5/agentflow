@@ -1,6 +1,7 @@
 package web
 
 import (
+	"bytes"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -15,6 +16,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/graph"
 	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
+	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
 )
 
@@ -46,6 +48,7 @@ func NewServer(options Options) *Server {
 	server.mux.HandleFunc("/api/state", server.handleState)
 	server.mux.HandleFunc("/api/runs", server.handleRuns)
 	server.mux.HandleFunc("/api/runs/", server.handleRun)
+	server.mux.HandleFunc("/api/node", server.handleNodeDetail)
 	return server
 }
 
@@ -139,8 +142,16 @@ func loadWorkflow(path string) (model.Workflow, error) {
 		return model.Workflow{}, fmt.Errorf("cannot read workflow %s: %w", path, err)
 	}
 	var workflow model.Workflow
-	if err := json.Unmarshal(data, &workflow); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&workflow); err != nil {
 		return model.Workflow{}, fmt.Errorf("invalid workflow JSON: %w", err)
+	}
+	if problems := schema.ValidateWorkflowJSON(data); len(problems) > 0 {
+		return model.Workflow{}, fmt.Errorf("invalid workflow: %s", strings.Join(problems, "; "))
+	}
+	if problems := schema.Validate(workflow); len(problems) > 0 {
+		return model.Workflow{}, fmt.Errorf("invalid workflow: %s", strings.Join(problems, "; "))
 	}
 	return workflow, nil
 }

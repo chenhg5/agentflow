@@ -17,7 +17,7 @@ func TestRunEvaluateAndCompare(t *testing.T) {
 	defer restore()
 	_ = previous
 	root := workspace
-	workflow := model.Workflow{Version: "3", Name: "demo", Entry: "agent", Nodes: []model.Node{{ID: "agent", Executor: "process"}}}
+	workflow := model.Workflow{Version: "3", Name: "demo", Entry: "agent", Nodes: []model.Node{{ID: "agent", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "process"}}}}}}
 	makeRun := func(idempotency string) *model.Run {
 		run, err := store.CreateRun(root, workflow, map[string]string{}, idempotency)
 		if err != nil {

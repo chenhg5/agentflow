@@ -119,7 +119,7 @@ func TestStandaloneWorkspaceResumesAgentThroughSymlink(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "executors.json"), data, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	flow := `{"version":"3","name":"external-workspace","entry":"continue","nodes":[{"id":"continue","executor":"existing-agent","execution":{"session":{"mode":"fixed","id":"existing-session"}}}],"edges":[{"from":"continue","to":"$end"}]}`
+	flow := `{"version":"3","name":"external-workspace","entry":"continue","nodes":[{"id":"continue","execution":{"candidates":[{"executor":"existing-agent","session":{"mode":"fixed","id":"existing-session"}}]}}],"edges":[{"from":"continue","to":"$end"}]}`
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}

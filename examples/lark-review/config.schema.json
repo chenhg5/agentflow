@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Lark adapter config (candidate.config only; not graph schema)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "recipient",
+    "title",
+    "sections",
+    "actions"
+  ],
+  "properties": {
+    "profile": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "recipient": {
+      "type": "string",
+      "minLength": 1,
+      "description": "User open_id from the SAME app/profile. Templates are rendered by AgentFlow.",
+      "pattern": "\\S"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "\\S"
+    },
+    "subtitle": {
+      "type": "string"
+    },
+    "hint": {
+      "type": "string"
+    },
+    "sections": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "title",
+          "content"
+        ],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "label",
+          "output"
+        ],
+        "properties": {
+          "label": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S"
+          },
+          "output": {
+            "type": "object",
+            "description": "Arbitrary business fields. Must satisfy the node outputSchema."
+          },
+          "style": {
+            "enum": [
+              "default",
+              "primary_filled",
+              "danger",
+              "danger_filled",
+              "text"
+            ]
+          },
+          "color": {
+            "enum": [
+              "blue",
+              "green",
+              "orange",
+              "red",
+              "grey",
+              "default"
+            ]
+          },
+          "confirm": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "confirmation": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
+    }
+  }
+}

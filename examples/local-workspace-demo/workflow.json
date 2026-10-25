@@ -8,8 +8,7 @@
   "nodes": [
     {
       "id": "draft",
-      "executor": "author",
-      "execution": {"session": {"mode": "new"}},
+      "execution": {"candidates": [{"executor": "author", "session": {"mode": "new"}}]},
       "inputSchema": {
         "type": "object",
         "required": ["topic"],
@@ -29,8 +28,7 @@
     },
     {
       "id": "verify",
-      "executor": "verifier",
-      "execution": {"session": {"mode": "new"}},
+      "execution": {"candidates": [{"executor": "verifier", "session": {"mode": "new"}}]},
       "inputSchema": {
         "type": "object",
         "required": ["summary", "source_sha256", "word_count"],
@@ -54,7 +52,7 @@
     },
     {
       "id": "report",
-      "executor": "report_writer",
+      "execution": {"candidates": [{"executor": "report_writer"}]},
       "inputSchema": {
         "type": "object",
         "required": ["draft", "review"],

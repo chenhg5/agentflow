@@ -78,6 +78,8 @@ type CommandResult struct {
 	Stdout   string
 	Stderr   string
 	TimedOut bool
+	Started  bool
+	Error    string
 }
 
 // LoadExecutors reads this standalone workspace's registrations over the
@@ -357,6 +359,34 @@ func SessionFromLogs(executor Executor, logs string) string {
 	return ""
 }
 
+// SessionCompatible reports whether an implicit inherit/fork session may be
+// passed between two registrations. Native provider aliases are compatible;
+// custom commands must keep the exact same registered identity.
+func SessionCompatible(targetName string, target Executor, sourceName string, source Executor) bool {
+	return SessionProtocol(targetName, target) == SessionProtocol(sourceName, source)
+}
+
+// SessionProtocol is the durable identity of the adapter that created a
+// session. Native aliases share a provider protocol; custom commands are
+// compatible only with the exact registered executor identity.
+func SessionProtocol(name string, executor Executor) string {
+	switch executor.Kind {
+	case "codex", "claude-code":
+		return "native:" + executor.Kind
+	case "command", "":
+		return "command:" + name
+	default:
+		return "kind:" + executor.Kind + ":" + name
+	}
+}
+
+// SessionProtocolCompatible compares a target's current adapter against the
+// protocol persisted when the source session was created. It deliberately
+// does not consult the source's mutable executor registration.
+func SessionProtocolCompatible(targetName string, target Executor, sourceProtocol string) bool {
+	return sourceProtocol != "" && SessionProtocol(targetName, target) == sourceProtocol
+}
+
 func stringValue(object map[string]any, keys ...string) string {
 	for _, key := range keys {
 		if value, ok := object[key].(string); ok && value != "" {
@@ -428,8 +458,16 @@ func buildClaudeCommand(executor Executor, binary string, request Request) []str
 	}
 	command = append(command, "--print")
 	command = append(command, "--output-format", "json")
+	if executor.Model != "" {
+		command = append(command, "--model", executor.Model)
+	}
 	command = append(command, executor.ExtraArgs...)
-	return append(command, request.Prompt)
+	if executor.PromptMode == "stdin" {
+		return command
+	}
+	// Native variadic options such as --allowedTools must not consume the
+	// task as another option value. The task may itself begin with a dash.
+	return append(command, "--", request.Prompt)
 }
 
 func buildCodexCommand(executor Executor, binary string, request Request) []string {
@@ -469,7 +507,7 @@ func buildCodexCommand(executor Executor, binary string, request Request) []stri
 
 func RunCommand(command []string, options CommandOptions) CommandResult {
 	if len(command) == 0 {
-		return CommandResult{Code: 1, Stderr: "command must be non-empty"}
+		return CommandResult{Code: -1, Error: "command must be non-empty"}
 	}
 	ctx := context.Background()
 	var cancel context.CancelFunc
@@ -489,11 +527,16 @@ func RunCommand(command []string, options CommandOptions) CommandResult {
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
-	result := CommandResult{Code: 0, Stdout: stdout.String(), Stderr: stderr.String()}
+	if err := cmd.Start(); err != nil {
+		return CommandResult{Code: -1, Stdout: stdout.String(), Stderr: stderr.String(), Error: err.Error()}
+	}
+	result := CommandResult{Code: 0, Started: true}
+	err := cmd.Wait()
+	result.Stdout, result.Stderr = stdout.String(), stderr.String()
 	if ctx.Err() == context.DeadlineExceeded {
 		result.Code = 124
 		result.TimedOut = true
+		result.Error = ctx.Err().Error()
 		return result
 	}
 	if err == nil {
@@ -506,6 +549,7 @@ func RunCommand(command []string, options CommandOptions) CommandResult {
 			result.Signal = exitErr.ProcessState.String()
 		}
 	}
+	result.Error = err.Error()
 	return result
 }
 

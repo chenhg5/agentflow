@@ -3,6 +3,7 @@ package engine
 import (
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/condition"
@@ -20,11 +21,10 @@ func Execute(run *model.Run, executors map[string]driver.Executor) error {
 	if run.Workflow.Version != "3" {
 		return fmt.Errorf("only version 3 edge workflows can execute")
 	}
-	resolved := driver.BuiltInExecutors()
-	for name, executor := range executors {
-		resolved[name] = executor
+	executors = resolveExecutors(executors)
+	if err := validateExecutorRegistrations(run.Workflow, executors); err != nil {
+		return err
 	}
-	executors = resolved
 	for first := true; ; first = false {
 		release, _, err := store.AcquireRunLock(run.RunDir)
 		if err != nil {
@@ -45,6 +45,33 @@ func Execute(run *model.Run, executors map[string]driver.Executor) error {
 	}
 }
 
+// ValidateExecutors rejects workflow references that are absent from the
+// effective registry. Availability failures remain candidate-level runtime
+// evidence, but a misspelled or removed registration is a workflow setup
+// error and can never be selected by fallback policy.
+func ValidateExecutors(workflow model.Workflow, executors map[string]driver.Executor) error {
+	return validateExecutorRegistrations(workflow, resolveExecutors(executors))
+}
+
+func resolveExecutors(executors map[string]driver.Executor) map[string]driver.Executor {
+	resolved := driver.BuiltInExecutors()
+	for name, executor := range executors {
+		resolved[name] = executor
+	}
+	return resolved
+}
+
+func validateExecutorRegistrations(workflow model.Workflow, executors map[string]driver.Executor) error {
+	for _, node := range workflow.Nodes {
+		for index, candidate := range node.Execution.Candidates {
+			if _, ok := executors[candidate.Executor]; !ok {
+				return fmt.Errorf("node %s candidate %d references unregistered executor %q", node.ID, index+1, candidate.Executor)
+			}
+		}
+	}
+	return nil
+}
+
 func nodeByID(workflow model.Workflow, id string) model.Node {
 	for _, node := range workflow.Nodes {
 		if node.ID == id {
@@ -54,13 +81,118 @@ func nodeByID(workflow model.Workflow, id string) model.Node {
 	return model.Node{}
 }
 
-func recoverOrphans(run *model.Run) {
+// recoverOrphans reconciles attempts left "running" by a previous executor
+// process. It durably checkpoints every recovery mutation before emitting the
+// corresponding event, so a failed state write cannot leave events claiming an
+// attempt was archived or completed while durable state still says running.
+func recoverOrphans(run *model.Run) error {
+	events := []map[string]any{}
+	emit := func(event map[string]any) { events = append(events, event) }
 	for id, node := range run.State.Nodes {
-		if node.Status == "running" {
-			*node = model.NodeState{Status: "pending", Input: node.Input, IncomingNode: node.IncomingNode, IncomingSessionID: node.IncomingSessionID, Artifacts: map[string]string{}}
-			_ = store.AppendEvent(run.RunDir, map[string]any{"type": "node.orphaned", "nodeId": id})
+		if node.Status != "running" {
+			continue
 		}
+		now := time.Now().UTC()
+		if len(node.AttemptSequence) > 0 {
+			attempt := &node.AttemptSequence[len(node.AttemptSequence)-1]
+			if attempt.Status == "failed" {
+				continuation := node.Continuation
+				if continuation != nil && continuation.Kind != continuationTerminal {
+					// The attempt already completed and its next step is
+					// durable. Resume that step without appending a replay.
+					node.Status = "pending"
+					emit(map[string]any{
+						"type": "node.continuation_resumed", "nodeId": id, "attempt": attempt.Sequence,
+						"continuation": continuation.Kind, "candidate": continuation.Candidate, "candidateAttempt": continuation.CandidateAttempt,
+					})
+					continue
+				}
+				failure := copyFailure(attempt.Failure)
+				if continuation != nil {
+					failure = copyFailure(continuation.Failure)
+				}
+				if failure == nil {
+					failure = copyFailure(node.Failure)
+				}
+				message := "executor attempt failed before the node status was finalized"
+				if failure != nil && failure.Message != "" {
+					message = failure.Message
+				}
+				node.Status = "failed"
+				node.Error = message
+				node.Failure = failure
+				node.FinishedAt = attempt.FinishedAt
+				if node.FinishedAt == "" {
+					node.FinishedAt = now.Format(time.RFC3339Nano)
+				}
+				metrics.RefreshNode(node, now)
+				emit(map[string]any{"type": "node.recovered_failed_attempt", "nodeId": id, "attempt": attempt.Sequence, "failure": failure})
+				continue
+			}
+			if attempt.Status != "running" {
+				node.Status = attempt.Status
+				node.FinishedAt = attempt.FinishedAt
+				metrics.RefreshNode(node, now)
+				emit(map[string]any{"type": "node.recovered_completed_attempt", "nodeId": id, "attempt": attempt.Sequence, "status": attempt.Status})
+				continue
+			}
+		}
+		archived := cloneState(node)
+		failure := &model.ExecutionFailure{Kind: "interrupted", Started: archived.Workspace != "", Message: "executor process ended before the attempt completed", Executor: archived.SelectedExecutor}
+		resumeCandidate, resumeAttempt := 0, 1
+		if len(archived.AttemptSequence) > 0 {
+			attempt := &archived.AttemptSequence[len(archived.AttemptSequence)-1]
+			failure.Executor = attempt.Executor
+			failure.Attempt = attempt.Sequence
+			failure.Started = attempt.Workspace != ""
+			resumeCandidate, resumeAttempt = attempt.Candidate, attempt.CandidateAttempt
+			attempt.Status = "failed"
+			attempt.Failure = failure
+			attempt.FinishedAt = now.Format(time.RFC3339Nano)
+			attempt.DurationMs = metrics.DurationMillis(attempt.StartedAt, attempt.FinishedAt, now)
+		}
+		archived.Status = "failed"
+		archived.Error = failure.Message
+		archived.Failure = failure
+		archived.FinishedAt = now.Format(time.RFC3339Nano)
+		metrics.RefreshNode(&archived, now)
+		oldVisit, newVisit := archiveAndResetNode(run, id, archived)
+		// The fresh visit gets a new artifact namespace, but only the attempt
+		// that was actually running may replay. Preserve its candidate/retry
+		// position instead of restarting the candidate list from scratch.
+		node.Continuation = &model.NodeContinuation{
+			Kind: continuationResume, Candidate: resumeCandidate, CandidateAttempt: resumeAttempt,
+			Failure: failure, At: now.Format(time.RFC3339Nano),
+		}
+		emit(map[string]any{"type": "node.orphaned", "nodeId": id, "visit": oldVisit, "nextVisit": newVisit, "resumeCandidate": resumeCandidate, "resumeAttempt": resumeAttempt, "failure": failure})
 	}
+	if len(events) == 0 {
+		return nil
+	}
+	if err := store.SaveState(run); err != nil {
+		return err
+	}
+	for _, event := range events {
+		_ = store.AppendEvent(run.RunDir, event)
+	}
+	return nil
+}
+
+func archiveAndResetNode(run *model.Run, id string, archived model.NodeState) (int, int) {
+	previous := run.State.Nodes[id]
+	oldVisit := run.State.Visits[id]
+	run.State.History = append(run.State.History, model.NodeVisit{NodeID: id, Visit: oldVisit, State: archived})
+	run.State.Visits[id] = oldVisit + 1
+	*previous = model.NodeState{
+		Status:                  "pending",
+		Input:                   previous.Input,
+		IncomingNode:            previous.IncomingNode,
+		IncomingSessionID:       previous.IncomingSessionID,
+		IncomingExecutor:        previous.IncomingExecutor,
+		IncomingSessionProtocol: previous.IncomingSessionProtocol,
+		Artifacts:               map[string]string{},
+	}
+	return oldVisit, run.State.Visits[id]
 }
 
 // RetryPlan permits retrying failed active nodes without resetting successful siblings.
@@ -110,12 +242,14 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 	if run.State.Traversals == nil {
 		run.State.Traversals = map[string]int{}
 	}
-	recoverOrphans(run)
+	if err := recoverOrphans(run); err != nil {
+		return err
+	}
 	if _, err := applyControls(run); err != nil {
 		return err
 	}
-	if run.State.Status == "cancelled" {
-		return store.SaveState(run)
+	if runStatusTerminal(run.State.Status) {
+		return nil
 	}
 	if run.State.ActiveNode == "" {
 		return store.SaveState(run)
@@ -125,12 +259,13 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 	if err := store.SaveState(run); err != nil {
 		return err
 	}
+	stateMu := &sync.Mutex{}
 	for run.State.ActiveNode != "" {
 		if _, err := applyControls(run); err != nil {
 			return err
 		}
-		if run.State.Status == "cancelled" {
-			return store.SaveState(run)
+		if runStatusTerminal(run.State.Status) {
+			return nil
 		}
 		id := run.State.ActiveNode
 		state := run.State.Nodes[id]
@@ -149,7 +284,7 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 		}
 		if state.Status == "pending" {
 			definition := nodeByID(run.Workflow, id)
-			task, prepared, err := prepareNode(run, definition, executors)
+			task, prepared, err := prepareNode(run, definition, executors, stateMu)
 			*state = prepared
 			if err != nil {
 				return err
@@ -234,7 +369,7 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 		}
 		run.State.ActiveNode = selected.To
 		run.State.Visits[selected.To]++
-		*run.State.Nodes[selected.To] = model.NodeState{Status: "pending", Input: nextInput, IncomingNode: id, IncomingSessionID: state.SessionID, Artifacts: map[string]string{}}
+		*run.State.Nodes[selected.To] = model.NodeState{Status: "pending", Input: nextInput, IncomingNode: id, IncomingSessionID: state.SessionID, IncomingExecutor: state.SelectedExecutor, IncomingSessionProtocol: state.SessionProtocol, Artifacts: map[string]string{}}
 		if err := store.SaveState(run); err != nil {
 			return err
 		}

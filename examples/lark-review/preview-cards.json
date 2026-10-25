@@ -1,0 +1,793 @@
+{
+  "waiting": {
+    "schema": "2.0",
+    "config": {
+      "update_multi": true,
+      "width_mode": "default",
+      "enable_forward": false,
+      "summary": {
+        "content": "[待处理] 这份提案，可以继续吗？"
+      }
+    },
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "这份提案，可以继续吗？"
+      },
+      "subtitle": {
+        "tag": "plain_text",
+        "content": "AgentFlow · 每日改进提案"
+      },
+      "icon": {
+        "tag": "standard_icon",
+        "token": "approval_colorful"
+      },
+      "template": "blue",
+      "text_tag_list": [
+        {
+          "tag": "text_tag",
+          "text": {
+            "tag": "plain_text",
+            "content": "待处理"
+          },
+          "color": "blue"
+        }
+      ]
+    },
+    "body": {
+      "direction": "vertical",
+      "padding": "12px",
+      "vertical_spacing": "12px",
+      "elements": [
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**改进提案**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "default",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**怎样算完成**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "horizontal_spacing": "8px",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "elements": [
+                {
+                  "tag": "button",
+                  "text": {
+                    "tag": "plain_text",
+                    "content": "通过"
+                  },
+                  "type": "primary_filled",
+                  "width": "fill",
+                  "size": "medium",
+                  "behaviors": [
+                    {
+                      "type": "callback",
+                      "value": {
+                        "invocation": "preview-only",
+                        "actionIndex": 0
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "elements": [
+                {
+                  "tag": "button",
+                  "text": {
+                    "tag": "plain_text",
+                    "content": "要求修改"
+                  },
+                  "type": "default",
+                  "width": "fill",
+                  "size": "medium",
+                  "behaviors": [
+                    {
+                      "type": "callback",
+                      "value": {
+                        "invocation": "preview-only",
+                        "actionIndex": 1
+                      }
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "elements": [
+                {
+                  "tag": "button",
+                  "text": {
+                    "tag": "plain_text",
+                    "content": "结束本次"
+                  },
+                  "type": "danger",
+                  "width": "fill",
+                  "size": "medium",
+                  "behaviors": [
+                    {
+                      "type": "callback",
+                      "value": {
+                        "invocation": "preview-only",
+                        "actionIndex": 2
+                      }
+                    }
+                  ],
+                  "confirm": {
+                    "title": {
+                      "tag": "plain_text",
+                      "content": "结束本次"
+                    },
+                    "text": {
+                      "tag": "plain_text",
+                      "content": "结束这次提案流程？本次流程不会继续执行后续节点。"
+                    }
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "markdown",
+          "content": "<font color='grey'>通过后整理行动方案；要求修改后重新提案；结束后不再推进。</font>",
+          "text_size": "notation"
+        }
+      ]
+    }
+  },
+  "recorded": {
+    "schema": "2.0",
+    "config": {
+      "update_multi": true,
+      "width_mode": "default",
+      "enable_forward": false,
+      "summary": {
+        "content": "[已记录] 这份提案，可以继续吗？"
+      }
+    },
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "这份提案，可以继续吗？"
+      },
+      "subtitle": {
+        "tag": "plain_text",
+        "content": "AgentFlow · 每日改进提案"
+      },
+      "icon": {
+        "tag": "standard_icon",
+        "token": "approval_colorful"
+      },
+      "template": "orange",
+      "text_tag_list": [
+        {
+          "tag": "text_tag",
+          "text": {
+            "tag": "plain_text",
+            "content": "已记录"
+          },
+          "color": "orange"
+        }
+      ]
+    },
+    "body": {
+      "direction": "vertical",
+      "padding": "12px",
+      "vertical_spacing": "12px",
+      "elements": [
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**改进提案**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "default",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**怎样算完成**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "orange-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**已记录**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "已记录：通过。正在提交，暂时无需再次操作。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "markdown",
+          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "text_size": "notation"
+        }
+      ]
+    }
+  },
+  "approved": {
+    "schema": "2.0",
+    "config": {
+      "update_multi": true,
+      "width_mode": "default",
+      "enable_forward": false,
+      "summary": {
+        "content": "[已处理] 这份提案，可以继续吗？"
+      }
+    },
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "这份提案，可以继续吗？"
+      },
+      "subtitle": {
+        "tag": "plain_text",
+        "content": "AgentFlow · 每日改进提案"
+      },
+      "icon": {
+        "tag": "standard_icon",
+        "token": "approval_colorful"
+      },
+      "template": "green",
+      "text_tag_list": [
+        {
+          "tag": "text_tag",
+          "text": {
+            "tag": "plain_text",
+            "content": "已处理"
+          },
+          "color": "green"
+        }
+      ]
+    },
+    "body": {
+      "direction": "vertical",
+      "padding": "12px",
+      "vertical_spacing": "12px",
+      "elements": [
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**改进提案**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "default",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**怎样算完成**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "green-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**已处理**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "已通过。工作流已接收结果，将继续整理行动方案。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "markdown",
+          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "text_size": "notation"
+        }
+      ]
+    }
+  },
+  "changes": {
+    "schema": "2.0",
+    "config": {
+      "update_multi": true,
+      "width_mode": "default",
+      "enable_forward": false,
+      "summary": {
+        "content": "[已处理] 这份提案，可以继续吗？"
+      }
+    },
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "这份提案，可以继续吗？"
+      },
+      "subtitle": {
+        "tag": "plain_text",
+        "content": "AgentFlow · 每日改进提案"
+      },
+      "icon": {
+        "tag": "standard_icon",
+        "token": "approval_colorful"
+      },
+      "template": "orange",
+      "text_tag_list": [
+        {
+          "tag": "text_tag",
+          "text": {
+            "tag": "plain_text",
+            "content": "已处理"
+          },
+          "color": "orange"
+        }
+      ]
+    },
+    "body": {
+      "direction": "vertical",
+      "padding": "12px",
+      "vertical_spacing": "12px",
+      "elements": [
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**改进提案**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "default",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**怎样算完成**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "orange-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**已处理**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "已要求修改。工作流已接收结果，将按配置重新生成提案。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "markdown",
+          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "text_size": "notation"
+        }
+      ]
+    }
+  },
+  "rejected": {
+    "schema": "2.0",
+    "config": {
+      "update_multi": true,
+      "width_mode": "default",
+      "enable_forward": false,
+      "summary": {
+        "content": "[已处理] 这份提案，可以继续吗？"
+      }
+    },
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "这份提案，可以继续吗？"
+      },
+      "subtitle": {
+        "tag": "plain_text",
+        "content": "AgentFlow · 每日改进提案"
+      },
+      "icon": {
+        "tag": "standard_icon",
+        "token": "approval_colorful"
+      },
+      "template": "red",
+      "text_tag_list": [
+        {
+          "tag": "text_tag",
+          "text": {
+            "tag": "plain_text",
+            "content": "已处理"
+          },
+          "color": "red"
+        }
+      ]
+    },
+    "body": {
+      "direction": "vertical",
+      "padding": "12px",
+      "vertical_spacing": "12px",
+      "elements": [
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**改进提案**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "default",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**怎样算完成**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "red-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**已处理**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "已结束。工作流已接收结果，将结束本次流程。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "markdown",
+          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "text_size": "notation"
+        }
+      ]
+    }
+  },
+  "expired": {
+    "schema": "2.0",
+    "config": {
+      "update_multi": true,
+      "width_mode": "default",
+      "enable_forward": false,
+      "summary": {
+        "content": "[已失效] 这份提案，可以继续吗？"
+      }
+    },
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "这份提案，可以继续吗？"
+      },
+      "subtitle": {
+        "tag": "plain_text",
+        "content": "AgentFlow · 每日改进提案"
+      },
+      "icon": {
+        "tag": "standard_icon",
+        "token": "approval_colorful"
+      },
+      "template": "grey",
+      "text_tag_list": [
+        {
+          "tag": "text_tag",
+          "text": {
+            "tag": "plain_text",
+            "content": "已失效"
+          },
+          "color": "neutral"
+        }
+      ]
+    },
+    "body": {
+      "direction": "vertical",
+      "padding": "12px",
+      "vertical_spacing": "12px",
+      "elements": [
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**改进提案**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "default",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**怎样算完成**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**已失效**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "该次请求已结束或已被其他操作处理，请查看最新消息。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "markdown",
+          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "text_size": "notation"
+        }
+      ]
+    }
+  }
+}

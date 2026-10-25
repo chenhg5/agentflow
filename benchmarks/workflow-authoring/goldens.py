@@ -33,23 +33,17 @@ def generate(directory):
             feedback = "note" if case == "scheduled-review" else "feedback"
             draft = {
                 "id": "draft",
-                "executor": "codex",
-                "config": {
-                    "instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result."
-                    + feedback
-                    + " }}"
-                },
+                "execution": {"candidates": [{"executor": "codex", "config": {
+                    "instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result." + feedback + " }}"
+                }}]},
                 "inputSchema": {"type": "object"},
                 "outputSchema": DRAFT,
             }
             final = {
                 "id": "finalize",
-                "executor": "codex",
-                "config": {
-                    "instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result."
-                    + feedback
-                    + " }}"
-                },
+                "execution": {"candidates": [{"executor": "codex", "config": {
+                    "instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result." + feedback + " }}"
+                }}]},
                 "inputSchema": {"type": "object"},
                 "outputSchema": FINAL,
             }
@@ -65,14 +59,13 @@ def generate(directory):
                 flow["inputs"]["reviewer"] = {"type": "string", "required": True}
                 review = {
                     "id": "review",
-                    "executor": "channel",
-                    "config": {
+                    "execution": {"candidates": [{"executor": "channel", "config": {
                         "recipient": "{{ inputs.reviewer }}",
                         "actions": [
                             {"label": v, "output": {"signal": v, "note": v}}
                             for v in ["happy", "again", "sad"]
                         ],
-                    },
+                    }}]},
                     "inputSchema": DRAFT,
                     "outputSchema": schema(
                         {"signal": {"enum": ["happy", "again", "sad"]}, "note": S}
@@ -116,7 +109,7 @@ def generate(directory):
             else:
                 review = {
                     "id": "review",
-                    "executor": "external",
+                    "execution": {"candidates": [{"executor": "external"}]},
                     "inputSchema": DRAFT,
                     "outputSchema": schema(
                         {
@@ -156,7 +149,7 @@ def generate(directory):
             nodes = [
                 {
                     "id": "measure",
-                    "executor": "measure",
+                    "execution": {"candidates": [{"executor": "measure"}]},
                     "inputSchema": schema({"sample": S}),
                     "outputSchema": schema(value),
                 }
@@ -165,8 +158,7 @@ def generate(directory):
                 nodes.append(
                     {
                         "id": role,
-                        "executor": "finish",
-                        "config": {"branch": role},
+                        "execution": {"candidates": [{"executor": "finish", "config": {"branch": role}}]},
                         "inputSchema": schema(value),
                         "outputSchema": schema({"branch": S, **value}),
                     }
@@ -222,13 +214,13 @@ def generate(directory):
             nodes = [
                 {
                     "id": "collect",
-                    "executor": "collect",
+                    "execution": {"candidates": [{"executor": "collect"}]},
                     "inputSchema": schema({"batch": S}),
                     "outputSchema": data,
                 },
                 {
                     "id": "report",
-                    "executor": "report",
+                    "execution": {"candidates": [{"executor": "report"}]},
                     "inputSchema": data,
                     "outputSchema": schema(
                         {

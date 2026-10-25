@@ -33,14 +33,12 @@ type Retry struct {
 }
 
 type Node struct {
-	ID       string `json:"id"`
-	Executor string `json:"executor"`
+	ID string `json:"id"`
 	// Dispatch selects one matching outgoing edge by default, or all matching
 	// edges when set to "all".
 	Dispatch string `json:"dispatch,omitempty"`
 	// Join waits for one payload from every named immediate predecessor.
 	Join         *JoinSpec      `json:"join,omitempty"`
-	Config       map[string]any `json:"config,omitempty"`
 	InputSchema  map[string]any `json:"inputSchema,omitempty"`
 	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 	Execution    Execution      `json:"execution,omitempty"`
@@ -52,11 +50,35 @@ type JoinSpec struct {
 	From []string `json:"from"`
 }
 
-// Execution contains runtime policy that is independent of node data. The
-// graph engine owns session selection; executor adapters translate the chosen
-// policy into native CLI arguments when they support sessions.
+// Execution contains the ordered ways a logical node may be executed. A
+// candidate failure stays inside the logical node; graph edges only observe
+// the first successful candidate result.
 type Execution struct {
-	Session SessionSpec `json:"session,omitempty"`
+	Candidates []ExecutorCandidate `json:"candidates"`
+	Fallback   *FallbackSpec       `json:"fallback,omitempty"`
+}
+
+type ExecutorCandidate struct {
+	Executor string         `json:"executor"`
+	Config   map[string]any `json:"config,omitempty"`
+	Session  SessionSpec    `json:"session,omitempty"`
+}
+
+type FallbackSpec struct {
+	When string `json:"when,omitempty"`
+}
+
+// NodeContinuation is the durable decision taken when an attempt completes
+// unsuccessfully. It is persisted together with the completed attempt so a
+// restart resumes the recorded retry/fallback/terminal outcome instead of
+// replaying an attempt that already finished. An attempt that is still
+// "running" in durable state has no such checkpoint and may replay.
+type NodeContinuation struct {
+	Kind             string            `json:"kind"`
+	Candidate        int               `json:"candidate"`
+	CandidateAttempt int               `json:"candidateAttempt"`
+	Failure          *ExecutionFailure `json:"failure,omitempty"`
+	At               string            `json:"at"`
 }
 
 // SessionSpec selects how a node obtains an agent session.
@@ -73,26 +95,71 @@ type SessionSpec struct {
 }
 
 type NodeState struct {
-	Status            string            `json:"status"`
-	IncomingNode      string            `json:"incomingNode,omitempty"`
-	IncomingSessionID string            `json:"incomingSessionId,omitempty"`
-	Workspace         string            `json:"workspace,omitempty"`
-	SessionID         string            `json:"sessionId,omitempty"`
-	Reason            string            `json:"reason,omitempty"`
-	Attempts          int               `json:"attempts,omitempty"`
-	DurationMs        int64             `json:"durationMs,omitempty"`
-	WaitDurationMs    int64             `json:"waitDurationMs,omitempty"`
-	InputBytes        int64             `json:"inputBytes,omitempty"`
-	OutputBytes       int64             `json:"outputBytes,omitempty"`
-	StdoutBytes       int64             `json:"stdoutBytes,omitempty"`
-	StderrBytes       int64             `json:"stderrBytes,omitempty"`
-	Error             string            `json:"error,omitempty"`
-	StartedAt         string            `json:"startedAt,omitempty"`
-	FinishedAt        string            `json:"finishedAt,omitempty"`
-	Result            any               `json:"result,omitempty"`
-	Input             any               `json:"input,omitempty"`
-	Artifacts         map[string]string `json:"artifacts,omitempty"`
-	LeaseToken        string            `json:"leaseToken,omitempty"`
+	Status                  string            `json:"status"`
+	IncomingNode            string            `json:"incomingNode,omitempty"`
+	IncomingSessionID       string            `json:"incomingSessionId,omitempty"`
+	IncomingExecutor        string            `json:"incomingExecutor,omitempty"`
+	IncomingSessionProtocol string            `json:"incomingSessionProtocol,omitempty"`
+	SelectedExecutor        string            `json:"selectedExecutor,omitempty"`
+	SelectedCandidate       *int              `json:"selectedCandidate,omitempty"`
+	Workspace               string            `json:"workspace,omitempty"`
+	SessionID               string            `json:"sessionId,omitempty"`
+	SessionProtocol         string            `json:"sessionProtocol,omitempty"`
+	Reason                  string            `json:"reason,omitempty"`
+	FallbackReason          string            `json:"fallbackReason,omitempty"`
+	Attempts                int               `json:"attempts,omitempty"`
+	AttemptSequence         []AttemptEvidence `json:"attemptSequence,omitempty"`
+	Continuation            *NodeContinuation `json:"continuation,omitempty"`
+	Failure                 *ExecutionFailure `json:"failure,omitempty"`
+	DurationMs              int64             `json:"durationMs,omitempty"`
+	WaitDurationMs          int64             `json:"waitDurationMs,omitempty"`
+	InputBytes              int64             `json:"inputBytes,omitempty"`
+	OutputBytes             int64             `json:"outputBytes,omitempty"`
+	StdoutBytes             int64             `json:"stdoutBytes,omitempty"`
+	StderrBytes             int64             `json:"stderrBytes,omitempty"`
+	Error                   string            `json:"error,omitempty"`
+	StartedAt               string            `json:"startedAt,omitempty"`
+	WaitingStartedAt        string            `json:"waitingStartedAt,omitempty"`
+	FinishedAt              string            `json:"finishedAt,omitempty"`
+	Result                  any               `json:"result,omitempty"`
+	Input                   any               `json:"input,omitempty"`
+	Artifacts               map[string]string `json:"artifacts,omitempty"`
+	LeaseToken              string            `json:"leaseToken,omitempty"`
+}
+
+// ExecutionFailure is the stable policy input used by execution.fallback.when.
+// Code is present only when a process produced an exit status.
+type ExecutionFailure struct {
+	Kind     string `json:"kind"`
+	Started  bool   `json:"started"`
+	Code     *int   `json:"code,omitempty"`
+	TimedOut bool   `json:"timedOut"`
+	Message  string `json:"message"`
+	Executor string `json:"executor"`
+	Attempt  int    `json:"attempt"`
+	Signal   string `json:"signal,omitempty"`
+}
+
+// AttemptEvidence preserves every command attempt, including failed fallback
+// candidates, without turning those intermediate failures into graph nodes.
+type AttemptEvidence struct {
+	Sequence         int               `json:"sequence"`
+	Candidate        int               `json:"candidate"`
+	CandidateAttempt int               `json:"candidateAttempt"`
+	Executor         string            `json:"executor"`
+	Status           string            `json:"status"`
+	StartedAt        string            `json:"startedAt,omitempty"`
+	FinishedAt       string            `json:"finishedAt,omitempty"`
+	DurationMs       int64             `json:"durationMs,omitempty"`
+	Workspace        string            `json:"workspace,omitempty"`
+	SessionID        string            `json:"sessionId,omitempty"`
+	SessionProtocol  string            `json:"sessionProtocol,omitempty"`
+	Failure          *ExecutionFailure `json:"failure,omitempty"`
+	InputBytes       int64             `json:"inputBytes,omitempty"`
+	OutputBytes      int64             `json:"outputBytes,omitempty"`
+	StdoutBytes      int64             `json:"stdoutBytes,omitempty"`
+	StderrBytes      int64             `json:"stderrBytes,omitempty"`
+	Artifacts        map[string]string `json:"artifacts,omitempty"`
 }
 
 type RunState struct {
@@ -155,6 +222,7 @@ type TriggerInfo struct {
 // writing run state, so the executor stays the only writer.
 type Control struct {
 	Kind   string         `json:"kind"`
+	Token  string         `json:"token,omitempty"`
 	NodeID string         `json:"nodeId,omitempty"`
 	Nodes  []string       `json:"nodes,omitempty"`
 	Output map[string]any `json:"output,omitempty"`

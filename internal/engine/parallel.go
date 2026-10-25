@@ -55,24 +55,27 @@ func executeParallelGraph(run *model.Run, executors map[string]driver.Executor) 
 	if run.State.Traversals == nil {
 		run.State.Traversals = map[string]int{}
 	}
-	recoverOrphans(run)
+	if err := recoverOrphans(run); err != nil {
+		return err
+	}
 	if _, err := applyControls(run); err != nil {
 		return err
 	}
-	if run.State.Status == "cancelled" || run.State.Status == "succeeded" || (run.State.Status == "failed" && len(run.State.ActiveNodes) == 0) {
-		return store.SaveState(run)
+	if runStatusTerminal(run.State.Status) {
+		return nil
 	}
 	metrics.MarkRunStarted(&run.State, time.Now().UTC())
 	run.State.Status = "running"
 	if err := store.SaveState(run); err != nil {
 		return err
 	}
+	stateMu := &sync.Mutex{}
 	for {
 		if _, err := applyControls(run); err != nil {
 			return err
 		}
-		if run.State.Status == "cancelled" {
-			return store.SaveState(run)
+		if runStatusTerminal(run.State.Status) {
+			return nil
 		}
 		if len(run.State.ActiveNodes) == 0 {
 			if len(run.State.JoinInputs) != 0 {
@@ -113,35 +116,15 @@ func executeParallelGraph(run *model.Run, executors map[string]driver.Executor) 
 				return store.SaveState(run)
 			}
 		}
-		advanced := false
-		for _, id := range append([]string(nil), run.State.ActiveNodes...) {
-			if run.State.Nodes[id].Status != "succeeded" {
-				continue
-			}
-			if err := advanceParallelNode(run, id); err != nil {
-				return err
-			}
-			advanced = true
-			if run.State.Status == "failed" {
-				break
-			}
-		}
-		if run.State.Status == "failed" {
-			return store.SaveState(run)
-		}
-		if advanced {
-			if err := store.SaveState(run); err != nil {
-				return err
-			}
-			continue
-		}
 		var tasks []*nodeTask
+		preparedPending := false
 		for _, id := range run.State.ActiveNodes {
 			state := run.State.Nodes[id]
 			if state.Status != "pending" {
 				continue
 			}
-			task, prepared, err := prepareNode(run, nodeByID(run.Workflow, id), executors)
+			preparedPending = true
+			task, prepared, err := prepareNode(run, nodeByID(run.Workflow, id), executors, stateMu)
 			*state = prepared
 			if err != nil {
 				return err
@@ -150,8 +133,10 @@ func executeParallelGraph(run *model.Run, executors map[string]driver.Executor) 
 				tasks = append(tasks, task)
 			}
 		}
-		if err := store.SaveState(run); err != nil {
-			return err
+		if preparedPending {
+			if err := store.SaveState(run); err != nil {
+				return err
+			}
 		}
 		if len(tasks) != 0 {
 			type taskResult struct {
@@ -174,6 +159,34 @@ func executeParallelGraph(run *model.Run, executors map[string]driver.Executor) 
 					return results[index].err
 				}
 			}
+			if err := store.SaveState(run); err != nil {
+				return err
+			}
+			continue
+		}
+		if preparedPending {
+			// Preparing may transition an external node to waiting_input or a
+			// deterministic session/configuration failure. Re-evaluate the whole
+			// active wave before advancing any previously successful sibling.
+			continue
+		}
+		advanced := false
+		for _, id := range append([]string(nil), run.State.ActiveNodes...) {
+			if run.State.Nodes[id].Status != "succeeded" {
+				continue
+			}
+			if err := advanceParallelNode(run, id); err != nil {
+				return err
+			}
+			advanced = true
+			if run.State.Status == "failed" {
+				break
+			}
+		}
+		if run.State.Status == "failed" {
+			return store.SaveState(run)
+		}
+		if advanced {
 			if err := store.SaveState(run); err != nil {
 				return err
 			}
@@ -274,7 +287,7 @@ func advanceParallelNode(run *model.Run, id string) error {
 			}
 		}
 		run.State.Visits[edge.To]++
-		*run.State.Nodes[edge.To] = model.NodeState{Status: "pending", Input: payload, IncomingNode: id, IncomingSessionID: state.SessionID, Artifacts: map[string]string{}}
+		*run.State.Nodes[edge.To] = model.NodeState{Status: "pending", Input: payload, IncomingNode: id, IncomingSessionID: state.SessionID, IncomingExecutor: state.SelectedExecutor, IncomingSessionProtocol: state.SessionProtocol, Artifacts: map[string]string{}}
 		run.State.ActiveNodes = append(run.State.ActiveNodes, edge.To)
 		syncActiveNode(&run.State)
 	}

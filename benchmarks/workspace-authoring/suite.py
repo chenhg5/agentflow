@@ -100,7 +100,7 @@ def golden(root):
     (root / "executors/programs/archive/main.py").write_text(PROGRAM)
     shape = lambda props: {"type": "object", "required": list(props), "properties": {key: {"type": kind} for key, kind in props.items()}, "additionalProperties": False}
     data = shape({"text": "string", "ok": "boolean"})
-    flow = {"version": "3", "name": "layout-v1", "entry": "transform", "inputs": {"text": {"type": "string", "required": True}}, "nodes": [{"id": "transform", "executor": "transform", "execution": {"session": session}, "inputSchema": shape({"text": "string"}), "outputSchema": data, "config": {"instruction": "Use workflow_tools.read_input; preserve text and add ok:true. Write the required result JSON."}}, {"id": "archive", "executor": "archive", "inputSchema": data, "outputSchema": shape({"artifact": "string", "ok": "boolean"})}], "edges": [{"from": "transform", "to": "archive"}, {"from": "archive", "to": "$end"}]}
+    flow = {"version": "3", "name": "layout-v1", "entry": "transform", "inputs": {"text": {"type": "string", "required": True}}, "nodes": [{"id": "transform", "execution": {"candidates": [{"executor": "transform", "session": session, "config": {"instruction": "Use workflow_tools.read_input; preserve text and add ok:true. Write the required result JSON."}}]}, "inputSchema": shape({"text": "string"}), "outputSchema": data}, {"id": "archive", "execution": {"candidates": [{"executor": "archive"}]}, "inputSchema": data, "outputSchema": shape({"artifact": "string", "ok": "boolean"})}], "edges": [{"from": "transform", "to": "archive"}, {"from": "archive", "to": "$end"}]}
     write_json(root / "workflow.json", flow)
     write_json(root / "triggers.json", {"triggers": [{"id": "daily", "enabled": True, "source": {"kind": "cron", "expression": "0 9 * * *", "timezone": "Asia/Shanghai"}, "target": {"workflow": "workflow.json"}, "inputs": {"text": TEXT}}]})
     write_json(root / "submission.json", {"workflow": "workflow.json", "roles": {"agent": "transform", "archive": "archive"}})
@@ -123,7 +123,9 @@ def grade(source):
         nodes = {node["id"]: node for node in flow["nodes"]}
         agent = nodes[submission["roles"]["agent"]]
         archive = nodes[submission["roles"]["archive"]]
-        a, p = registry[agent["executor"]], registry[archive["executor"]]
+        agent_candidate = agent["execution"]["candidates"][0]
+        archive_candidate = archive["execution"]["candidates"][0]
+        a, p = registry[agent_candidate["executor"]], registry[archive_candidate["executor"]]
         check("only task executors", len(registry) == 2 and len(nodes) == 2)
         check("agent implementation", a.get("kind") == "codex")
         workspace = Path(a["workspace"])
@@ -132,11 +134,11 @@ def grade(source):
         check("agent files", all((original_agent / name).is_file() for name in ["AGENTS.md", ".codex/config.toml"]) and any((original_agent / ".agents/skills").glob("*/SKILL.md")) and (original_agent / "tools").is_dir())
         if meta["case"] == "owned":
             check("owned agent grouped", workspace.parts[:2] == ("executors", "agents") and not (source / workspace).is_symlink())
-            check("new session", agent.get("execution", {}).get("session", {}).get("mode", "new") == "new")
+            check("new session", agent_candidate.get("session", {}).get("mode", "new") == "new")
         else:
             check("external directory retained", original_agent == Path(meta["existing"]).resolve())
             check("external files unchanged", digest_tree(original_agent) == meta["existing_hashes"])
-            check("fixed existing session", agent["execution"]["session"] == {"mode": "fixed", "id": meta["session"]})
+            check("fixed existing session", agent_candidate["session"] == {"mode": "fixed", "id": meta["session"]})
             local = source / "executors/agents"
             check("no duplicated agent", not local.exists() or all(f.is_symlink() for f in local.iterdir()))
         report = cli(source, "workspace", "validate", binary=source / ".tool/agentflow")
@@ -214,7 +216,7 @@ def selftest():
             if case == "reuse":
                 flow = json.loads((attempt / "workflow.json").read_text())
                 original_flow = json.loads(json.dumps(flow))
-                flow["nodes"][0]["execution"]["session"] = {"mode": "new"}
+                flow["nodes"][0]["execution"]["candidates"][0]["session"] = {"mode": "new"}
                 write_json(attempt / "workflow.json", flow)
                 assert not grade(attempt)["passed"]
                 write_json(attempt / "workflow.json", original_flow)

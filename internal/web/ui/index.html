@@ -141,6 +141,23 @@
       .inspector { flex: 1 1 auto; min-height: 0; overflow: auto; background: var(--panel); padding: 14px 18px; }
       .inspector-empty { color: var(--muted); font-size: 12px; }
       .inspector-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 10px; }
+      .inspector-head { flex-wrap: wrap; align-items: center; }
+      .inspector-head select { margin-left: auto; max-width: 180px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 5px; background: var(--panel); color: var(--text); font-size: 11px; }
+      .inspector-tabs { display: flex; gap: 16px; border-bottom: 1px solid var(--border); margin-bottom: 12px; }
+      .inspector-tabs button { padding: 0 0 8px; border: 0; border-bottom: 2px solid transparent; background: none; color: var(--muted); font-size: 11px; cursor: pointer; }
+      .inspector-tabs button.active { border-bottom-color: var(--accent); color: var(--text); }
+      .runtime-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+      .runtime-value { min-width: 0; }
+      .runtime-value-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; font-size: 11px; color: var(--muted); }
+      .runtime-value-head button { border: 0; background: none; color: var(--accent); padding: 2px 0 2px 8px; font-size: 10px; cursor: pointer; }
+      .inspector .runtime-value pre { max-height: none; min-height: 72px; }
+      .runtime-placeholder, .log-note { color: var(--muted); font-size: 11px; line-height: 1.5; }
+      .runtime-placeholder { padding: 12px; border: 1px dashed var(--border); border-radius: 6px; min-height: 72px; }
+      .runtime-error { color: var(--edge-condition); font-size: 11px; margin: 0 0 12px; }
+      .session-meta { display: flex; gap: 16px; flex-wrap: wrap; margin-bottom: 12px; font-size: 11px; color: var(--muted); overflow-wrap: anywhere; }
+      .session-meta code { color: var(--text); font-size: 11px; }
+      .inspector .execution-log pre { max-height: none; }
+      .execution-log + .execution-log { margin-top: 14px; }
       .inspector-head strong { font-size: 13px; }
       .inspector-head span { color: var(--muted); font-size: 10px; }
       .inspector-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
@@ -159,6 +176,8 @@
         .toolbar-actions { width: 100%; justify-content: flex-start; }
         .legend { margin-left: 0; }
         .inspector-grid { grid-template-columns: 1fr; }
+        .runtime-grid { grid-template-columns: 1fr; }
+        .react-flow__minimap { display: none; }
       }
     </style>
   </head>
@@ -178,16 +197,25 @@
       ];
       const messages = {
         en: {
-          loading: "Loading AgentFlow visualization…", unable: "Unable to load visualization: {error}", language: "Language", light: "Light", dark: "Dark", switchToLight: "Switch to light mode", switchToDark: "Switch to dark mode", refresh: "Refresh", visualization: "Workflow visualization", recentRuns: "Recent runs", noRuns: "No runs yet", selectRun: "Select a run from the sidebar to inspect its graph", chooseRun: "Choose a run to open its workflow graph.", definitionPreview: "Workflow definition preview · no run attached", selectNode: "Select a node to inspect its executor, contract, artifacts, and runtime state.", inputSchema: "Input schema", outputSchema: "Output schema", config: "Executor config", sessionPolicy: "Session policy", sessionId: "Session ID", runtimeInput: "Runtime input", runtimeResult: "Runtime result", artifacts: "Artifacts", edges: "Edges", status: "Status", duration: "Duration", attempts: "Attempts", input: "Input", output: "Output", logs: "Logs", comparison: "Compared with previous run", baseline: "Baseline", change: "Change", improved: "improved", regressed: "regressed", unchanged: "unchanged", resizeInspector: "Drag to resize the graph and details panels", loopMax: "loop ≤ {value}", fanOut: "parallel fan-out", join: "join", statusSucceeded: "succeeded", statusRunning: "running", statusWaitingInput: "waiting for input", statusFailed: "failed", statusSkipped: "skipped", statusPending: "pending", attemptsValue: "{value} attempts", end: "end", updated: "updated"
+          loading: "Loading AgentFlow visualization…", unable: "Unable to load visualization: {error}", language: "Language", light: "Light", dark: "Dark", switchToLight: "Switch to light mode", switchToDark: "Switch to dark mode", refresh: "Refresh", visualization: "Workflow visualization", recentRuns: "Recent runs", noRuns: "No runs yet", selectRun: "Select a run from the sidebar to inspect its graph", chooseRun: "Choose a run to open its workflow graph.", definitionPreview: "Workflow definition preview · no run attached", selectNode: "Select a node to inspect its candidates, contract, artifacts, and runtime state.", inputSchema: "Input schema", outputSchema: "Output schema", candidates: "Ordered candidates", fallbackPolicy: "Fallback policy", selectedExecutor: "Selected executor", attemptSequence: "Attempt sequence", failure: "Final failure", config: "Executor config", sessionPolicy: "Session policy", sessionId: "Session ID", runtimeInput: "Runtime input", runtimeResult: "Runtime result", artifacts: "Artifacts", edges: "Edges", status: "Status", duration: "Duration", attempts: "Attempts", input: "Input", output: "Output", logs: "Logs", comparison: "Compared with previous run", baseline: "Baseline", change: "Change", improved: "improved", regressed: "regressed", unchanged: "unchanged", resizeInspector: "Drag to resize the graph and details panels", loopMax: "loop ≤ {value}", fanOut: "parallel fan-out", join: "join", statusSucceeded: "succeeded", statusRunning: "running", statusWaitingInput: "waiting for input", statusFailed: "failed", statusSkipped: "skipped", statusPending: "pending", attemptsValue: "{value} attempts", end: "end", updated: "updated"
         },
         "zh-CN": {
-          loading: "正在加载 AgentFlow 可视化…", unable: "无法加载可视化页面：{error}", language: "语言", light: "浅色", dark: "深色", switchToLight: "切换到浅色模式", switchToDark: "切换到深色模式", refresh: "刷新", visualization: "工作流可视化", recentRuns: "最近运行", noRuns: "暂无运行记录", selectRun: "从左侧选择一次运行来查看图", chooseRun: "请选择一次运行来打开工作流图。", definitionPreview: "工作流定义预览 · 尚未关联运行", selectNode: "选择一个节点，查看它的执行器、契约、产物和运行状态。", inputSchema: "输入 schema", outputSchema: "输出 schema", config: "执行器配置", sessionPolicy: "Session 策略", sessionId: "Session ID", runtimeInput: "实际输入", runtimeResult: "运行结果", artifacts: "产物", edges: "边", status: "状态", duration: "耗时", attempts: "尝试次数", input: "输入", output: "输出", logs: "日志", comparison: "与上一次运行对比", baseline: "基线", change: "变化", improved: "提升", regressed: "下降", unchanged: "不变", resizeInspector: "拖动调整画布和详情面板的高度", loopMax: "循环 ≤ {value}", fanOut: "并行发散", join: "汇合", statusSucceeded: "成功", statusRunning: "运行中", statusWaitingInput: "等待输入", statusFailed: "失败", statusSkipped: "已跳过", statusPending: "待处理", attemptsValue: "{value} 次尝试", end: "结束", updated: "更新时间"
+          loading: "正在加载 AgentFlow 可视化…", unable: "无法加载可视化页面：{error}", language: "语言", light: "浅色", dark: "深色", switchToLight: "切换到浅色模式", switchToDark: "切换到深色模式", refresh: "刷新", visualization: "工作流可视化", recentRuns: "最近运行", noRuns: "暂无运行记录", selectRun: "从左侧选择一次运行来查看图", chooseRun: "请选择一次运行来打开工作流图。", definitionPreview: "工作流定义预览 · 尚未关联运行", selectNode: "选择一个节点，查看候选执行器、契约、产物和运行状态。", inputSchema: "输入 schema", outputSchema: "输出 schema", candidates: "候选执行器顺序", fallbackPolicy: "回退策略", selectedExecutor: "已选执行器", attemptSequence: "尝试序列", failure: "最终失败", config: "执行器配置", sessionPolicy: "Session 策略", sessionId: "Session ID", runtimeInput: "实际输入", runtimeResult: "运行结果", artifacts: "产物", edges: "边", status: "状态", duration: "耗时", attempts: "尝试次数", input: "输入", output: "输出", logs: "日志", comparison: "与上一次运行对比", baseline: "基线", change: "变化", improved: "提升", regressed: "下降", unchanged: "不变", resizeInspector: "拖动调整画布和详情面板的高度", loopMax: "循环 ≤ {value}", fanOut: "并行发散", join: "汇合", statusSucceeded: "成功", statusRunning: "运行中", statusWaitingInput: "等待输入", statusFailed: "失败", statusSkipped: "已跳过", statusPending: "待处理", attemptsValue: "{value} 次尝试", end: "结束", updated: "更新时间"
         },
         "zh-TW": {
-          loading: "正在載入 AgentFlow 視覺化…", unable: "無法載入視覺化頁面：{error}", language: "語言", light: "淺色", dark: "深色", switchToLight: "切換到淺色模式", switchToDark: "切換到深色模式", refresh: "重新整理", visualization: "工作流視覺化", recentRuns: "最近執行", noRuns: "尚無執行記錄", selectRun: "從左側選擇一次執行來查看圖形", chooseRun: "請選擇一次執行來開啟工作流圖。", definitionPreview: "工作流定義預覽 · 尚未關聯執行", selectNode: "選擇一個節點，查看它的執行器、契約、產物和執行狀態。", inputSchema: "輸入 schema", outputSchema: "輸出 schema", config: "執行器設定", sessionPolicy: "Session 策略", sessionId: "Session ID", runtimeInput: "實際輸入", runtimeResult: "執行結果", artifacts: "產物", edges: "邊", status: "狀態", duration: "耗時", attempts: "嘗試次數", input: "輸入", output: "輸出", logs: "日誌", comparison: "與上一次執行對比", baseline: "基線", change: "變化", improved: "提升", regressed: "下降", unchanged: "不變", resizeInspector: "拖動調整畫布和詳細資訊面板的高度", loopMax: "循環 ≤ {value}", fanOut: "並行發散", join: "匯合", statusSucceeded: "成功", statusRunning: "執行中", statusWaitingInput: "等待輸入", statusFailed: "失敗", statusSkipped: "已跳過", statusPending: "待處理", attemptsValue: "{value} 次嘗試", end: "結束", updated: "更新時間"
+          loading: "正在載入 AgentFlow 視覺化…", unable: "無法載入視覺化頁面：{error}", language: "語言", light: "淺色", dark: "深色", switchToLight: "切換到淺色模式", switchToDark: "切換到深色模式", refresh: "重新整理", visualization: "工作流視覺化", recentRuns: "最近執行", noRuns: "尚無執行記錄", selectRun: "從左側選擇一次執行來查看圖形", chooseRun: "請選擇一次執行來開啟工作流圖。", definitionPreview: "工作流定義預覽 · 尚未關聯執行", selectNode: "選擇一個節點，查看候選執行器、契約、產物和執行狀態。", inputSchema: "輸入 schema", outputSchema: "輸出 schema", candidates: "候選執行器順序", fallbackPolicy: "回退策略", selectedExecutor: "已選執行器", attemptSequence: "嘗試序列", failure: "最終失敗", config: "執行器設定", sessionPolicy: "Session 策略", sessionId: "Session ID", runtimeInput: "實際輸入", runtimeResult: "執行結果", artifacts: "產物", edges: "邊", status: "狀態", duration: "耗時", attempts: "嘗試次數", input: "輸入", output: "輸出", logs: "日誌", comparison: "與上一次執行對比", baseline: "基線", change: "變化", improved: "提升", regressed: "下降", unchanged: "不變", resizeInspector: "拖動調整畫布和詳細資訊面板的高度", loopMax: "循環 ≤ {value}", fanOut: "並行發散", join: "匯合", statusSucceeded: "成功", statusRunning: "執行中", statusWaitingInput: "等待輸入", statusFailed: "失敗", statusSkipped: "已跳過", statusPending: "待處理", attemptsValue: "{value} 次嘗試", end: "結束", updated: "更新時間"
         }
       };
-      const statusMessageKeys = { succeeded: "statusSucceeded", running: "statusRunning", waiting_input: "statusWaitingInput", failed: "statusFailed", skipped: "statusSkipped", pending: "statusPending" };
+      Object.assign(messages.en, {
+        dataTab: "Input / output", logsTab: "Execution logs", definitionTab: "Definition", currentVisit: "Latest visit", visit: "Visit {value}", visitLabel: "Node visit", copy: "Copy JSON", copied: "Copied", copyFailed: "Copy failed", notStarted: "This node has not run yet.", noInput: "No recorded input.", outputPending: "Still running · no output yet.", noOutput: "No recorded output.", noLogs: "No recorded logs yet.", emptyLog: "Empty log", logTail: "Showing the last 64 KiB.", logsScope: "Logs captured by the executor for this node visit; not the full agent conversation.", detailFailed: "Cannot load node details. Retrying…", statusCancelled: "cancelled"
+      });
+      Object.assign(messages["zh-CN"], {
+        dataTab: "输入 / 输出", logsTab: "执行记录", definitionTab: "节点定义", currentVisit: "最近一次", visit: "第 {value} 次", visitLabel: "节点执行次数", copy: "复制 JSON", copied: "已复制", copyFailed: "复制失败", notStarted: "该节点尚未执行。", noInput: "没有记录到输入。", outputPending: "运行中，尚未产生输出。", noOutput: "没有记录到输出。", noLogs: "暂无执行日志。", emptyLog: "日志为空", logTail: "显示最后 64 KiB。", logsScope: "这里显示该节点本次执行器捕获的日志，不包含完整 agent 会话。", detailFailed: "无法加载节点详情，正在重试…", statusCancelled: "已取消"
+      });
+      Object.assign(messages["zh-TW"], {
+        dataTab: "輸入 / 輸出", logsTab: "執行記錄", definitionTab: "節點定義", currentVisit: "最近一次", visit: "第 {value} 次", visitLabel: "節點執行次數", copy: "複製 JSON", copied: "已複製", copyFailed: "複製失敗", notStarted: "該節點尚未執行。", noInput: "沒有記錄到輸入。", outputPending: "執行中，尚未產生輸出。", noOutput: "沒有記錄到輸出。", noLogs: "暫無執行日誌。", emptyLog: "日誌為空", logTail: "顯示最後 64 KiB。", logsScope: "這裡顯示該節點本次執行器擷取的日誌，不包含完整 agent 對話。", detailFailed: "無法載入節點詳情，正在重試…", statusCancelled: "已取消"
+      });
+      const statusMessageKeys = { succeeded: "statusSucceeded", running: "statusRunning", waiting_input: "statusWaitingInput", failed: "statusFailed", skipped: "statusSkipped", pending: "statusPending", cancelled: "statusCancelled" };
       const themePalettes = {
         dark: { grid: "#26313d", edge: "#52606d", condition: "#d29922", label: "#79c0ff", labelBackground: "#161b22" },
         light: { grid: "#d8e0e9", edge: "#718096", condition: "#a15c00", label: "#185b91", labelBackground: "#ffffff" },
@@ -215,6 +243,16 @@
       const readPreference = (key, fallback) => {
         try { return localStorage.getItem(key) || fallback; } catch (_) { return fallback; }
       };
+      function initialLanguage() {
+        const saved = readPreference("agentflow-language", "");
+        if (Object.hasOwn(languageTags, saved)) return saved;
+        for (const value of [...(navigator.languages || []), navigator.language || ""]) {
+          const tag = value.toLowerCase();
+          if (tag === "zh" || tag.startsWith("zh-")) return /(?:^|-)(?:hant|tw|hk|mo)(?:-|$)/.test(tag) ? "zh-TW" : "zh-CN";
+          if (tag === "en" || tag.startsWith("en-")) return "en";
+        }
+        return "en";
+      }
 
       function nodeLayout(workflow, state, description, language, theme, selectedNodeID) {
         const graphEdges = description?.edges || [];
@@ -276,14 +314,17 @@
       }
 
       function NodeCard({ definition, state, status, language }) {
+		const candidates = definition.execution?.candidates?.map((candidate) => candidate.executor) || [];
+		const executorLabel = state?.selectedExecutor || candidates.join(" → ") || (definition.id === "$end" ? t(language, "end") : "—");
+        const elapsed = state?.startedAt ? Math.max(0, (state.finishedAt ? Date.parse(state.finishedAt) : Date.now()) - Date.parse(state.startedAt)) : state?.durationMs || 0;
         return h("div", { className: "node-card" },
           h("div", { className: "node-head" },
             h("i", { className: "node-dot " + statusClass(status) }),
             h("span", { className: "node-name", title: definition.id }, definition.id),
           ),
-          h("div", { className: "node-type" }, (definition.executor || t(language, "end")) + " · " + statusLabel(language, status) + (definition.dispatch === "all" ? " · " + t(language, "fanOut") : "") + (definition.join ? " · " + t(language, "join") : "")),
+          h("div", { className: "node-type" }, executorLabel + " · " + statusLabel(language, status) + (definition.dispatch === "all" ? " · " + t(language, "fanOut") : "") + (definition.join ? " · " + t(language, "join") : "")),
           state && (state.durationMs || state.attempts || state.outputBytes) ? h("div", { className: "node-stats" },
-            h("span", null, formatMs(state.durationMs)),
+            h("span", null, formatMs(Number.isFinite(elapsed) ? elapsed : 0)),
             h("span", null, t(language, "attemptsValue", { value: state.attempts || 0 })),
             h("span", null, formatBytes(state.outputBytes || 0)),
           ) : null,
@@ -313,23 +354,106 @@
         );
       }
 
-      function Inspector({ definition, state, description, language }) {
+      function RuntimeValue({ label, record, placeholder, language }) {
+        const [copyState, setCopyState] = useState("copy");
+        useEffect(() => { setCopyState("copy"); }, [record?.value]);
+        const text = JSON.stringify(record?.value, null, 2);
+        const copy = async () => {
+          try { await navigator.clipboard.writeText(text); setCopyState("copied"); }
+          catch (_) { setCopyState("copyFailed"); }
+        };
+        return h("section", { className: "runtime-value", "aria-label": label },
+          h("div", { className: "runtime-value-head" }, h("span", null, label), record?.available ? h("button", { onClick: copy }, t(language, copyState)) : null),
+          record?.available ? h("pre", null, text) : h("div", { className: "runtime-placeholder" }, record?.error || placeholder),
+        );
+      }
+
+      function Inspector({ definition, state, description, language, runID, history = [], visits = {} }) {
+        const [tab, setTab] = useState("data");
+        const [visit, setVisit] = useState("current");
+        const [loaded, setLoaded] = useState(null);
+        const nodeID = definition?.id;
+        const detailKey = JSON.stringify([runID, nodeID, visit]);
+        useEffect(() => { setVisit("current"); setTab("data"); }, [runID, nodeID]);
+        useEffect(() => {
+          if (!runID || !nodeID || nodeID === "$end") return undefined;
+          const controller = new AbortController();
+          let busy = false;
+          const loadDetails = async () => {
+            if (busy) return;
+            busy = true;
+            try {
+              const query = new URLSearchParams({ run: runID, node: nodeID, visit });
+              const response = await fetch("/api/node?" + query, { signal: controller.signal });
+              if (!response.ok) throw new Error("Node details unavailable");
+              const data = await response.json();
+              if (!controller.signal.aborted) setLoaded({ key: detailKey, data });
+            } catch (_) {
+              if (!controller.signal.aborted) setLoaded((previous) => ({ key: detailKey, data: previous?.key === detailKey ? previous.data : null, error: true }));
+            } finally { busy = false; }
+          };
+          loadDetails();
+          const timer = setInterval(loadDetails, 2000);
+          return () => { controller.abort(); clearInterval(timer); };
+        }, [runID, nodeID, visit]);
         if (!definition) return h("div", { className: "inspector" }, h("div", { className: "inspector-empty" }, t(language, "selectNode")));
-        const edges = (description?.edges || []).filter((edge) => edge.source === definition.id || edge.target === definition.id);
+        const previous = history.filter((item) => item.nodeId === nodeID && item.visit !== visits[nodeID]);
+        const selectedState = visit === "current" ? state : history.find((item) => item.nodeId === nodeID && String(item.visit) === visit)?.state;
+        const currentDetails = loaded?.key === detailKey ? loaded : null;
+        const detail = visit === "current" && visits[nodeID] && currentDetails?.data?.visit !== visits[nodeID] ? null : currentDetails?.data;
+        const runtime = detail?.state || selectedState;
+        const hasRun = Boolean(runID && runtime && nodeID !== "$end");
+        const recorded = (key) => ({ available: runtime && Object.hasOwn(runtime, key), value: runtime?.[key] });
+        const input = detail?.input || recorded("input");
+        const output = detail?.output || recorded("result");
+        const pending = !runtime || runtime.status === "pending" || runtime.status === "skipped";
+        const waiting = runtime?.status === "running" || runtime?.status === "waiting_input";
+        const edges = (description?.edges || []).filter((edge) => edge.source === nodeID || edge.target === nodeID);
+        const candidates = definition.execution?.candidates;
+        const executorLabel = runtime?.selectedExecutor || candidates?.map((candidate) => candidate.executor).join(" → ") || "";
         return h("div", { className: "inspector" },
-          h("div", { className: "inspector-head" }, h("strong", null, definition.id), h("span", null, definition.executor + (state?.status ? " · " + statusLabel(language, state.status) : ""))),
-          h("div", { className: "inspector-grid" },
-            h(JsonBlock, { label: t(language, "inputSchema"), value: definition.inputSchema }),
-            h(JsonBlock, { label: t(language, "outputSchema"), value: definition.outputSchema }),
-            h(JsonBlock, { label: t(language, "config"), value: definition.config }),
-            h(JsonBlock, { label: t(language, "join"), value: definition.join }),
-            h(JsonBlock, { label: t(language, "sessionPolicy"), value: definition.execution?.session }),
-            h(JsonBlock, { label: t(language, "sessionId"), value: state?.sessionId }),
-            h(JsonBlock, { label: t(language, "runtimeInput"), value: state?.input }),
-            h(JsonBlock, { label: t(language, "runtimeResult"), value: state?.result }),
-            h(JsonBlock, { label: t(language, "artifacts"), value: state?.artifacts }),
+          h("div", { className: "inspector-head" }, h("strong", null, nodeID), h("span", null, executorLabel + (runtime?.status ? " · " + statusLabel(language, runtime.status) : "")),
+            previous.length ? h("select", { value: visit, "aria-label": t(language, "visitLabel"), onChange: (event) => setVisit(event.target.value) },
+              h("option", { value: "current" }, t(language, "currentVisit") + " · " + t(language, "visit", { value: visits[nodeID] || 1 })),
+              previous.map((item) => h("option", { key: item.visit, value: String(item.visit) }, t(language, "visit", { value: item.visit }) + " · " + statusLabel(language, item.state.status))),
+            ) : null,
           ),
-          edges.length ? h("div", { className: "graph-warning" }, t(language, "edges") + ": ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id, title: edge.map ? JSON.stringify(edge.map, null, 2) : undefined }, edge.source + " → " + edge.target + (edge.condition ? " · " + edge.condition : "") + (edge.map ? " · map" : "") + (edge.maxIterations ? " · max " + edge.maxIterations : "")))) : null,
+          hasRun ? h("div", { className: "inspector-tabs", role: "tablist" },
+            [["data", "dataTab"], ["logs", "logsTab"], ["definition", "definitionTab"]].map(([id, label]) => h("button", { key: id, role: "tab", "aria-selected": tab === id, className: tab === id ? "active" : "", onClick: () => setTab(id) }, t(language, label))),
+          ) : null,
+          currentDetails?.error ? h("div", { className: "log-note" }, t(language, "detailFailed")) : null,
+          hasRun && tab === "data" ? h(React.Fragment, null,
+            runtime.error ? h("div", { className: "runtime-error" }, runtime.error) : null,
+            h("div", { className: "runtime-grid" },
+              h(RuntimeValue, { label: t(language, "runtimeInput"), record: input, placeholder: t(language, pending ? "notStarted" : "noInput"), language }),
+              h(RuntimeValue, { label: t(language, "runtimeResult"), record: output, placeholder: t(language, pending ? "notStarted" : waiting ? "outputPending" : "noOutput"), language }),
+            ),
+          ) : null,
+          hasRun && tab === "logs" ? h(React.Fragment, null,
+            h("div", { className: "session-meta" }, executorLabel ? h("span", null, t(language, "selectedExecutor") + ": ", h("code", null, executorLabel)) : null, runtime.sessionId ? h("span", null, "Session ID: ", h("code", null, runtime.sessionId)) : null),
+            h("p", { className: "log-note" }, t(language, "logsScope")),
+            ["stdout", "stderr"].map((channel) => {
+              const log = detail?.logs?.[channel];
+              return h("section", { className: "execution-log", key: channel },
+                h("div", { className: "inspector-label" }, channel),
+                log?.available ? h("pre", null, log.text || t(language, "emptyLog")) : h("div", { className: "log-note" }, log?.error || t(language, "noLogs")),
+                log?.truncated ? h("div", { className: "log-note" }, t(language, "logTail")) : null,
+              );
+            }),
+            h(JsonBlock, { label: t(language, "attemptSequence"), value: runtime.attemptSequence }),
+          ) : null,
+          !hasRun || tab === "definition" ? h(React.Fragment, null,
+            h("div", { className: "inspector-grid" },
+              h(JsonBlock, { label: t(language, "inputSchema"), value: definition.inputSchema }),
+              h(JsonBlock, { label: t(language, "outputSchema"), value: definition.outputSchema }),
+              h(JsonBlock, { label: t(language, "candidates"), value: candidates }),
+              h(JsonBlock, { label: t(language, "fallbackPolicy"), value: definition.execution?.fallback }),
+              h(JsonBlock, { label: t(language, "join"), value: definition.join }),
+              h(JsonBlock, { label: t(language, "failure"), value: runtime?.failure }),
+              h(JsonBlock, { label: t(language, "artifacts"), value: runtime?.artifacts }),
+            ),
+            edges.length ? h("div", { className: "graph-warning" }, t(language, "edges") + ": ", edges.map((edge) => h("span", { className: "edge-chip", key: edge.id, title: edge.map ? JSON.stringify(edge.map, null, 2) : undefined }, edge.source + " → " + edge.target + (edge.condition ? " · " + edge.condition : "") + (edge.map ? " · map" : "") + (edge.maxIterations ? " · max " + edge.maxIterations : "")))) : null,
+          ) : null,
         );
       }
 
@@ -428,7 +552,7 @@
         const [view, setView] = useState(null);
         const [selectedNode, setSelectedNode] = useState(null);
         const [error, setError] = useState("");
-        const [language, setLanguage] = useState(() => readPreference("agentflow-language", "en"));
+        const [language, setLanguage] = useState(initialLanguage);
         const [theme, setTheme] = useState(() => readPreference("agentflow-theme", "dark"));
         const [lowerPanelHeight, setLowerPanelHeight] = useState(() => Number(readPreference("agentflow-lower-panel-height", "280")) || 280);
         useEffect(() => {
@@ -484,9 +608,9 @@
               h(Flow, { workflow: view.workflow, state, description: view.graph, language, theme, selectedNodeID: selectedNode?.id, onSelect: setSelectedNode }),
               h(ResizeHandle, { height: lowerPanelHeight, setHeight: setLowerPanelHeight, language }),
               h("div", { className: "lower-panel", style: { height: lowerPanelHeight + "px" } },
-                h(Summary, { view, language }),
-                h(Comparison, { comparison: view.comparison, language }),
-                h(Inspector, { definition: selectedNode, state: selectedNode && state?.nodes?.[selectedNode.id], description: view.graph, language }),
+                !selectedNode ? h(Summary, { view, language }) : null,
+                !selectedNode ? h(Comparison, { comparison: view.comparison, language }) : null,
+                h(Inspector, { key: (view.run?.run_id || "workflow") + ":" + (selectedNode?.id || ""), definition: selectedNode, state: selectedNode && state?.nodes?.[selectedNode.id], description: view.graph, language, runID: view.run?.run_id, history: state?.history, visits: state?.visits }),
               ),
             ),
           ),

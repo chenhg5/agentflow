@@ -5,25 +5,21 @@
   "nodes": [
     {
       "id": "start",
-      "executor": "process",
       "dispatch": "all",
-      "config": {"command": ["sh", "-c", "printf '{\"request\":\"demo\"}' > \"$AGENTFLOW_RESULT_FILE\""]}
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "printf '{\"request\":\"demo\"}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}
     },
     {
       "id": "left",
-      "executor": "process",
-      "config": {"command": ["sh", "-c", "sleep 1; printf '{\"result\":\"left complete\"}' > \"$AGENTFLOW_RESULT_FILE\""]}
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "sleep 1; printf '{\"result\":\"left complete\"}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}
     },
     {
       "id": "right",
-      "executor": "process",
-      "config": {"command": ["sh", "-c", "sleep 1; printf '{\"result\":\"right complete\"}' > \"$AGENTFLOW_RESULT_FILE\""]}
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "sleep 1; printf '{\"result\":\"right complete\"}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}
     },
     {
       "id": "join",
-      "executor": "process",
       "join": {"from": ["left", "right"]},
-      "config": {"command": ["sh", "-c", "cat \"$AGENTFLOW_INPUT_FILE\" > \"$AGENTFLOW_RESULT_FILE\""]}
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "cat \"$AGENTFLOW_INPUT_FILE\" > \"$AGENTFLOW_RESULT_FILE\""]}}]}
     }
   ],
   "edges": [

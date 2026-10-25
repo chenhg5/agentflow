@@ -52,8 +52,10 @@ ln -s /path/to/my-agent executors/agents/existing
 ```json
 {
   "id": "continue-work",
-  "executor": "existing",
-  "execution": {"session": {"mode": "fixed", "id": "existing-session-id"}}
+  "execution": {"candidates": [{
+    "executor": "existing",
+    "session": {"mode": "fixed", "id": "existing-session-id"}
+  }]}
 }
 ```
 

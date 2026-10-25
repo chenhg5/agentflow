@@ -15,7 +15,7 @@ import (
 func TestWorkflowAndRunViews(t *testing.T) {
 	root := t.TempDir()
 	workflowPath := filepath.Join(root, "workflow.json")
-	workflowData := []byte(`{"version":"2","name":"demo","entry":"build","nodes":[{"id":"build","type":"program","command":["true"]}],"edges":[{"from":"build","to":"$end"}]}`)
+	workflowData := []byte(`{"version":"3","name":"demo","entry":"build","nodes":[{"id":"build","execution":{"candidates":[{"executor":"process","config":{"command":["true"]}}]}}],"edges":[{"from":"build","to":"$end"}]}`)
 	if err := os.WriteFile(workflowPath, workflowData, 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -41,11 +41,11 @@ func TestWorkflowAndRunViews(t *testing.T) {
 		t.Fatalf("workflow graph edges = %#v", graphView["edges"])
 	}
 
-	run, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "")
+	run, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "process", Config: map[string]any{"command": []string{"true"}}}}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseline, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "baseline")
+	baseline, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "process", Config: map[string]any{"command": []string{"true"}}}}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "baseline")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -62,6 +62,10 @@ func TestWorkflowAndRunViews(t *testing.T) {
 	run.State.StartedAt = run.State.CreatedAt
 	run.State.FinishedAt = "2026-10-24T00:00:01Z"
 	run.State.Evaluation = &model.Evaluation{EvaluatedAt: run.State.FinishedAt, Measurements: map[string]model.Measurement{"quality": {Value: 0.8, Direction: "higher"}}}
+	selected := 1
+	run.State.Nodes["build"].SelectedExecutor = "fallback"
+	run.State.Nodes["build"].SelectedCandidate = &selected
+	run.State.Nodes["build"].AttemptSequence = []model.AttemptEvidence{{Sequence: 1, Candidate: 0, CandidateAttempt: 1, Executor: "primary", Status: "failed", Failure: &model.ExecutionFailure{Kind: "start_failed", Message: "missing", Executor: "primary", Attempt: 1}, Artifacts: map[string]string{"stderrLog": "artifacts/logs/build.1.candidate-1.attempt-1.stderr.log"}}}
 	if err := store.SaveState(run); err != nil {
 		t.Fatal(err)
 	}
@@ -90,5 +94,11 @@ func TestWorkflowAndRunViews(t *testing.T) {
 	}
 	if _, ok := runViewPayload["comparison"].(map[string]any); !ok {
 		t.Fatalf("run comparison missing: %#v", runViewPayload["comparison"])
+	}
+	state := runPayload["state"].(map[string]any)
+	nodes := state["nodes"].(map[string]any)
+	build := nodes["build"].(map[string]any)
+	if build["selectedExecutor"] != "fallback" || len(build["attemptSequence"].([]any)) != 1 {
+		t.Fatalf("candidate attempt evidence missing from web state: %#v", build)
 	}
 }

@@ -8,9 +8,9 @@ cat > "$WORKSPACE/window.json" <<'JSON'
 {
   "version":"3", "name":"e2e-window", "entry":"build",
   "nodes":[
-    {"id":"build","executor":"process","config":{"command":["sh","-c","printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}},
-    {"id":"review","executor":"external","outputSchema":{"type":"object","required":["score"],"properties":{"score":{"type":"number"}}}},
-    {"id":"publish","executor":"process","config":{"command":["sh","-c","test -f fixed && printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}}
+    {"id":"build","execution":{"candidates":[{"executor":"process","config":{"command":["sh","-c","printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}},
+    {"id":"review","execution":{"candidates":[{"executor":"external"}]},"outputSchema":{"type":"object","required":["score"],"properties":{"score":{"type":"number"}}}},
+    {"id":"publish","execution":{"candidates":[{"executor":"process","config":{"command":["sh","-c","test -f fixed && printf '{}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}}
   ],
   "edges":[
     {"from":"build","to":"review"},

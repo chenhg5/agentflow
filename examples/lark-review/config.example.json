@@ -1,0 +1,50 @@
+{
+  "profile": "my-bot",
+  "recipient": "{{ inputs.reviewer }}",
+  "title": "这个方案是否继续？",
+  "subtitle": "方案确认",
+  "sections": [
+    {
+      "title": "方案",
+      "content": "{{ input.summary }}"
+    },
+    {
+      "title": "验收方式",
+      "content": "{{ input.check }}"
+    }
+  ],
+  "hint": "继续将整理行动方案；修改将重新起草；结束将关闭本次流程。",
+  "actions": [
+    {
+      "label": "满意，继续",
+      "style": "primary_filled",
+      "color": "green",
+      "output": {
+        "mood": "happy",
+        "score": 90
+      },
+      "confirmation": "结果已接收，将继续整理行动方案。"
+    },
+    {
+      "label": "需要调整",
+      "style": "default",
+      "color": "orange",
+      "output": {
+        "mood": "sad",
+        "score": 40
+      },
+      "confirmation": "结果已接收，将重新起草方案。"
+    },
+    {
+      "label": "结束本次",
+      "style": "danger",
+      "color": "red",
+      "confirm": "确定结束本次流程？",
+      "output": {
+        "mood": "sad",
+        "score": 0
+      },
+      "confirmation": "结果已接收，将结束本次流程。"
+    }
+  ]
+}

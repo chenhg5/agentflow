@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,7 +46,7 @@ func TestRuntimeQueuesAndExecutesShellWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	workflowPath := filepath.Join(cwd, "workflow.json")
-	workflow, err := json.Marshal(model.Workflow{Version: "3", Name: "triggered", Entry: "shell", Nodes: []model.Node{{ID: "shell", Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}}}}, Edges: []model.Transition{{From: "shell", To: "$end"}}})
+	workflow, err := json.Marshal(model.Workflow{Version: "3", Name: "triggered", Entry: "shell", Nodes: []model.Node{{ID: "shell", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", `printf '{"ok":true}' > "$AGENTFLOW_RESULT_FILE"`}}}}}}}, Edges: []model.Transition{{From: "shell", To: "$end"}}})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -72,9 +73,45 @@ func TestRuntimeQueuesAndExecutesShellWorkflow(t *testing.T) {
 	}
 }
 
+func TestRuntimeRejectsUnregisteredCandidateBeforeCreatingRun(t *testing.T) {
+	root := t.TempDir()
+	workflowPath := filepath.Join(root, "workflow.json")
+	workflow := `{
+  "version": "3",
+  "name": "invalid-trigger-candidate",
+  "entry": "work",
+  "nodes": [{
+    "id": "work",
+    "execution": {
+      "candidates": [{"executor": "typo"}, {"executor": "process"}],
+      "fallback": {"when": "failure.kind == 'configuration_failed'"}
+    }
+  }],
+  "edges": [{"from": "work", "to": "$end"}]
+}`
+	if err := os.WriteFile(workflowPath, []byte(workflow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := NewRuntime(root, root, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = runtime.Start(context.Background(), StartRunCommand{WorkflowPath: workflowPath, Inputs: map[string]string{}, TriggerID: "hook", TriggerKind: "webhook", DeliveryID: "d-1", ReceivedAt: time.Now().UTC()})
+	if err == nil || !strings.Contains(err.Error(), `candidate 1 references unregistered executor "typo"`) {
+		t.Fatalf("expected unregistered executor error, got %v", err)
+	}
+	entries, readErr := os.ReadDir(filepath.Join(root, "runs"))
+	if readErr != nil && !os.IsNotExist(readErr) {
+		t.Fatal(readErr)
+	}
+	if len(entries) != 0 {
+		t.Fatalf("invalid trigger workflow created %d run(s)", len(entries))
+	}
+}
+
 func TestDeliveryAndConcurrencyAreScopedToTrigger(t *testing.T) {
 	root := t.TempDir()
-	flow := `{"version":"3","name":"shared-target","entry":"wait","nodes":[{"id":"wait","executor":"external"}],"edges":[{"from":"wait","to":"$end"}]}`
+	flow := `{"version":"3","name":"shared-target","entry":"wait","nodes":[{"id":"wait","execution":{"candidates":[{"executor":"external"}]}}],"edges":[{"from":"wait","to":"$end"}]}`
 	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
 		t.Fatal(err)
 	}

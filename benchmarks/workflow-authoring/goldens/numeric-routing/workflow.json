@@ -11,7 +11,7 @@
   "nodes": [
     {
       "id": "measure",
-      "executor": "measure",
+      "execution": {"candidates": [{"executor": "measure"}]},
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -50,10 +50,7 @@
     },
     {
       "id": "accept",
-      "executor": "finish",
-      "config": {
-        "branch": "accept"
-      },
+      "execution": {"candidates": [{"executor": "finish", "config": {"branch": "accept"}}]},
       "inputSchema": {
         "type": "object",
         "properties": {
@@ -107,10 +104,7 @@
     },
     {
       "id": "recheck",
-      "executor": "finish",
-      "config": {
-        "branch": "recheck"
-      },
+      "execution": {"candidates": [{"executor": "finish", "config": {"branch": "recheck"}}]},
       "inputSchema": {
         "type": "object",
         "properties": {

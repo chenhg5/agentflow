@@ -28,6 +28,15 @@ To run only the trigger coverage:
 make test-e2e-triggers
 ```
 
+## Web UI checks
+
+For the Web node inspector, run `go test ./internal/web` and
+`node scripts/test-web-ui.cjs` (Node.js required). These cover visit-specific
+input/output and logs, empty/falsy JSON values, artifact containment, browser
+locale matching, saved language priority, and component rendering. Browser
+verification should also select a running node and a completed node, switch
+visits where available, and reload after changing the language.
+
 ## Run the real smoke test
 
 Prerequisites:

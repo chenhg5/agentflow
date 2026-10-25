@@ -10,7 +10,7 @@ import (
 
 func TestFindRunByIdempotency(t *testing.T) {
 	root := t.TempDir()
-	workflow := model.Workflow{Version: "3", Name: "demo", Entry: "step", Nodes: []model.Node{{ID: "step", Executor: "process", Config: map[string]any{"command": []string{"echo", "ok"}}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
+	workflow := model.Workflow{Version: "3", Name: "demo", Entry: "step", Nodes: []model.Node{{ID: "step", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "process", Config: map[string]any{"command": []string{"echo", "ok"}}}}}}}, Edges: []model.Transition{{From: "step", To: "$end"}}}
 	created, err := CreateRun(root, workflow, map[string]string{"issue": "ABC-123"}, "request-1")
 	if err != nil {
 		t.Fatal(err)
@@ -54,7 +54,7 @@ func TestRunEnumerationStillReportsIncompleteContainers(t *testing.T) {
 
 func TestSaveAndLoadEvaluation(t *testing.T) {
 	root := t.TempDir()
-	workflow := model.Workflow{Version: "3", Name: "demo", Entry: "agent", Nodes: []model.Node{{ID: "agent", Executor: "process"}}}
+	workflow := model.Workflow{Version: "3", Name: "demo", Entry: "agent", Nodes: []model.Node{{ID: "agent", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "process"}}}}}}
 	run, err := CreateRun(root, workflow, map[string]string{}, "")
 	if err != nil {
 		t.Fatal(err)

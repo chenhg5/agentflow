@@ -48,6 +48,19 @@ def includes(value, needle):
     return needle in value if isinstance(value, str) else value == needle
 
 
+def first_candidate(node):
+    candidates = node.get("execution", {}).get("candidates", [])
+    return candidates[0] if candidates else {}
+
+
+def node_executor(node):
+    return first_candidate(node).get("executor")
+
+
+def node_config(node):
+    return first_candidate(node).get("config", {})
+
+
 class Grade:
     def __init__(self, workspace, case, binary=None):
         self.workspace = Path(workspace).resolve()
@@ -113,7 +126,11 @@ class Grade:
 
         self.check(
             "all_executor_references_bound",
-            all(node["executor"] in self.registry for node in self.flow["nodes"]),
+            all(
+                candidate.get("executor") in self.registry
+                for node in self.flow["nodes"]
+                for candidate in node.get("execution", {}).get("candidates", [])
+            ),
         )
         self.check("runbook_written", (self.workspace / "RUNBOOK.md").exists())
         expected_inputs = {
@@ -134,12 +151,12 @@ class Grade:
         if self.case["id"] in ["scheduled-review", "external-loop"]:
             for role in ["draft", "finalize"]:
                 node = self.nodes[self.roles[role]]
-                definition = self.registry.get(node["executor"], {})
+                definition = self.registry.get(node_executor(node), {})
                 self.check(role + "_uses_codex", definition.get("kind") == "codex")
                 self.check(
                     role + "_instructions_present",
-                    isinstance(node.get("config", {}).get("instruction"), str)
-                    or (self.workspace / definition.get("workspace", node.get("config", {}).get("workspace", ".")) / "AGENTS.md").is_file(),
+                    isinstance(node_config(node).get("instruction"), str)
+                    or (self.workspace / definition.get("workspace", node_config(node).get("workspace", ".")) / "AGENTS.md").is_file(),
                 )
             if self.case["id"] == "scheduled-review":
                 self.check(
@@ -149,7 +166,7 @@ class Grade:
             self.check(
                 "programs_do_not_require_prompt",
                 all(
-                    "instruction" not in self.nodes[self.roles[role]].get("config", {})
+                    "instruction" not in node_config(self.nodes[self.roles[role]])
                     for role in self.case["roles"]
                 ),
             )
@@ -166,7 +183,7 @@ class Grade:
             role = self.nodes[self.roles["review"]]
             self.check(
                 "interaction_entry_registered",
-                bool(self.registry.get(role["executor"], {}).get("command")),
+                bool(self.registry.get(node_executor(role), {}).get("command")),
             )
             path = self.workspace / "triggers.json"
             data = json.loads(path.read_text()) if path.exists() else {}
@@ -549,8 +566,8 @@ class Grade:
                             "valid": True,
                         },
                     )
-                    source = self.nodes[self.roles["collect"]]["executor"]
-                    target = self.nodes[self.roles["report"]]["executor"]
+                    source = node_executor(self.nodes[self.roles["collect"]])
+                    target = node_executor(self.nodes[self.roles["report"]])
                     entries = [
                         self.config.get("executors", {}).get(name, {})
                         for name in [source, target]

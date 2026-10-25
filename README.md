@@ -10,7 +10,9 @@ Use a standalone workflow workspace to coordinate your repositories, agents, and
 curl -fsSL https://raw.githubusercontent.com/chenhg5/agentflow/main/scripts/install.sh | sh
 ```
 
-This executor schema is currently in the source checkout. Build the checkout to try it:
+The current preview is [v0.3.0](https://github.com/chenhg5/agentflow/releases/tag/v0.3.0). It changes the workflow execution schema: use `execution.candidates` for every node, including nodes with a single executor. See the [migration notes and known limitations](changelogs/v0.3.0.md) before upgrading.
+
+To build and try the source checkout:
 
 ```bash
 make build
@@ -46,9 +48,9 @@ agentflow executor init archive --kind command
 agentflow workspace validate --format json
 ```
 
-The starter graph runs immediately; adapt it for your task. Codex scaffolding includes its own persistent instructions, skill and local MCP input tool. `executor add <name> --kind codex --workspace /existing/agent` binds an existing directory without changing its files. Static validation checks bindings; execute a smoke run to verify behavior and file placement. See [layout v1](docs/workspace-layout.md) for the full contract.
+The starter graph runs immediately; adapt it for your task. Fill in `DESIGN.md` with node contracts, agent responsibilities/context/skills/tools, routing and human feedback. `executor init --kind codex` and `--kind claude-code` create native role resources and a local MCP input tool. `executor add <name> --kind codex --workspace /existing/agent` binds an existing directory without changing its files. `workspace validate --input key=value` resolves representative input-based paths and inventories local agent resources; discovery does not prove actual loading or task completion. See [layout v1](docs/workspace-layout.md) for the full contract and [authoring guidance](skills/agentflow/references/design.md) for design and acceptance.
 
-Run CLI commands from `my-workflow/`. Register external agent or repository paths through `workspace`; reuse existing session history through `execution.session`. Repository URLs, refs, and commit IDs are ordinary executor config or result data; repository checkout and version capture are performed by the executor.
+Run CLI commands from `my-workflow/`. Register external agent or repository paths through `workspace`; reuse existing session history through a candidate's `session`. Repository URLs, refs, and commit IDs are ordinary executor config or result data; repository checkout and version capture are performed by the executor.
 
 `workflows/` is optional organization for multiple graphs. The CLI and trigger targets accept an explicit JSON path; a workspace with one graph can keep `workflow.json` directly at its root.
 
@@ -60,8 +62,8 @@ Run CLI commands from `my-workflow/`. Register external agent or repository path
   "name": "example",
   "entry": "draft",
   "nodes": [
-    {"id": "draft", "executor": "codex", "config": {"instruction": "Write a short proposal."}},
-    {"id": "review", "executor": "my-review"}
+    {"id": "draft", "execution": {"candidates": [{"executor": "codex", "config": {"instruction": "Write a short proposal."}}]}},
+    {"id": "review", "execution": {"candidates": [{"executor": "my-review"}]}}
   ],
   "edges": [
     {"from": "draft", "to": "review"},
@@ -71,7 +73,7 @@ Run CLI commands from `my-workflow/`. Register external agent or repository path
 }
 ```
 
-A node has `id`, `executor`, optional `config`, `execution.session`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. The entry node receives the run input; each later node receives the previous node's JSON output by default. An edge may declare `map` to build the next input from source `input`, source `output`, run `inputs`, and prior `nodes`; for example, `"map":{"review":"{{ output.comments }}","original":"{{ input.summary }}"}`. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge by default; `allowUnboundedCycles: true` explicitly permits unlimited loops. See [graph semantics](docs/graph-and-visualization.md).
+A node has `id`, `execution.candidates`, optional `execution.fallback`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. Each ordered candidate owns its executor, opaque config, and session policy. The entry node receives the run input; each later node receives the previous node's JSON output by default. An edge may declare `map` to build the next input from source `input`, source `output`, run `inputs`, and prior `nodes`; for example, `"map":{"review":"{{ output.comments }}","original":"{{ input.summary }}"}`. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge by default; `allowUnboundedCycles: true` explicitly permits unlimited loops. See [graph semantics](docs/graph-and-visualization.md).
 
 Set `"dispatch":"all"` on a node to run every matching outgoing branch concurrently. A target with `"join":{"from":["left","right"]}` starts only after both predecessors have delivered input; it receives `{"left": <payload>, "right": <payload>}`. The default dispatch remains first matching edge. See [the runnable parallel example](examples/parallel.json) and [parallel execution semantics](docs/graph-and-visualization.md#parallel-nodes-and-joins).
 
@@ -95,13 +97,15 @@ Create `executors.json` at the workflow workspace root. If absent, only built-in
 
 Executor names are arbitrary. `command` is an argument array, `workspace` is the process working directory, and `env` adds environment variables. Configured commands and environment values can reference `{{ config.field }}` and `{{ input.field }}`. A relative workspace resolves from the AgentFlow invocation directory; relative command paths resolve inside that workspace.
 
-Built-in executors are `codex`, `claude-code`, `process`, and `external`. Codex and Claude Code adapters accept `config.instruction` and optional `config.workspace`. Session behavior belongs in `execution.session`: `new` starts fresh on every visit, `fixed` creates and reuses one session per run (or uses a supplied ID), `inherit` resumes an upstream session, and `fork` branches from one. Their CLI options belong in executor registration. `process` accepts `config.command` as an argument array. `external` persists `waiting_input` until `run submit` supplies JSON output. These are ready-made executors; nodes use the same reference contract for custom executors.
+Built-in executors are `codex`, `claude-code`, `process`, and `external`. Codex and Claude Code adapters accept candidate `config.instruction` and optional `config.workspace`. Candidate session behavior belongs in `execution.candidates[].session`: `new` starts fresh on every visit, `fixed` creates and reuses one session for that node/candidate in the run (or uses a supplied ID), `inherit` resumes a compatible upstream session, and `fork` branches from one. Their CLI options belong in executor registration. `process` accepts candidate `config.command` as an argument array. `external` persists `waiting_input` until `run submit` supplies JSON output.
+
+Candidate order is priority order. Retries are per candidate. By default the next candidate is tried only when the OS process could not start; a launched nonzero exit, timeout, missing/invalid result, or output-contract failure stops the node. Set `execution.fallback.when` to an Expr over structured `failure` fields to opt into another policy, for example `failure.kind == 'exit_code' && failure.code == 75`. See the [runnable fallback example](examples/executor-fallback.json).
 
 ## Program contract
 
 The runner starts the configured program whenever the graph reaches its node. The program reads incoming JSON from `AGENTFLOW_INPUT_FILE`, optional executor configuration from `AGENTFLOW_CONFIG_FILE`, writes one JSON object to `AGENTFLOW_RESULT_FILE`, and exits successfully. It may write a newly created session ID to `AGENTFLOW_SESSION_FILE`. stdout and stderr are logs. The runner validates output and selects the next edge.
 
-`AGENTFLOW_ROOT` points to the workflow workspace; `AGENTFLOW_WORKSPACE` points to this executor's working directory. An executor workspace may be a local directory, a symlink, or an external project path. A directory binding does not select a session: use `execution.session` to start, resume, or fork one. Existing agent directories keep their own instructions and tools. See [the standalone workspace demo](examples/local-workspace-demo/README.md).
+`AGENTFLOW_ROOT` points to the workflow workspace; `AGENTFLOW_WORKSPACE` points to this executor's working directory. An executor workspace may be a local directory, a symlink, or an external project path. A directory binding does not select a session: use the selected candidate's `session` to start, resume, or fork one. Existing agent directories keep their own instructions and tools. See [the standalone workspace demo](examples/local-workspace-demo/README.md).
 
 ```python
 import json, os
@@ -112,7 +116,7 @@ Path(os.environ["AGENTFLOW_RESULT_FILE"]).write_text(json.dumps({"score": 8}))
 
 The language and communication channel are unrestricted. An interaction program can send a card or display a terminal prompt, wait for a response, then write output. A person clicking a button does not select graph edges; the returned JSON is evaluated by the graph's conditions. Programs do not edit run state.
 
-Input and output contracts use JSON Schema draft 2020-12. Exact templates in `config`, such as `{{ nodes.draft.result.count }}`, preserve JSON types. Every visit has separate input, result, and log artifacts. See [execution semantics](docs/execution-semantics.md).
+Input and output contracts use JSON Schema draft 2020-12. Exact templates in candidate `config`, such as `{{ nodes.draft.result.count }}`, preserve JSON types. Every candidate attempt has separate input, config, result, session, stdout, and stderr paths. Run state records the selected executor, structured failure, and complete attempt sequence. See [execution semantics](docs/execution-semantics.md).
 
 ## Operate and inspect
 
@@ -146,3 +150,7 @@ Run `make check` and `make test-e2e` for deterministic verification. Real model 
 ## Workflow authoring benchmark
 
 [Cold-context authoring benchmark](benchmarks/workflow-authoring/README.md) includes business tasks, private golden workflows, deterministic execution checks, arbitrary agent-command runners, and retained authoring artifacts. `make test-benchmark` verifies the goldens and detects deliberately broken routes, bindings, type handoffs, feedback and loop limits without calling a model. Live authoring runs are opt-in. The [initial report](benchmarks/workflow-authoring/reports/2026-10-23/REPORT.md) distinguishes final task success from errors repaired during authoring.
+
+## Feishu human review example
+
+Follow the [five-step Lark adapter setup guide](examples/lark-review/SETUP.md) for configurable content, buttons, bots and reviewers. It includes a complete workflow, registry, config schema and local checker. The graph uses the generic external executor contract.

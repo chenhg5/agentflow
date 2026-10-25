@@ -5,6 +5,31 @@ bind an existing external agent and resume its known session without changing
 its files. Both require a real archive program, a daily trigger, a runbook and
 root-level evidence storage.
 
+The original tasks specify the expected directory structure, so they measure
+execution of that explicit request. They do not establish that an agent will
+infer a good design while migrating an existing project.
+
+## Existing-project migration
+
+`cases/pr-migration/` adds a brownfield task with a legacy script, business policy
+and nonempty frozen PR evidence. The task specifies the required behavior and
+data contracts, without prescribing agent-directory names or native resource
+files. It requires Claude/Codex role candidates and accept/revise/stop feedback.
+
+```sh
+python3 benchmarks/workspace-authoring/migration.py prepare /path/to/attempt
+# Give a fresh author only the resulting TASK.md and workspace.
+python3 benchmarks/workspace-authoring/migration.py grade /path/to/attempt \
+  --output /path/to/contract-report.json
+```
+
+The grader executes the submitted programs and graph with substitute model
+transport. It checks meaningful review-node execution, data identity, feedback
+and loop-back, invalid output rejection, stale invocation rejection and the
+accepted/cancelled artifact paths. This does not verify native model reasoning,
+provider loading or an IM channel: those fields stay explicitly unverified.
+Inspect the role's design and run a separate native nonempty evidence case.
+
 See [the local pilot results](RESULTS.md) for fresh-model attempts, native smoke
 coverage and observed limitations.
 

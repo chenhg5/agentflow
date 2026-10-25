@@ -21,8 +21,17 @@ func EnqueueControl(runDir string, control model.Control) error {
 	return writeJSON(filepath.Join(runDir, controlDir, name), control)
 }
 
-// TakeControls returns queued requests in arrival order and removes them.
-func TakeControls(runDir string) ([]model.Control, error) {
+// QueuedControl pairs a control with the queue file that holds it so the
+// caller can acknowledge delivery only after its durable state checkpoint.
+type QueuedControl struct {
+	Name    string
+	Control model.Control
+}
+
+// PeekControls returns queued requests in arrival order without removing
+// them. Acknowledging a request is a separate step, so a failed state write
+// leaves the request available for retry.
+func PeekControls(runDir string) ([]QueuedControl, error) {
 	directory := filepath.Join(runDir, controlDir)
 	entries, err := os.ReadDir(directory)
 	if os.IsNotExist(err) {
@@ -38,19 +47,25 @@ func TakeControls(runDir string) ([]model.Control, error) {
 		}
 	}
 	sort.Strings(names)
-	controls := make([]model.Control, 0, len(names))
+	controls := make([]QueuedControl, 0, len(names))
 	for _, name := range names {
-		path := filepath.Join(directory, name)
 		var control model.Control
-		if err := readJSON(path, &control); err != nil {
+		if err := readJSON(filepath.Join(directory, name), &control); err != nil {
 			return controls, err
 		}
-		if err := os.Remove(path); err != nil {
-			return controls, err
-		}
-		controls = append(controls, control)
+		controls = append(controls, QueuedControl{Name: name, Control: control})
 	}
 	return controls, nil
+}
+
+// AcknowledgeControl removes a delivered request after its effects are
+// durable.
+func AcknowledgeControl(runDir, name string) error {
+	err := os.Remove(filepath.Join(runDir, controlDir, name))
+	if os.IsNotExist(err) {
+		return nil
+	}
+	return err
 }
 
 // HasControls reports whether requests are waiting for an executor.
