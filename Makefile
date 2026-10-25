@@ -63,7 +63,7 @@ release-all: release-preflight clean check
 		mkdir -p $(DIST)/$(NAME) && \
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
 		git archive HEAD README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json examples skills docs scripts benchmarks | tar -x -C $(DIST)/$(NAME) && \
-		$(if $(EXT),(cd $(DIST) && zip -qr $(NAME).zip $(NAME)),tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
+		$(if $(EXT),(cd $(DIST) && zip -Xqr $(NAME).zip $(NAME)),COPYFILE_DISABLE=1 tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
 		rm -rf $(DIST)/$(NAME) && \
 	) true
 	@cd $(DIST) && $(SHA256) *.tar.gz *.zip > checksums.txt
