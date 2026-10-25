@@ -28,14 +28,14 @@ cleanup() {
 }
 trap cleanup EXIT
 
-mkdir -p "$WORKSPACE/.agentflow"
+mkdir -p "$WORKSPACE"
 cat > "$WORKSPACE/webhook-workflow.json" <<'JSON'
 {"version": "3", "name": "webhook-e2e", "entry": "work", "nodes": [{"id": "work", "executor": "process", "config": {"command": ["sh", "-c", "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""]}}], "edges": [{"from": "work", "to": "$end"}], "inputs": {"name": {"type": "string", "required": true}}}
 JSON
 cat > "$WORKSPACE/cron-workflow.json" <<'JSON'
 {"version": "3", "name": "cron-e2e", "entry": "work", "nodes": [{"id": "work", "executor": "process", "config": {"command": ["sh", "-c", "printf '{\"done\":true}' > \"$AGENTFLOW_RESULT_FILE\""]}}], "edges": [{"from": "work", "to": "$end"}]}
 JSON
-cat > "$WORKSPACE/.agentflow/triggers.json" <<'JSON'
+cat > "$WORKSPACE/triggers.json" <<'JSON'
 {"triggers":[{"id":"webhook-e2e","enabled":true,"source":{"kind":"webhook","path":"/hooks/e2e","method":"POST","deliveryIDHeader":"X-Delivery-ID"},"target":{"workflow":"webhook-workflow.json"},"bindings":{"name":{"from":"json","path":"$.name"}}},{"id":"cron-e2e","enabled":true,"source":{"kind":"cron","expression":"* * * * *"},"target":{"workflow":"cron-workflow.json"},"inputs":{"name":"cron"}}]}
 JSON
 
@@ -73,7 +73,7 @@ curl -fsS -X POST "http://127.0.0.1:$PORT/hooks/e2e" \
 jq -e '.duplicate == true and .delivery_id == "webhook-e2e-check"' webhook-duplicate.json >/dev/null
 
 for _ in $(seq 1 70); do
-  count=$(find "$WORKSPACE/.agentflow/runs" -type f -name state.json -print0 2>/dev/null | xargs -0 -r grep -l '"workflowName": "cron-e2e"' | wc -l | tr -d ' ')
+  count=$(find "$WORKSPACE/runs" -type f -name state.json -print0 2>/dev/null | xargs -0 -r grep -l '"workflowName": "cron-e2e"' | wc -l | tr -d ' ')
   if [[ "$count" -ge 2 ]]; then
     break
   fi

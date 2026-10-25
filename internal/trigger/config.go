@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/robfig/cron/v3"
@@ -23,6 +24,7 @@ func LoadConfig(root string) (Config, error) {
 		return Config{}, fmt.Errorf("invalid triggers.json: %w", err)
 	}
 	seen := map[string]bool{}
+	webhookPaths := map[string]string{}
 	for _, definition := range config.Triggers {
 		if definition.ID == "" {
 			return Config{}, fmt.Errorf("trigger id is required")
@@ -62,6 +64,13 @@ func LoadConfig(root string) (Config, error) {
 		}
 		if definition.Source.Kind == "webhook" && definition.Source.Path[0] != '/' {
 			return Config{}, fmt.Errorf("webhook trigger %s source.path must start with /", definition.ID)
+		}
+		if definition.Enabled && definition.Source.Kind == "webhook" {
+			path := strings.TrimSuffix(definition.Source.Path, "/")
+			if previous, exists := webhookPaths[path]; exists {
+				return Config{}, fmt.Errorf("webhook triggers %s and %s share source.path %s", previous, definition.ID, definition.Source.Path)
+			}
+			webhookPaths[path] = definition.ID
 		}
 	}
 	return config, nil

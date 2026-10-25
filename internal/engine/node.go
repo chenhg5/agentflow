@@ -59,7 +59,7 @@ func prepareNode(run *model.Run, node model.Node, executors map[string]driver.Ex
 	state.InputBytes = int64(len(inputJSON))
 	executor, ok := executors[node.Executor]
 	if !ok {
-		return nil, fail(state, fmt.Sprintf("executor %s is not configured; add .agentflow/executors.json", node.Executor)), nil
+		return nil, fail(state, fmt.Sprintf("executor %s is not configured; add executors.json", node.Executor)), nil
 	}
 	resultRelativePath := visitArtifact(run, node.ID, "result.json")
 	resultFile, err := store.ArtifactPath(run.RunDir, resultRelativePath)
@@ -103,6 +103,7 @@ func prepareNode(run *model.Run, node model.Node, executors map[string]driver.Ex
 	}
 	state.Workspace, state.SessionID = prepared.Workspace, prepared.SessionID
 	env := map[string]string{
+		"AGENTFLOW_ROOT":         filepath.Dir(filepath.Dir(run.RunDir)),
 		"AGENTFLOW_RUN_ID":       run.RunID,
 		"AGENTFLOW_NODE_ID":      node.ID,
 		"AGENTFLOW_NODE_TOKEN":   state.LeaseToken,

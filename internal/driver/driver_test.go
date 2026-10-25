@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"testing"
 )
 
@@ -118,6 +119,21 @@ func TestCheckExecutor(t *testing.T) {
 	}
 }
 
+func TestCheckRelativeExecutableInExecutorWorkspace(t *testing.T) {
+	directory := t.TempDir()
+	name := "runner"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	if err := os.WriteFile(filepath.Join(directory, name), []byte("fixture"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	status := CheckExecutor("local", Executor{Kind: "command", Workspace: directory, Command: []string{"./" + name}})
+	if !status.Available {
+		t.Fatalf("relative executable not resolved inside workspace: %+v", status)
+	}
+}
+
 func TestBuildCommandExecutorRequiresResumeTemplate(t *testing.T) {
 	_, err := BuildCommand("custom", Executor{Kind: "command", Command: []string{"agent", "{{ prompt }}"}}, Request{Prompt: "continue", SessionID: "session-3"})
 	if err == nil {
@@ -127,11 +143,8 @@ func TestBuildCommandExecutorRequiresResumeTemplate(t *testing.T) {
 
 func TestCustomExecutorEntryDoesNotInferBehaviorFromItsName(t *testing.T) {
 	directory := t.TempDir()
-	if err := os.MkdirAll(filepath.Join(directory, ".agentflow"), 0o755); err != nil {
-		t.Fatal(err)
-	}
 	config := `{"executors":{"codex":{"command":["echo","{{ config.label }}"],"workspace":"{{ config.directory }}","env":{"CHANNEL":"{{ config.channel }}"}}}}`
-	if err := os.WriteFile(filepath.Join(directory, ".agentflow", "executors.json"), []byte(config), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(directory, "executors.json"), []byte(config), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	executors, err := LoadExecutors(directory)

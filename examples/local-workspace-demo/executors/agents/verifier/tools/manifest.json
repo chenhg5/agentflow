@@ -1,0 +1,21 @@
+{
+  "name": "source_tools",
+  "tools": [
+    {
+      "name": "verify_source",
+      "description": "Check a summary's source digest and word count against the local field note; return source text for factual review.",
+      "inputSchema": {
+        "type": "object",
+        "required": ["summary", "source_sha256", "word_count"],
+        "properties": {
+          "summary": {"type": "string"},
+          "source_sha256": {"type": "string"},
+          "word_count": {"type": "integer"}
+        },
+        "additionalProperties": false
+      },
+      "annotations": {"readOnlyHint": true},
+      "command": ["python3", "tools/verify_source.py"]
+    }
+  ]
+}

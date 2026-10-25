@@ -21,7 +21,11 @@ Source builds need the Go version specified in `go.mod`. A registered program ne
 
 ## Executor configuration
 
-`config init` creates `.agentflow/executors.json`. Custom programs need a command entry:
+For a new standalone workspace, prefer `agentflow workspace init <directory>`,
+then run `agentflow executor init <name> --kind codex|command` from its root.
+Use `executor add` to bind existing directories. See [layout v1](docs/workspace-layout.md).
+
+`config init` creates `executors.json`. Custom programs need a command entry:
 
 ```json
 {
@@ -71,6 +75,8 @@ agentflow web --host 127.0.0.1 --port 7070
 
 The UI displays the explicit edges, selected node states, and visit artifacts. It loads React Flow browser dependencies from public CDNs. A failed program stops the run until retry. A crashed running node is retried on resume; external side effects should be idempotent. Only one node is active in a run.
 
-Use `.agentflow/triggers.json` for cron/webhook definitions and keep `agentflow trigger serve` running to deliver scheduled events. Run files live under `.agentflow/runs/`; delivery receipts and dispatch jobs live beside them. Persist the workflow, executor configuration, program sources, and trigger definitions to move a flow to another environment.
+Use `triggers.json` for cron/webhook definitions and keep `agentflow trigger serve` running to deliver scheduled events. Run files live under `runs/`; delivery receipts and dispatch jobs live beside them. Persist the workflow, executor configuration, program sources, and trigger definitions to move a flow to another environment.
+
+Run one trigger service per workspace. One config may target several graph files. Cron-only workspaces need no HTTP port; webhook workspaces may use distinct fixed ports or port `0` to pick an available port. Duplicate services for the same workspace are rejected, and delivery IDs are deduplicated separately for each trigger. A `workflows/` directory is optional; a single graph can be stored as `workflow.json` at the root.
 
 See [README](README.md), [execution semantics](docs/execution-semantics.md), and [the agent skill](skills/agentflow/SKILL.md).

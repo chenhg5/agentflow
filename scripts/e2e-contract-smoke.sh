@@ -201,7 +201,7 @@ jq -e '.valid == true' validate.json >/dev/null
 RUN_ID=$(jq -r '.run_id' waiting.json)
 jq -e '.status == "waiting_input" and .nodes.produce.status == "succeeded" and .nodes.verify.status == "succeeded" and .nodes.approval.status == "waiting_input"' waiting.json >/dev/null
 
-INPUT_ARTIFACT=".agentflow/runs/$RUN_ID/artifacts/verify.1.input.json"
+INPUT_ARTIFACT="runs/$RUN_ID/artifacts/verify.1.input.json"
 jq -e '.summary == "fixture ok" and .count == 2' "$INPUT_ARTIFACT" >/dev/null
 jq -e '.nodes.verify.artifacts.input == "artifacts/verify.1.input.json"' waiting.json >/dev/null
 

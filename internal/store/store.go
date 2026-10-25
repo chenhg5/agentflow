@@ -60,26 +60,47 @@ func FindRunByIdempotency(root, workflowName, idempotencyKey string) (*model.Run
 	if idempotencyKey == "" {
 		return nil, nil
 	}
-	entries, err := os.ReadDir(filepath.Join(root, "runs"))
-	if os.IsNotExist(err) {
-		return nil, nil
-	}
+	ids, err := RunIDs(root)
 	if err != nil {
 		return nil, err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		run, err := LoadRun(root, entry.Name())
+	for _, id := range ids {
+		run, err := LoadRun(root, id)
 		if err != nil {
-			return nil, fmt.Errorf("cannot inspect run %s while checking idempotency: %w", entry.Name(), err)
+			return nil, fmt.Errorf("cannot inspect run %s while checking idempotency: %w", id, err)
 		}
 		if run.State.WorkflowName == workflowName && run.State.IdempotencyKey == idempotencyKey {
 			return run, nil
 		}
 	}
 	return nil, nil
+}
+
+// RunIDs enumerates run containers, ignoring unrelated directories. Either
+// engine metadata file identifies a container, so incomplete/corrupt runs still
+// reach LoadRun and surface their errors instead of being silently hidden.
+func RunIDs(root string) ([]string, error) {
+	directory := filepath.Join(root, "runs")
+	entries, err := os.ReadDir(directory)
+	if os.IsNotExist(err) {
+		return []string{}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	ids := []string{}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		for _, marker := range []string{"workflow.json", "state.json"} {
+			if _, err := os.Stat(filepath.Join(directory, entry.Name(), marker)); !os.IsNotExist(err) {
+				ids = append(ids, entry.Name())
+				break
+			}
+		}
+	}
+	return ids, nil
 }
 
 func LoadRun(root, runID string) (*model.Run, error) {

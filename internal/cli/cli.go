@@ -28,6 +28,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/trigger"
 	"github.com/chenhg5/agentflow/internal/version"
 	"github.com/chenhg5/agentflow/internal/web"
+	"github.com/chenhg5/agentflow/internal/workspace"
 )
 
 const (
@@ -67,8 +68,12 @@ func Run(args []string) error {
 	if err != nil {
 		return internalError(err)
 	}
-	root := filepath.Join(cwd, ".agentflow")
+	root := cwd
 	switch args[0] {
+	case "workspace":
+		return workspaceCommand(args[1:], cwd)
+	case "executor":
+		return executorCommand(args[1:], cwd)
 	case "workflow":
 		return workflowCommand(args[1:])
 	case "run":
@@ -109,7 +114,7 @@ func triggerCommand(args []string, root, cwd string) error {
 		if os.IsNotExist(err) {
 			return notFoundError("trigger config", filepath.Join(root, "triggers.json"), parsed.Format)
 		}
-		return usageError(err.Error(), "Run `agentflow schema trigger` and correct .agentflow/triggers.json.", "invalid_trigger_config")
+		return usageError(err.Error(), "Run `agentflow schema trigger` and correct triggers.json.", "invalid_trigger_config")
 	}
 	switch verb {
 	case "list":
@@ -168,7 +173,11 @@ func triggerCommand(args []string, root, cwd string) error {
 	case "serve":
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
-		return trigger.Serve(ctx, root, cwd, trigger.ServeOptions{Host: parsed.Host, Port: parsed.Port, Workers: 1})
+		err := trigger.Serve(ctx, root, cwd, trigger.ServeOptions{Host: parsed.Host, Port: parsed.Port, Workers: 1})
+		if errors.Is(err, trigger.ErrServiceBusy) {
+			return conflictError(err.Error(), "Use the trigger service already running for this workspace.", parsed.Format)
+		}
+		return err
 	default:
 		return usageError(fmt.Sprintf("unknown trigger action: %s", verb), "Use `agentflow trigger --help` to list actions.", "trigger_action")
 	}
@@ -285,11 +294,11 @@ func workflowCommand(args []string) error {
 		}
 		executors, err := driver.LoadExecutors(cwd)
 		if err != nil {
-			return usageError(err.Error(), "Correct .agentflow/executors.json.", "invalid_executor_config")
+			return usageError(err.Error(), "Correct executors.json.", "invalid_executor_config")
 		}
 		for _, node := range workflow.Nodes {
 			if _, ok := executors[node.Executor]; !ok {
-				return usageError(fmt.Sprintf("node %s references unregistered executor %q", node.ID, node.Executor), "Register its command in .agentflow/executors.json or choose a built-in executor.", "unregistered_executor")
+				return usageError(fmt.Sprintf("node %s references unregistered executor %q", node.ID, node.Executor), "Register its command in executors.json or choose a built-in executor.", "unregistered_executor")
 			}
 		}
 	}
@@ -649,19 +658,13 @@ func runStats(parsed parsedArgs, root string) error {
 }
 
 func loadRuns(root string) ([]*model.Run, error) {
-	entries, err := os.ReadDir(filepath.Join(root, "runs"))
-	if os.IsNotExist(err) {
-		return []*model.Run{}, nil
-	}
+	ids, err := store.RunIDs(root)
 	if err != nil {
 		return nil, internalError(err)
 	}
-	runs := make([]*model.Run, 0, len(entries))
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		run, err := store.LoadRun(root, entry.Name())
+	runs := make([]*model.Run, 0, len(ids))
+	for _, id := range ids {
+		run, err := store.LoadRun(root, id)
 		if err != nil {
 			return nil, internalError(err)
 		}
@@ -824,7 +827,7 @@ func configCommand(args []string, cwd string) error {
 	if args[0] != "init" {
 		return usageError("unknown config action", "Use `agentflow config init`.", "config_action")
 	}
-	directory := filepath.Join(cwd, ".agentflow")
+	directory := cwd
 	target := filepath.Join(directory, "executors.json")
 	if parsed.DryRun {
 		if err := writeData(map[string]any{"ok": true, "dry_run": true, "action": "config.init", "path": target}, parsed.Output()); err != nil {
@@ -875,6 +878,8 @@ func schemaCommand(args []string, cwd string) error {
 	targetParts := append([]string{args[0]}, parsed.Positionals...)
 	target := strings.Join(targetParts, " ")
 	switch target {
+	case "workspace":
+		return writeData(workspace.Contract(), parsed.Output())
 	case "--all", "all":
 		return writeData(commandSchema(), parsed.Output())
 	case "workflow", "trigger", "executors":
@@ -918,7 +923,7 @@ func doctorCommand(args []string, cwd string) error {
 	}
 	sort.Strings(drivers)
 	sort.Slice(statuses, func(i, j int) bool { return statuses[i].Name < statuses[j].Name })
-	return writeData(map[string]any{"ok": true, "cwd": cwd, "executors": drivers, "executor_status": statuses, "run_store": filepath.Join(cwd, ".agentflow", "runs")}, parsed.Output())
+	return writeData(map[string]any{"ok": true, "cwd": cwd, "executors": drivers, "executor_status": statuses, "run_store": filepath.Join(cwd, "runs")}, parsed.Output())
 }
 
 func readWorkflow(file, format string) (model.Workflow, error) {
@@ -999,6 +1004,14 @@ func parseArgs(args []string) (parsedArgs, error) {
 			value = args[index]
 		}
 		switch key {
+		case "--kind":
+			parsed.Kind = value
+		case "--workspace":
+			parsed.ExecutorWorkspace = value
+		case "--command":
+			parsed.CommandJSON = value
+		case "--model":
+			parsed.Model = value
 		case "--format":
 			if value != "json" && value != "table" && value != "ndjson" {
 				return parsed, usageError("--format must be json, table, or ndjson", "Use `--format json` for agents.", "invalid_format")
@@ -1078,31 +1091,35 @@ func validIdempotencyKey(value string) bool {
 }
 
 type parsedArgs struct {
-	CheckExecutors  bool
-	Positionals     []string
-	Inputs          map[string]string
-	Format          string
-	SubmittedOutput string
-	EvaluationJSON  string
-	Workflow        string
-	Statuses        []string
-	Digest          string
-	From            []string
-	IdempotencyKey  string
-	RunID           string
-	Host            string
-	Port            int
-	PortSet         bool
-	ScheduledAt     string
-	DeliveryID      string
-	PageSize        int
-	DryRun          bool
-	NoInteractive   bool
-	PageAll         bool
-	All             bool
-	Force           bool
-	ByVersion       bool
-	Help            bool
+	Kind              string
+	ExecutorWorkspace string
+	CommandJSON       string
+	Model             string
+	CheckExecutors    bool
+	Positionals       []string
+	Inputs            map[string]string
+	Format            string
+	SubmittedOutput   string
+	EvaluationJSON    string
+	Workflow          string
+	Statuses          []string
+	Digest            string
+	From              []string
+	IdempotencyKey    string
+	RunID             string
+	Host              string
+	Port              int
+	PortSet           bool
+	ScheduledAt       string
+	DeliveryID        string
+	PageSize          int
+	DryRun            bool
+	NoInteractive     bool
+	PageAll           bool
+	All               bool
+	Force             bool
+	ByVersion         bool
+	Help              bool
 }
 
 func (p parsedArgs) Output() OutputOptions { return OutputOptions{Format: p.Format} }
@@ -1238,6 +1255,10 @@ func commandSchema() map[string]any {
 	}
 	formatFlag := map[string]any{"name": "--format", "type": "enum", "enum": []string{"json", "table", "ndjson"}, "default": "json_when_piped_table_when_tty", "description": "Output format", "required": false}
 	commands := []map[string]any{
+		{"name": "workspace init", "description": "Create a standalone layout-v1 workspace with a runnable program; never overwrite files.", "arguments": []map[string]any{{"name": "directory", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview file creation", false), formatFlag}},
+		{"name": "workspace validate", "description": "Check graph, trigger targets, executor bindings and workspace paths without executing programs.", "flags": []map[string]any{flag("--workflow", "path", "Graph path; default workflow.json", false), formatFlag}},
+		{"name": "executor init", "description": "Create and register an owned Codex agent or program in the layout-v1 directories.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|command", "Scaffold kind", true), flag("--model", "string", "Optional Codex model", false), flag("--dry-run", "boolean", "Preview creation", false), formatFlag}},
+		{"name": "executor add", "description": "Register an existing directory or symlink without creating or modifying agent files.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|claude-code|command|external", "Executor kind", true), flag("--workspace", "path", "Existing working directory", false), flag("--command", "JSON-array", "Command executor argument array", false), flag("--model", "string", "Optional model", false), flag("--dry-run", "boolean", "Preview registration", false), formatFlag}},
 		{"name": "workflow validate", "description": "Validate a workflow JSON definition.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--check-executors", "boolean", "Check named executor registrations in this working directory", false), formatFlag}, "examples": []string{"agentflow workflow validate workflow.json --check-executors --format json"}},
 		{"name": "run start", "description": "Create and execute a workflow run.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--input", "key=value", "Workflow input; repeat for multiple inputs", false), flag("--idempotency-key", "string", "Stable request token used to safely retry a start", false), flag("--dry-run", "boolean", "Preview without creating or executing a run", false), formatFlag}, "examples": []string{"agentflow run start workflow.json --input issue=ABC-123 --idempotency-key 7f9c2b1e-4d9c-4f4e-8bb2-8b3d7d6d0a11"}},
 		{"name": "run list", "description": "List workflow runs, newest first.", "flags": []map[string]any{flag("--workflow", "string", "Only runs of this workflow name", false), flag("--status", "comma-separated", "Only runs with these statuses", false), flag("--page-size", "integer", "Maximum number of runs to return", false), flag("--page-all", "boolean", "Return every run", false), formatFlag}},
@@ -1256,7 +1277,7 @@ func commandSchema() map[string]any {
 		{"name": "config init", "description": "Create local executor configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
 		{"name": "doctor", "description": "Check local setup and configured executors.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger list", "description": "List configured cron and webhook triggers.", "flags": []map[string]any{formatFlag}},
-		{"name": "trigger validate", "description": "Validate .agentflow/triggers.json.", "flags": []map[string]any{formatFlag}},
+		{"name": "trigger validate", "description": "Validate triggers.json.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger fire", "description": "Emit one trigger event through the durable dispatcher.", "arguments": []map[string]any{{"name": "trigger-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--scheduled-at", "RFC3339", "Scheduled occurrence time", false), flag("--delivery-id", "string", "Stable event id used for idempotency", false), formatFlag}},
 		{"name": "trigger serve", "description": "Run the persistent cron scheduler, webhook server, and run worker.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
@@ -1282,6 +1303,10 @@ func printHelp(args []string) {
 		return
 	}
 	switch args[0] {
+	case "workspace":
+		printWorkspaceHelp()
+	case "executor":
+		printExecutorHelp()
 	case "workflow":
 		printWorkflowHelp()
 	case "run":
@@ -1310,6 +1335,10 @@ Usage:
   agentflow <noun> <verb> [arguments] [flags]
 
 Commands:
+  workspace init     Create a standalone runnable workspace
+  workspace validate Check graph, paths, and executor bindings
+  executor init      Create an owned agent or program executor
+  executor add       Register an existing executor directory
   workflow validate  Validate a workflow JSON definition
   run start          Start a workflow run
   run list           List runs
@@ -1391,6 +1420,7 @@ func printSchemaHelp() {
   agentflow schema workflow
   agentflow schema trigger
   agentflow schema executors
+  agentflow schema workspace
   agentflow schema run start
 
 Returns machine-readable command metadata or workflow.schema.json.`)
@@ -1400,7 +1430,7 @@ func printConfigHelp() {
 	fmt.Println(`Usage:
   agentflow config init [--format json|table]
 
-Creates .agentflow/executors.json from the executor template.`)
+Creates executors.json from the executor template.`)
 }
 
 func printDoctorHelp() {
@@ -1431,8 +1461,10 @@ func printTriggerHelp() {
   agentflow trigger fire <trigger-id> [--scheduled-at RFC3339] [--delivery-id ID]
   agentflow trigger serve [--host 127.0.0.1] [--port 7071]
 
-The service reads .agentflow/triggers.json. Cron occurrences and webhook
+The service reads triggers.json. Cron occurrences and webhook
 deliveries are persisted before a queued worker executes the target workflow.
+Run one service per workflow workspace. Cron-only workspaces do not bind an
+HTTP listener. Webhooks default to an available port; choose --port for a stable endpoint.
 Webhook endpoints use the path configured by each trigger, for example:
   POST /triggers/github-pull-request`)
 }

@@ -1,0 +1,7 @@
+/runs/
+/dispatch/
+/trigger-deliveries/
+/scheduler.lock
+/trigger-dispatch.lock
+/output/
+/executors/agents/*/scratch/

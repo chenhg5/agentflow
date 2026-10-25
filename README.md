@@ -2,7 +2,7 @@
 
 AgentFlow runs local workflows described by `entry`, `nodes`, and explicit `edges`. Each node calls a named executor with JSON input and produces JSON output. Executors can run Codex, Claude Code, an interactive program, or a program you write in any language.
 
-The runner persists state under `.agentflow/`, validates input/output schemas, evaluates conditions, and advances the graph automatically. Workflow version `3` is the supported format.
+Use a standalone workflow workspace to coordinate your repositories, agents, and programs. Run AgentFlow from that workspace: `workflow.json` defines a graph, `executors.json` registers execution entry points, and `runs/` holds state, snapshots, and logs. The runner validates input/output schemas, evaluates conditions, and advances the graph automatically. Workflow version `3` is the supported format.
 
 ## Install and try
 
@@ -20,6 +20,37 @@ bin/agentflow run submit <run-id> approve --output '{"decision":"happy"}' --form
 ```
 
 See [INSTALL.md](INSTALL.md) for setup and [skills/agentflow/SKILL.md](skills/agentflow/SKILL.md) for agent instructions.
+
+## Standalone workspace
+
+Keep orchestration in its own directory or Git repository. It can coordinate several project repositories and worktrees; placing it inside one project is optional. A recommended layout is:
+
+```text
+my-workflow/
+├── workflow.json
+├── executors.json
+├── triggers.json                 # optional
+├── executors/
+│   ├── agents/                   # owned directories or symlinks to existing agents
+│   └── programs/
+└── runs/                         # generated state, snapshots, and logs
+```
+
+Create the v1 layout using the CLI:
+
+```sh
+agentflow workspace init my-workflow
+cd my-workflow
+agentflow executor init author --kind codex
+agentflow executor init archive --kind command
+agentflow workspace validate --format json
+```
+
+The starter graph runs immediately; adapt it for your task. Codex scaffolding includes its own persistent instructions, skill and local MCP input tool. `executor add <name> --kind codex --workspace /existing/agent` binds an existing directory without changing its files. Static validation checks bindings; execute a smoke run to verify behavior and file placement. See [layout v1](docs/workspace-layout.md) for the full contract.
+
+Run CLI commands from `my-workflow/`. Register external agent or repository paths through `workspace`; reuse existing session history through `execution.session`. Repository URLs, refs, and commit IDs are ordinary executor config or result data; repository checkout and version capture are performed by the executor.
+
+`workflows/` is optional organization for multiple graphs. The CLI and trigger targets accept an explicit JSON path; a workspace with one graph can keep `workflow.json` directly at its root.
 
 ## Workflow
 
@@ -48,7 +79,7 @@ Set `"dispatch":"all"` on a node to run every matching outgoing branch concurren
 
 ## Register your executor
 
-Create `.agentflow/executors.json` in the directory where you run AgentFlow. If absent, the runner checks `~/.agentflow/executors.json`. Start with [executors.example.json](executors.example.json) or `agentflow config init`.
+Create `executors.json` at the workflow workspace root. If absent, only built-in executors are available. Start with [executors.example.json](executors.example.json) or `agentflow config init`.
 
 ```json
 {
@@ -69,6 +100,8 @@ Built-in executors are `codex`, `claude-code`, `process`, and `external`. Codex 
 ## Program contract
 
 The runner starts the configured program whenever the graph reaches its node. The program reads incoming JSON from `AGENTFLOW_INPUT_FILE`, optional executor configuration from `AGENTFLOW_CONFIG_FILE`, writes one JSON object to `AGENTFLOW_RESULT_FILE`, and exits successfully. It may write a newly created session ID to `AGENTFLOW_SESSION_FILE`. stdout and stderr are logs. The runner validates output and selects the next edge.
+
+`AGENTFLOW_ROOT` points to the workflow workspace; `AGENTFLOW_WORKSPACE` points to this executor's working directory. An executor workspace may be a local directory, a symlink, or an external project path. A directory binding does not select a session: use `execution.session` to start, resume, or fork one. Existing agent directories keep their own instructions and tools. See [the standalone workspace demo](examples/local-workspace-demo/README.md).
 
 ```python
 import json, os
@@ -100,7 +133,9 @@ agentflow web --host 127.0.0.1 --port 7070
 
 Serial graphs run one active node at a time; `dispatch: "all"` can run siblings concurrently. Retry restarts failed active nodes while preserving successful siblings. Each run saves its workflow snapshot; executor registrations are resolved from the current environment. Changing executor configuration therefore affects a later resume or retry. Old workflow formats and removed node fields are rejected.
 
-Cron and webhook configuration lives in `.agentflow/triggers.json`. `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher; the persistent scheduler requires `trigger serve` to stay running. See [trigger architecture](docs/trigger-architecture.md).
+Cron and webhook configuration lives in `triggers.json`. `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher; the persistent scheduler requires `trigger serve` to stay running. See [trigger architecture](docs/trigger-architecture.md).
+
+Each workspace runs its own trigger service. One service can schedule several graph files from its `triggers.json`; it has one run worker by default, so separate triggered runs queue while a run executes. Services in different workspaces have separate receipts and run stores. Cron-only services do not bind HTTP ports. Webhooks share one listener per workspace: use distinct explicit ports across workspaces, or port `0` for an automatically assigned port (reported on stderr). A second service for the same workspace is rejected. Delivery deduplication and the default `forbid` overlap policy are scoped to each trigger, not to the repositories or sessions its executors use.
 
 CLI stdout contains data; diagnostics go to stderr. Piped output defaults to JSON. Exit codes are `0` success, `1` execution failure, `2` invalid input, `3` not found, `4` permission denied, `5` conflict, and `10` successful dry run. Start requests support idempotency keys. Controls are queued when another process owns the run lock.
 

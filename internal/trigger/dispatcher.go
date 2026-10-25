@@ -34,6 +34,11 @@ type DeliveryReceipt struct {
 func (d *Dispatcher) Dispatch(ctx context.Context, event Event) (DispatchResult, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
+	release, err := acquireWorkspaceLock(ctx, d.Root, "trigger-dispatch.lock", true)
+	if err != nil {
+		return DispatchResult{}, err
+	}
+	defer release()
 	definition, ok := findDefinition(d.Config, event.TriggerID)
 	if !ok {
 		return DispatchResult{}, fmt.Errorf("trigger not found: %s", event.TriggerID)
@@ -47,12 +52,12 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event Event) (DispatchResult,
 	if event.DeliveryID == "" {
 		event.DeliveryID = generatedDeliveryID(event)
 	}
-	if existing, err := d.loadReceipt(event.DeliveryID); err != nil {
+	if existing, err := d.loadReceipt(event.TriggerID, event.DeliveryID); err != nil {
 		return DispatchResult{}, err
 	} else if existing != nil {
 		return DispatchResult{TriggerID: existing.TriggerID, DeliveryID: existing.DeliveryID, Status: existing.Status, Run: existing.Run, Duplicate: true, Reason: existing.Reason}, nil
 	}
-	if strings.EqualFold(definition.Policy.Concurrency, "forbid") {
+	if !strings.EqualFold(definition.Policy.Concurrency, "allow") {
 		active, err := d.hasActiveRun(definition.ID)
 		if err != nil {
 			return DispatchResult{}, err
@@ -66,7 +71,7 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event Event) (DispatchResult,
 	if err != nil {
 		return DispatchResult{}, err
 	}
-	command := StartRunCommand{WorkflowPath: definition.Target.Workflow, Inputs: inputs, TriggerID: definition.ID, TriggerKind: event.SourceKind, DeliveryID: event.DeliveryID, ScheduledAt: event.ScheduledAt, ReceivedAt: event.ReceivedAt, IdempotencyKey: definition.ID + ":" + event.DeliveryID}
+	command := StartRunCommand{WorkflowPath: definition.Target.Workflow, Inputs: inputs, TriggerID: definition.ID, TriggerKind: event.SourceKind, DeliveryID: event.DeliveryID, ScheduledAt: event.ScheduledAt, ReceivedAt: event.ReceivedAt, IdempotencyKey: deliveryKey(definition.ID, event.DeliveryID)}
 	run, err := d.Starter.Start(ctx, command)
 	if err != nil {
 		return DispatchResult{}, err
@@ -92,13 +97,18 @@ func generatedDeliveryID(event Event) string {
 	return hex.EncodeToString(hash[:])
 }
 
-func (d *Dispatcher) receiptPath(deliveryID string) string {
-	hash := sha256.Sum256([]byte(deliveryID))
-	return filepath.Join(d.Root, "trigger-deliveries", hex.EncodeToString(hash[:])+".json")
+func deliveryKey(triggerID, deliveryID string) string {
+	encoded, _ := json.Marshal([]string{triggerID, deliveryID})
+	hash := sha256.Sum256(encoded)
+	return hex.EncodeToString(hash[:])
 }
 
-func (d *Dispatcher) loadReceipt(deliveryID string) (*DeliveryReceipt, error) {
-	data, err := os.ReadFile(d.receiptPath(deliveryID))
+func (d *Dispatcher) receiptPath(triggerID, deliveryID string) string {
+	return filepath.Join(d.Root, "trigger-deliveries", deliveryKey(triggerID, deliveryID)+".json")
+}
+
+func (d *Dispatcher) loadReceipt(triggerID, deliveryID string) (*DeliveryReceipt, error) {
+	data, err := os.ReadFile(d.receiptPath(triggerID, deliveryID))
 	if os.IsNotExist(err) {
 		return nil, nil
 	}
@@ -113,7 +123,7 @@ func (d *Dispatcher) loadReceipt(deliveryID string) (*DeliveryReceipt, error) {
 }
 
 func (d *Dispatcher) saveReceipt(receipt DeliveryReceipt) error {
-	path := d.receiptPath(receipt.DeliveryID)
+	path := d.receiptPath(receipt.TriggerID, receipt.DeliveryID)
 	if err := store.EnsureDir(filepath.Dir(path)); err != nil {
 		return err
 	}

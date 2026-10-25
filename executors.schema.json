@@ -22,7 +22,8 @@
             }
           },
           "workspace": {
-            "type": "string"
+            "type": "string",
+            "description": "Executor working directory: a path relative to the workflow workspace root or an absolute path. Existing directories and symlinks are supported."
           },
           "env": {
             "type": "object",

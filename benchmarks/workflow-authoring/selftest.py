@@ -22,10 +22,6 @@ class EvaluatorTest(unittest.TestCase):
         prepare(case, root)
         source = sources / case
         shutil.copytree(source, root, dirs_exist_ok=True)
-        (root / ".agentflow").mkdir(exist_ok=True)
-        for filename in ["executors.json", "triggers.json"]:
-            if (source / filename).exists():
-                shutil.copy2(source / filename, root / ".agentflow" / filename)
         return holder, root
 
     def test_all_goldens(self):
@@ -61,6 +57,26 @@ class EvaluatorTest(unittest.TestCase):
                 edge["from"] = rename[edge["from"]]
                 if edge["to"] != "$end":
                     edge["to"] = rename[edge["to"]]
+            # Equivalent data/config bindings and file-based role instructions
+            # must not be rejected for differing from the reference syntax.
+            review = next(n for n in flow["nodes"] if n["id"] == rename["review"])
+            actions = review["config"]["actions"]
+            review["config"]["recipient"] = "{{ input.recipient }}"
+            review["config"]["actions"] = "{{ input.actions }}"
+            review["inputSchema"] = {"type": "object"}
+            next(e for e in flow["edges"] if e["from"] == rename["draft"] and e["to"] == rename["review"])["map"] = {
+                "recipient": "{{ inputs.reviewer }}", "actions": actions,
+                "summary": "{{ output.summary }}", "check": "{{ output.check }}",
+            }
+            draft = next(n for n in flow["nodes"] if n["id"] == rename["draft"])
+            draft["config"].pop("instruction")
+            draft["executor"] = "owned-author"
+            directory = root / "executors/agents/author"
+            directory.mkdir(parents=True)
+            (directory / "AGENTS.md").write_text("Produce summary/check from the workflow input and any returned review note.\n")
+            registry = json.loads((root / "executors.json").read_text())
+            registry["executors"]["owned-author"] = {"kind": "codex", "workspace": "executors/agents/author"}
+            (root / "executors.json").write_text(json.dumps(registry))
             (root / "workflow.json").write_text(json.dumps(flow))
             (root / "submission.json").write_text(
                 json.dumps({"workflow": "workflow.json", "roles": rename})
@@ -99,7 +115,7 @@ class EvaluatorTest(unittest.TestCase):
                     if defect == "unbounded":
                         flow["edges"][2].pop("maxIterations")
                     if defect == "missing-environment":
-                        p = root / ".agentflow/executors.json"
+                        p = root / "executors.json"
                         config = json.loads(p.read_text())
                         config["executors"]["collect"].pop("env")
                         p.write_text(json.dumps(config))

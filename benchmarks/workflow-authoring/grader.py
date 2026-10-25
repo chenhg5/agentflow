@@ -93,8 +93,8 @@ class Grade:
             json.dumps(data, ensure_ascii=False) if code else "",
         )
         self.config = (
-            json.loads((self.workspace / ".agentflow/executors.json").read_text())
-            if (self.workspace / ".agentflow/executors.json").exists()
+            json.loads((self.workspace / "executors.json").read_text())
+            if (self.workspace / "executors.json").exists()
             else {"executors": {}}
         )
         builtins = {
@@ -137,8 +137,9 @@ class Grade:
                 definition = self.registry.get(node["executor"], {})
                 self.check(role + "_uses_codex", definition.get("kind") == "codex")
                 self.check(
-                    role + "_instruction_in_config",
-                    isinstance(node.get("config", {}).get("instruction"), str),
+                    role + "_instructions_present",
+                    isinstance(node.get("config", {}).get("instruction"), str)
+                    or (self.workspace / definition.get("workspace", node.get("config", {}).get("workspace", ".")) / "AGENTS.md").is_file(),
                 )
             if self.case["id"] == "scheduled-review":
                 self.check(
@@ -167,14 +168,7 @@ class Grade:
                 "interaction_entry_registered",
                 bool(self.registry.get(role["executor"], {}).get("command")),
             )
-            actions = role.get("config", {}).get("actions", [])
-            self.check(
-                "interaction_actions_complete",
-                isinstance(actions, list)
-                and {action.get("output", {}).get("signal") for action in actions}
-                == {"happy", "again", "sad"},
-            )
-            path = self.workspace / ".agentflow/triggers.json"
+            path = self.workspace / "triggers.json"
             data = json.loads(path.read_text()) if path.exists() else {}
             triggers = data.get("triggers", [])
             self.check(
@@ -226,7 +220,7 @@ class Grade:
             ),
         )
         for folder in ["runs", "dispatch", "trigger-deliveries"]:
-            shutil.rmtree(root / ".agentflow" / folder, ignore_errors=True)
+            shutil.rmtree(root / folder, ignore_errors=True)
         if self.binary_override:
             target = (
                 root / ".tool/agentflow"
@@ -245,8 +239,7 @@ class Grade:
                 config.setdefault("executors", {})[name] = {
                     "command": ["python3", str(mock)]
                 }
-        (root / ".agentflow").mkdir(exist_ok=True)
-        (root / ".agentflow/executors.json").write_text(json.dumps(config))
+        (root / "executors.json").write_text(json.dumps(config))
         inherited = {
             key: value
             for key, value in os.environ.items()
@@ -360,7 +353,7 @@ class Grade:
                 config_artifact = state["nodes"][self.roles["finalize"]].get("artifacts", {}).get("config")
                 final_config = {}
                 if config_artifact and state.get("run_id"):
-                    path = root / ".agentflow" / "runs" / state["run_id"] / config_artifact
+                    path = root / "runs" / state["run_id"] / config_artifact
                     if path.exists():
                         final_config = json.loads(path.read_text())
                 drafts = actual.count(self.roles["draft"])
@@ -380,9 +373,17 @@ class Grade:
                 self.roles["review"], {}
             ).get("input"):
                 request = state["nodes"][self.roles["review"]]["input"]
-                config = self.nodes[self.roles["review"]].get("config", {})
+                artifact = state["nodes"][self.roles["review"]]["artifacts"]["config"]
+                config = json.loads((root / "runs" / state["run_id"] / artifact).read_text())
                 self.check(
-                    label + "_recipient", config.get("recipient") == "{{ inputs.reviewer }}"
+                    label + "_recipient", config.get("recipient") == inputs["reviewer"]
+                )
+                actions = config.get("actions", [])
+                self.check(
+                    label + "_interaction_actions_complete",
+                    isinstance(actions, list)
+                    and all(isinstance(action, dict) and isinstance(action.get("label"), str) and isinstance(action.get("output"), dict) for action in actions)
+                    and {action["output"].get("signal") for action in actions} == {"happy", "again", "sad"},
                 )
                 self.check(
                     label + "_review_content",

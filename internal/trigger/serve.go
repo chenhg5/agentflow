@@ -6,10 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -31,30 +34,61 @@ func Serve(ctx context.Context, root, cwd string, options ServeOptions) error {
 	if err != nil {
 		return err
 	}
+	release, err := acquireWorkspaceLock(ctx, root, "scheduler.lock", false)
+	if errors.Is(err, errWorkspaceBusy) {
+		return fmt.Errorf("%w: %s", ErrServiceBusy, root)
+	}
+	if err != nil {
+		return err
+	}
+	defer release()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	runtime, err := NewRuntime(root, cwd, options.Workers)
 	if err != nil {
 		return err
 	}
-	runtime.StartWorkers(ctx)
 	dispatcher := &Dispatcher{Root: root, Config: config, Starter: runtime}
+	var listener net.Listener
+	for _, definition := range config.Triggers {
+		if definition.Enabled && definition.Source.Kind == "webhook" {
+			host := options.Host
+			if host == "" {
+				host = "127.0.0.1"
+			}
+			listener, err = net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(options.Port)))
+			if err != nil {
+				return err
+			}
+			defer listener.Close()
+			break
+		}
+	}
+	// Reserve the listener before recovering queued jobs or starting timers.
+	// A port conflict must not launch work from a service that failed to start.
+	runtime.StartWorkers(ctx)
 	cronStop, err := startCron(ctx, config, dispatcher)
 	if err != nil {
 		return err
 	}
-	defer cronStop()
+	defer func() {
+		cancel()
+		cronStop()
+	}()
 
-	host := options.Host
-	if host == "" {
-		host = "127.0.0.1"
+	if listener == nil {
+		<-ctx.Done()
+		return nil
 	}
-	server := &http.Server{Addr: fmt.Sprintf("%s:%d", host, options.Port), Handler: webhookHandler(dispatcher, config)}
+	server := &http.Server{Handler: webhookHandler(dispatcher, config)}
+	fmt.Fprintf(os.Stderr, "trigger webhook listener: http://%s\n", listener.Addr())
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}()
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
@@ -62,22 +96,27 @@ func Serve(ctx context.Context, root, cwd string, options ServeOptions) error {
 
 func startCron(ctx context.Context, config Config, dispatcher *Dispatcher) (func(), error) {
 	schedulers := []*cron.Cron{}
+	stop := func() {
+		for _, scheduler := range schedulers {
+			<-scheduler.Stop().Done()
+		}
+	}
 	for _, definition := range config.Triggers {
 		if !definition.Enabled || definition.Source.Kind != "cron" {
 			continue
 		}
 		source := CronSource{Definition: definition}
-		scheduler, err := source.scheduler(func(event Event) { _, _ = dispatcher.Dispatch(context.Background(), event) })
+		scheduler, err := source.scheduler(func(event Event) {
+			if _, err := dispatcher.Dispatch(ctx, event); err != nil && ctx.Err() == nil {
+				fmt.Fprintf(os.Stderr, "trigger %s dispatch failed: %v\n", event.TriggerID, err)
+			}
+		})
 		if err != nil {
+			stop()
 			return nil, err
 		}
 		scheduler.Start()
 		schedulers = append(schedulers, scheduler)
-	}
-	stop := func() {
-		for _, scheduler := range schedulers {
-			<-scheduler.Stop().Done()
-		}
 	}
 	return stop, nil
 }

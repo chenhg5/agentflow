@@ -1,4 +1,9 @@
 .agentflow/
+/runs/
+/dispatch/
+/trigger-deliveries/
+/scheduler.lock
+/trigger-dispatch.lock
 node_modules/
 /agentflow
 bin/

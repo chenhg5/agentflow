@@ -29,7 +29,7 @@
         "policy": {
           "type": "object",
           "properties": {
-            "concurrency": { "enum": ["forbid", "allow"] },
+            "concurrency": { "enum": ["forbid", "allow"], "default": "forbid", "description": "Overlap policy for runs of this trigger; does not lock shared repositories or sessions." },
             "misfire": { "const": "skip" }
           },
           "additionalProperties": false

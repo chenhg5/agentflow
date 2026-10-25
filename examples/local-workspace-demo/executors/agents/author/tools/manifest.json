@@ -1,0 +1,12 @@
+{
+  "name": "source_tools",
+  "tools": [
+    {
+      "name": "read_source",
+      "description": "Read the workflow's local field note and return its text, SHA-256 digest, and word count.",
+      "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
+      "annotations": {"readOnlyHint": true},
+      "command": ["python3", "tools/read_source.py"]
+    }
+  ]
+}

@@ -1,0 +1,90 @@
+{
+  "version": "3",
+  "name": "local-agent-workspaces",
+  "entry": "draft",
+  "inputs": {
+    "topic": {"type": "string", "required": true}
+  },
+  "nodes": [
+    {
+      "id": "draft",
+      "executor": "author",
+      "execution": {"session": {"mode": "new"}},
+      "inputSchema": {
+        "type": "object",
+        "required": ["topic"],
+        "properties": {"topic": {"type": "string"}},
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["summary", "source_sha256", "word_count"],
+        "properties": {
+          "summary": {"type": "string"},
+          "source_sha256": {"type": "string"},
+          "word_count": {"type": "integer"}
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "verify",
+      "executor": "verifier",
+      "execution": {"session": {"mode": "new"}},
+      "inputSchema": {
+        "type": "object",
+        "required": ["summary", "source_sha256", "word_count"],
+        "properties": {
+          "summary": {"type": "string"},
+          "source_sha256": {"type": "string"},
+          "word_count": {"type": "integer"}
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["accepted", "note", "source_sha256"],
+        "properties": {
+          "accepted": {"type": "boolean"},
+          "note": {"type": "string"},
+          "source_sha256": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "report",
+      "executor": "report_writer",
+      "inputSchema": {
+        "type": "object",
+        "required": ["draft", "review"],
+        "properties": {
+          "draft": {"type": "object"},
+          "review": {"type": "object"}
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["report_path", "accepted"],
+        "properties": {
+          "report_path": {"type": "string"},
+          "accepted": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    }
+  ],
+  "edges": [
+    {"from": "draft", "to": "verify"},
+    {
+      "from": "verify",
+      "to": "report",
+      "map": {
+        "draft": "{{ nodes.draft.result }}",
+        "review": "{{ output }}"
+      }
+    },
+    {"from": "report", "to": "$end"}
+  ]
+}

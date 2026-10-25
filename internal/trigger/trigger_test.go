@@ -39,7 +39,7 @@ func TestDispatcherIsIdempotent(t *testing.T) {
 }
 
 func TestRuntimeQueuesAndExecutesShellWorkflow(t *testing.T) {
-	root := filepath.Join(t.TempDir(), ".agentflow")
+	root := t.TempDir()
 	cwd := t.TempDir()
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		t.Fatal(err)
@@ -69,6 +69,83 @@ func TestRuntimeQueuesAndExecutesShellWorkflow(t *testing.T) {
 	}
 	if _, err := store.LoadRun(root, run.RunID); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestDeliveryAndConcurrencyAreScopedToTrigger(t *testing.T) {
+	root := t.TempDir()
+	flow := `{"version":"3","name":"shared-target","entry":"wait","nodes":[{"id":"wait","executor":"external"}],"edges":[{"from":"wait","to":"$end"}]}`
+	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	runtime, err := NewRuntime(root, root, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	config := Config{Triggers: []Definition{
+		{ID: "first", Enabled: true, Source: SourceConfig{Kind: "webhook"}, Target: TargetConfig{Workflow: "workflow.json"}},
+		{ID: "second", Enabled: true, Source: SourceConfig{Kind: "webhook"}, Target: TargetConfig{Workflow: "workflow.json"}},
+	}}
+	dispatcher := &Dispatcher{Root: root, Config: config, Starter: runtime}
+	ctx := context.Background()
+	event := Event{TriggerID: "first", SourceKind: "webhook", DeliveryID: "same-delivery", ReceivedAt: time.Now().UTC()}
+	first, err := dispatcher.Dispatch(ctx, event)
+	if err != nil || first.Status != "queued" {
+		t.Fatalf("first trigger: %+v, %v", first, err)
+	}
+	event.TriggerID = "second"
+	second, err := dispatcher.Dispatch(ctx, event)
+	if err != nil || second.Duplicate || second.Status != "queued" || second.Run.RunID == first.Run.RunID {
+		t.Fatalf("delivery leaked between triggers: %+v, %v", second, err)
+	}
+	replayed, err := dispatcher.Dispatch(ctx, event)
+	if err != nil || !replayed.Duplicate || replayed.Run.RunID != second.Run.RunID {
+		t.Fatalf("replay: %+v, %v", replayed, err)
+	}
+	event.DeliveryID = "next-delivery"
+	skipped, err := dispatcher.Dispatch(ctx, event)
+	if err != nil || skipped.Status != "skipped" || skipped.Reason != "active_run" {
+		t.Fatalf("default overlap policy: %+v, %v", skipped, err)
+	}
+	dispatcher.Config.Triggers[1].Policy.Concurrency = "allow"
+	event.DeliveryID = "allowed-delivery"
+	allowed, err := dispatcher.Dispatch(ctx, event)
+	if err != nil || allowed.Status != "queued" {
+		t.Fatalf("explicit overlap policy: %+v, %v", allowed, err)
+	}
+}
+
+func TestConcurrentDispatchersDeduplicateOneDelivery(t *testing.T) {
+	root := t.TempDir()
+	starter := &fakeStarter{next: "run_1"}
+	config := Config{Triggers: []Definition{{ID: "shared", Enabled: true, Source: SourceConfig{Kind: "webhook"}, Target: TargetConfig{Workflow: "workflow.json"}}}}
+	// Each dispatcher represents a separate service/CLI delivery path. Its
+	// in-memory mutex cannot protect the other instance.
+	results := make(chan DispatchResult, 2)
+	errors := make(chan error, 2)
+	start := make(chan struct{})
+	for index := 0; index < 2; index++ {
+		dispatcher := &Dispatcher{Root: root, Config: config, Starter: starter}
+		go func() {
+			<-start
+			result, err := dispatcher.Dispatch(context.Background(), Event{TriggerID: "shared", SourceKind: "webhook", DeliveryID: "one-delivery", ReceivedAt: time.Now().UTC()})
+			results <- result
+			errors <- err
+		}()
+	}
+	close(start)
+	duplicates := 0
+	for index := 0; index < 2; index++ {
+		result := <-results
+		if err := <-errors; err != nil {
+			t.Fatal(err)
+		}
+		if result.Duplicate {
+			duplicates++
+		}
+	}
+	if duplicates != 1 || starter.calls != 1 {
+		t.Fatalf("duplicate starts: duplicates=%d, starts=%d", duplicates, starter.calls)
 	}
 }
 

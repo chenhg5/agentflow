@@ -34,7 +34,7 @@ type Executor struct {
 	Ephemeral                  bool     `json:"ephemeral,omitempty"`
 	ExtraArgs                  []string `json:"extraArgs,omitempty"`
 	// Command starts a new agent session.
-	Command []string `json:"command"`
+	Command []string `json:"command,omitempty"`
 	// ResumeCommand sends a prompt to an existing session.
 	ResumeCommand []string `json:"resumeCommand,omitempty"`
 	// ForkCommand starts a new session from an existing session.
@@ -80,46 +80,41 @@ type CommandResult struct {
 	TimedOut bool
 }
 
+// LoadExecutors reads this standalone workspace's registrations over the
+// built-ins. It does not inherit registrations from other workspaces.
 func LoadExecutors(cwd string) (map[string]Executor, error) {
 	executors := BuiltInExecutors()
-	files := []string{filepath.Join(cwd, ".agentflow", "executors.json")}
-	if home, err := os.UserHomeDir(); err == nil {
-		files = append(files, filepath.Join(home, ".agentflow", "executors.json"))
+	file := filepath.Join(cwd, "executors.json")
+	data, err := os.ReadFile(file)
+	if os.IsNotExist(err) {
+		return executors, nil
 	}
-	for _, file := range files {
-		data, err := os.ReadFile(file)
-		if os.IsNotExist(err) {
-			continue
+	if err != nil {
+		return nil, fmt.Errorf("cannot read executors file %s: %w", file, err)
+	}
+	var config struct {
+		Executors map[string]Executor `json:"executors"`
+	}
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&config); err != nil {
+		return nil, fmt.Errorf("invalid executors file %s: %w", file, err)
+	}
+	if config.Executors == nil {
+		return nil, fmt.Errorf("executor config %s must contain an executors object", file)
+	}
+	for name, configuredExecutor := range config.Executors {
+		if configuredExecutor.Kind == "" && len(configuredExecutor.Command) > 0 {
+			configuredExecutor.Kind = "command"
 		}
-		if err != nil {
-			return nil, fmt.Errorf("cannot read executors file %s: %w", file, err)
-		}
-		var config struct {
-			Executors map[string]Executor `json:"executors"`
-		}
-		decoder := json.NewDecoder(bytes.NewReader(data))
-		decoder.DisallowUnknownFields()
-		if err := decoder.Decode(&config); err != nil {
-			return nil, fmt.Errorf("invalid executors file %s: %w", file, err)
-		}
-		if config.Executors == nil {
-			return nil, fmt.Errorf("executor config %s must contain an executors object", file)
-		}
-		configured := config.Executors
-		for name, configuredExecutor := range configured {
-			if configuredExecutor.Kind == "" && len(configuredExecutor.Command) > 0 {
+		if base, ok := executors[name]; ok {
+			executors[name] = merge(base, configuredExecutor)
+		} else {
+			if configuredExecutor.Kind == "" {
 				configuredExecutor.Kind = "command"
 			}
-			if base, ok := executors[name]; ok {
-				executors[name] = merge(base, configuredExecutor)
-			} else {
-				if configuredExecutor.Kind == "" {
-					configuredExecutor.Kind = "command"
-				}
-				executors[name] = configuredExecutor
-			}
+			executors[name] = configuredExecutor
 		}
-		return executors, nil
 	}
 	return executors, nil
 }
@@ -168,7 +163,11 @@ func CheckExecutor(name string, executor Executor) Status {
 		status.Error = "no binary or command configured"
 		return status
 	}
-	if _, err := exec.LookPath(binary); err != nil {
+	lookup := binary
+	if !filepath.IsAbs(binary) && strings.ContainsAny(binary, `/\`) {
+		lookup, _ = filepath.Abs(filepath.Join(executor.Workspace, binary))
+	}
+	if _, err := exec.LookPath(lookup); err != nil {
 		status.Error = err.Error()
 		return status
 	}

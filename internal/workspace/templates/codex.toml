@@ -1,0 +1,6 @@
+[mcp_servers.workflow_tools]
+command = "python3"
+args = ["tools/mcp_server.py", "tools/manifest.json"]
+env_vars = ["AGENTFLOW_ROOT", "AGENTFLOW_INPUT_FILE"]
+required = true
+default_tools_approval_mode = "writes"

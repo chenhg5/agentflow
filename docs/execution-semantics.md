@@ -5,7 +5,9 @@ When a node sets `dispatch: "all"`, all matching outgoing edges activate their t
 
 ## Executor contract
 
-Each node references an executor registered in `.agentflow/executors.json` or a built-in executor. The registry defines the program entry point, working directory, and environment. Custom names have no graph meaning.
+Each node references an executor registered in `executors.json` or a built-in executor. The registry defines the program entry point, working directory, and environment. Custom names have no graph meaning.
+
+The invocation directory is the standalone workflow workspace root. Definitions, `executors.json`, optional `triggers.json`, and generated `runs/` live directly in that workspace. Executor directories may be elsewhere, including symlinks to existing agents or paths to external repositories. `AGENTFLOW_ROOT` identifies the workflow root; `AGENTFLOW_WORKSPACE` identifies the executor's working directory. Session policy is independent of directory selection. Resuming persisted session history does not attach to an already running interactive process.
 
 The entry node receives the run input; each selected edge passes the source node output to its target. An edge may declare `map` to construct the target input from `{{ input.field }}`, `{{ output.field }}`, run inputs, and prior node results. An explicit empty `map` sends `{}`. A missing reference in an edge map yields an empty string. An empty run input is an empty JSON object, including after save/reload. Programs read a JSON object from `AGENTFLOW_INPUT_FILE`, write a JSON object to `AGENTFLOW_RESULT_FILE`, and exit with zero status. The runner validates `inputSchema` and `outputSchema` using JSON Schema draft 2020-12. stdout/stderr are logs. The runner alone advances the graph.
 

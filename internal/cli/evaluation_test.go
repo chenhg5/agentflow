@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/chenhg5/agentflow/internal/model"
@@ -17,7 +16,7 @@ func TestRunEvaluateAndCompare(t *testing.T) {
 	previous, restore := chdirForTest(t, workspace)
 	defer restore()
 	_ = previous
-	root := filepath.Join(workspace, ".agentflow")
+	root := workspace
 	workflow := model.Workflow{Version: "3", Name: "demo", Entry: "agent", Nodes: []model.Node{{ID: "agent", Executor: "process"}}}
 	makeRun := func(idempotency string) *model.Run {
 		run, err := store.CreateRun(root, workflow, map[string]string{}, idempotency)

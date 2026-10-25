@@ -148,7 +148,7 @@
         "executor": {
           "type": "string",
           "minLength": 1,
-          "description": "Name of the executor registered in .agentflow/executors.json or a built-in executor"
+          "description": "Name of the executor registered in executors.json or a built-in executor"
         },
         "config": {
           "type": "object",

@@ -1,5 +1,11 @@
 # Testing AgentFlow
 
+`make test-benchmark` checks both graph authoring and
+[workspace authoring](../benchmarks/workspace-authoring/README.md). The latter
+executes submitted MCP tools and program executors, checks file locations and
+external-agent preservation, and substitutes model transport. Fresh-context
+model-authoring experiments and native provider smoke runs remain opt-in.
+
 AgentFlow has three test layers:
 
 1. **Deterministic checks** run on every change. `make check` runs formatting, `go vet`, and all Go tests with fake drivers. It does not contact a model executor.
@@ -14,7 +20,7 @@ make test-e2e
 ```
 
 The test uses process executor invocations as deterministic stand-ins for agents. This verifies the runner and persistence boundary; the real provider smoke test below verifies Claude Code and Codex command construction separately.
-Set `AGENTFLOW_KEEP_WORKSPACE=1` to retain the temporary `.agentflow` directory for inspection after the test.
+Set `AGENTFLOW_KEEP_WORKSPACE=1` to retain the temporary workflow workspace for inspection after the test.
 
 To run only the trigger coverage:
 

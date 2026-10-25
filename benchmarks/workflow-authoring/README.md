@@ -11,11 +11,16 @@ This benchmark evaluates **an agent + the shipped CLI + the shipped skill**. A p
 | external-loop | development | Durable pause/reload/submit, arbitrary field names, confidence bounds, return paths, invalid output rejection, bounded loops |
 | mixed-language | holdout | Authored Python and Node executors, program entry points, environment, nested JSON handoff and computed result |
 
-`cases.json` contains business tasks and scenario contracts. `goldens/` contains private reference solutions. `grader.py` tests runtime behavior and required interfaces, rather than requiring an identical JSON file, node naming, array ordering, or one exact implementation. Reference configs are named `executors.json` / `triggers.json`; materialize them under `.agentflow/` when running a reference.
+`cases.json` contains business tasks and scenario contracts. `goldens/` contains private reference solutions. `grader.py` tests runtime behavior and required interfaces, rather than requiring an identical JSON file, node naming, array ordering, or one exact implementation. Reference configs are named `executors.json` / `triggers.json`; keep them at the standalone workspace root when running a reference.
 
 An exhausted rework loop may either end normally or fail with the documented `max_iterations`, because the task only limits the number of returns. Extra technical nodes are allowed unless the task explicitly requires its first action to be Codex. Quality findings, such as undeclared required run inputs, are recorded separately from functional task success. Mock model steps produce deterministic contract outputs: this measures orchestration, not model writing quality.
 
 The grader checks supplied executor bindings and runs local programs. It replaces registered model adapters with deterministic programs and does not call models while grading. Participant code is executed; these task workspaces are resource separation, not an operating-system security boundary. The evaluator provides a limited process environment and fresh runtime state for every scenario.
+
+Checks inspect rendered invocation configuration and runtime data, rather than
+requiring a specific template spelling. Role instructions may live in the
+executor's `AGENTS.md` or node configuration. Equivalent input-to-config mappings,
+renamed nodes and reordered arrays are covered by an acceptance regression.
 
 ## Deterministic regression checks
 

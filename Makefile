@@ -1,7 +1,7 @@
 APP        := agentflow
 CMD        := ./cmd/agentflow
 DIST       := dist
-VERSION    := v0.1.2
+VERSION    := v0.2.0
 COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
@@ -20,10 +20,10 @@ PLATFORMS := \
 
 SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: build test test-real test-e2e test-e2e-triggers test-benchmark vet check release-all clean
+.PHONY: build test test-real test-e2e test-e2e-triggers test-benchmark vet check release-preflight release-all clean
 
 build:
-	go build -ldflags "$(LDFLAGS)" -o bin/$(APP) $(CMD)
+	go build -trimpath -ldflags "$(LDFLAGS)" -o bin/$(APP) $(CMD)
 
 test:
 	go test -count=1 ./...
@@ -41,6 +41,7 @@ test-e2e-triggers: build
 
 test-benchmark: build
 	python3 benchmarks/workflow-authoring/selftest.py
+	python3 benchmarks/workspace-authoring/suite.py selftest
 
 vet:
 	test -z "$$(gofmt -l .)" || { gofmt -l .; exit 1; }
@@ -48,7 +49,10 @@ vet:
 
 check: vet test
 
-release-all: clean check
+release-preflight:
+	@test -z "$$(git status --porcelain)" || { echo "Commit workspace changes before packaging a release." >&2; exit 1; }
+
+release-all: release-preflight clean check
 	@mkdir -p $(DIST)
 	@$(foreach platform,$(PLATFORMS), \
 		$(eval GOOS   := $(word 1,$(subst /, ,$(platform)))) \
@@ -57,9 +61,8 @@ release-all: clean check
 		$(eval NAME   := $(APP)-$(VERSION)-$(GOOS)-$(GOARCH)) \
 		echo "Building $(NAME)" && \
 		mkdir -p $(DIST)/$(NAME) && \
-		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
-		cp README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json $(DIST)/$(NAME)/ && \
-		cp -R examples skills docs scripts $(DIST)/$(NAME)/ && \
+		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
+		git archive HEAD README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json examples skills docs scripts benchmarks | tar -x -C $(DIST)/$(NAME) && \
 		$(if $(EXT),(cd $(DIST) && zip -qr $(NAME).zip $(NAME)),tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
 		rm -rf $(DIST)/$(NAME) && \
 	) true

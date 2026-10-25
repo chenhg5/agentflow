@@ -20,7 +20,7 @@ func TestWorkflowAndRunViews(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	workflowServer := NewServer(Options{Root: filepath.Join(root, ".agentflow"), WorkflowPath: workflowPath, Port: -1})
+	workflowServer := NewServer(Options{Root: root, WorkflowPath: workflowPath, Port: -1})
 	workflowResponse := httptest.NewRecorder()
 	workflowServer.Handler().ServeHTTP(workflowResponse, httptest.NewRequest(http.MethodGet, "/api/state", nil))
 	if workflowResponse.Code != http.StatusOK {
@@ -41,11 +41,11 @@ func TestWorkflowAndRunViews(t *testing.T) {
 		t.Fatalf("workflow graph edges = %#v", graphView["edges"])
 	}
 
-	run, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "")
+	run, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	baseline, err := store.CreateRun(filepath.Join(root, ".agentflow"), model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "baseline")
+	baseline, err := store.CreateRun(root, model.Workflow{Version: "3", Name: "demo", Entry: "build", Nodes: []model.Node{{ID: "build", Executor: "process", Config: map[string]any{"command": []string{"true"}}}}, Edges: []model.Transition{{From: "build", To: "$end"}}}, nil, "baseline")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -65,7 +65,7 @@ func TestWorkflowAndRunViews(t *testing.T) {
 	if err := store.SaveState(run); err != nil {
 		t.Fatal(err)
 	}
-	runServer := NewServer(Options{Root: filepath.Join(root, ".agentflow"), RunID: run.RunID, Port: -1})
+	runServer := NewServer(Options{Root: root, RunID: run.RunID, Port: -1})
 	runResponse := httptest.NewRecorder()
 	runServer.Handler().ServeHTTP(runResponse, httptest.NewRequest(http.MethodGet, "/api/state", nil))
 	if runResponse.Code != http.StatusOK {

@@ -23,7 +23,7 @@ func TestSchemaDiscoveryInEmptyDirectory(t *testing.T) {
 	}
 	os.Stdout = sink
 	defer func() { os.Stdout = output; sink.Close() }()
-	for _, name := range []string{"workflow", "executors", "trigger"} {
+	for _, name := range []string{"workflow", "executors", "trigger", "workspace"} {
 		if err := Run([]string{"schema", name, "--format", "json"}); err != nil {
 			t.Fatalf("%s schema unavailable without repository files: %v", name, err)
 		}
