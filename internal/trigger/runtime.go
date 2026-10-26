@@ -57,7 +57,13 @@ func (r *Runtime) creationRequest(command StartRunCommand) (store.CreateRequest,
 	if !filepath.IsAbs(workflowPath) {
 		workflowPath = filepath.Join(r.CWD, workflowPath)
 	}
-	data, err := os.ReadFile(workflowPath)
+	var data []byte
+	var err error
+	if command.Workflow != nil {
+		data, err = json.Marshal(command.Workflow)
+	} else {
+		data, err = os.ReadFile(workflowPath)
+	}
 	if err != nil {
 		return store.CreateRequest{}, err
 	}
@@ -76,16 +82,30 @@ func (r *Runtime) creationRequest(command StartRunCommand) (store.CreateRequest,
 	if err := engine.ValidateExecutors(workflow, r.Executors); err != nil {
 		return store.CreateRequest{}, err
 	}
+	if err := store.ValidateResources(r.Root, workflow); err != nil {
+		return store.CreateRequest{}, err
+	}
 	for name, definition := range workflow.Inputs {
 		if definition.Required && command.Inputs[name] == "" {
 			return store.CreateRequest{}, fmt.Errorf("missing required workflow input: %s", name)
 		}
 	}
-	info := &model.TriggerInfo{ID: command.TriggerID, Kind: command.TriggerKind, DeliveryID: command.DeliveryID, ReceivedAt: command.ReceivedAt.UTC().Format(time.RFC3339Nano)}
+	info := &model.TriggerInfo{ID: command.TriggerID, Kind: command.TriggerKind, DeliveryID: command.DeliveryID, ReceivedAt: command.ReceivedAt.UTC().Format(time.RFC3339Nano), Timezone: command.Timezone, CatchUp: command.CatchUp}
 	if command.ScheduledAt != nil {
 		info.ScheduledAt = command.ScheduledAt.UTC().Format(time.RFC3339Nano)
 	}
 	return store.CreateRequest{Workflow: workflow, Inputs: command.Inputs, IdempotencyKey: command.IdempotencyKey, Trigger: info, Queued: true}, nil
+}
+
+// Prepare freezes the graph before dispatch records an intent. Recovery cannot
+// accidentally create another workflow name under the same occurrence key.
+func (r *Runtime) Prepare(_ context.Context, command StartRunCommand) (StartRunCommand, error) {
+	request, err := r.creationRequest(command)
+	if err != nil {
+		return command, err
+	}
+	command.Workflow = &request.Workflow
+	return command, nil
 }
 
 func (r *Runtime) ValidateReplay(_ context.Context, command StartRunCommand, previous RunRef) error {

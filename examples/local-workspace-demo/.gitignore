@@ -1,6 +1,8 @@
 /runs/
 /dispatch/
 /trigger-deliveries/
+/trigger-cursors/
+/cron-state.lock
 /scheduler.lock
 /trigger-dispatch.lock
 /resource-state/

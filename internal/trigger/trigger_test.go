@@ -194,6 +194,10 @@ type fakeStarter struct {
 	calls int
 }
 
+func (f *fakeStarter) Prepare(_ context.Context, command StartRunCommand) (StartRunCommand, error) {
+	return command, nil
+}
+
 func (f *fakeStarter) ValidateReplay(context.Context, StartRunCommand, RunRef) error { return nil }
 
 func (f *fakeStarter) Start(context.Context, StartRunCommand) (RunRef, error) {

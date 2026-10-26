@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chenhg5/agentflow/internal/store"
 )
 
 func TestUnknownTriggerFieldsAreNotSilentlyDiscarded(t *testing.T) {
@@ -16,6 +18,31 @@ func TestUnknownTriggerFieldsAreNotSilentlyDiscarded(t *testing.T) {
 	_, err := LoadConfig(root)
 	if err == nil || !strings.Contains(err.Error(), `unknown field "inputs"`) {
 		t.Fatalf("misplaced inputs must produce an actionable error, got %v", err)
+	}
+}
+
+func TestOccurrencePolicyAndEventBindingsAreValidated(t *testing.T) {
+	for _, invalid := range []string{"misfire", "event_path", "event_name", "inline_timezone"} {
+		t.Run(invalid, func(t *testing.T) {
+			root := t.TempDir()
+			definition := Definition{ID: "daily", Enabled: true, Source: SourceConfig{Kind: "cron", Expression: "15 2 * * *", Timezone: "Asia/Shanghai"}, Target: TargetConfig{Workflow: "workflow.json"}, Policy: Policy{Misfire: "fire-once"}}
+			switch invalid {
+			case "misfire":
+				definition.Policy.Misfire = "catch-up-all"
+			case "event_path":
+				definition.Bindings = map[string]Binding{"x": {From: "event", Path: "unknown"}}
+			case "event_name":
+				definition.Bindings = map[string]Binding{"x": {From: "event", Name: "scheduled_at"}}
+			case "inline_timezone":
+				definition.Source.Expression = "TZ=UTC 15 2 * * *"
+			}
+			if err := store.WriteAtomicJSON(filepath.Join(root, "triggers.json"), Config{Triggers: []Definition{definition}}); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := LoadConfig(root); err == nil {
+				t.Fatal("invalid occurrence config accepted")
+			}
+		})
 	}
 }
 

@@ -136,17 +136,19 @@ Dispatcher 的职责顺序固定为：
 1. 加载 `TriggerDefinition`。
 2. 检查 trigger 是否 enabled。
 3. 校验 event 的 source kind 和 trigger ID。
-4. 应用 input bindings。
-5. 生成 deterministic idempotency key。
-6. 执行并发策略。
-7. 持久化 delivery receipt。
-8. 调用 `RunStarter` 创建 queued run。
+4. 生成稳定事件事实及 occurrence/delivery key，检查已有 receipt。
+5. 已完成 receipt 去重；pending receipt 恢复原 prepared 请求，不对自己的恢复重新执行 forbid。
+6. 新请求执行并发策略；其他未完成创建 intent 也算 active。
+7. 解析 input bindings，调用 Prepare 固定图和输入，持久化 pending receipt。
+8. 调用 Start 原子创建 queued run，保存 completed receipt 后才允许推进 cron 水位。
 
 ### Run execution port
 
 ```go
 type RunStarter interface {
+    Prepare(context.Context, StartRunCommand) (StartRunCommand, error)
     Start(context.Context, StartRunCommand) (RunRef, error)
+    ValidateReplay(context.Context, StartRunCommand, RunRef) error
 }
 ```
 
@@ -160,7 +162,7 @@ Dispatcher 依赖 `RunStarter`，不依赖 `engine.Execute`。这样 HTTP source
 - 建议显式指定 IANA `timezone`；当前省略时使用 UTC，不使用运行机器的隐式本地时区。
 - 每次 occurrence 产生一个 event，即使上一次 run 仍在执行。
 - 默认 `misfire: skip`：进程停止期间错过的 occurrence 不补跑。
-- `misfire: fire-once` 可以作为后续策略，启动时最多补一个未处理 occurrence。
+- `misfire: fire-once` 已支持：恢复已持久化的计划后，最多新增补一个最新的未处理 occurrence；更早项记录 skipped 数量/范围。详见 [稳定 occurrence 与补触发](cron-occurrences.md)。
 - 默认 `concurrency: forbid`：同一 trigger 有 active run 时，新 occurrence 记录为 skipped。
 - 后续可以增加 `queue` 和 `replace`，但必须先定义队列上限和取消语义。
 
@@ -246,7 +248,7 @@ workflow/
 
 同一工作区由 `scheduler.lock` 的操作系统文件锁限制为一个长期服务进程；进程退出后锁自动释放。不同工作区可以各自运行服务。纯 cron 工作区不创建 HTTP listener；有启用的 webhook 时才监听 HTTP，所有 webhook 共享该工作区的一个 listener。默认端口 `0` 自动选择并输出实际地址，也可显式指定不同端口。端口占用会在启动 timer 和恢复 queued jobs 前报错，不会由启动失败的服务执行任务。启用的 webhook path（含尾部 `/` 归一化）不得重复。
 
-同一工作区的 CLI `trigger fire` 与服务投递使用 `trigger-dispatch.lock` 做跨进程事务串行化，保护 receipt 去重、重叠策略检查和 run 创建。默认 `concurrency=forbid` 按 trigger ID 检查 pending/queued/running/waiting_input；`allow` 允许同一 trigger 重叠入队。该策略没有跨 trigger 或跨工作区的仓库/session 资源互斥语义。
+同一工作区的 CLI `trigger fire` 与服务投递使用 `trigger-dispatch.lock` 做跨进程事务串行化，保护 receipt 去重、重叠策略检查和 run 创建。默认 `concurrency=forbid` 按 trigger ID 检查 pending/queued/running/waiting_input/waiting_resource（含未完成创建的 receipt intent）；`allow` 允许同一 trigger 重叠入队。该策略没有跨 trigger 或跨工作区的仓库/session 资源互斥语义。
 
 当前 CLI 启动一个 run worker，因此同一服务的不同 triggered run 顺序执行；单个 run 内的 `dispatch: all` 节点并行仍独立生效。外部等待节点退出本次执行后释放 worker，后续 run 可以继续。跨 run 增加 worker 数和全局多工作区 supervisor 是独立能力，当前没有自动全局发现服务。
 
@@ -302,7 +304,7 @@ cli / http / cron adapters
 4. webhook 支持 body limit、HMAC SHA-256、bearer token、标量 JSONPath binding 和重复 delivery 去重。
 5. `dispatch/<run-id>.json` 在服务重启时恢复 queued job；run 和 trigger metadata 继续写入现有观测接口。
 
-后续可以增加 `queue`/`replace` 并发语义、misfire 补偿策略、外部队列 source 和 UI 中的 trigger delivery 视图，但这些扩展不需要修改 engine。
+后续可以增加 `queue`/`replace` 并发语义、catch-up-all 策略、外部队列 source 和 UI 中的 trigger delivery 视图，但这些扩展不需要修改 engine。
 
 Trigger 的单元测试使用 fake `RunStarter` 和本地 shell workflow，不调用真实 Claude Code/Codex；真实 provider smoke test 继续单独保留。
 

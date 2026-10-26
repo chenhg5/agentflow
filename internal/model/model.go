@@ -221,6 +221,8 @@ type NodeVisit struct {
 }
 
 type TriggerInfo struct {
+	Timezone    string `json:"scheduleTimezone,omitempty"`
+	CatchUp     bool   `json:"catchUp,omitempty"`
 	ID          string `json:"id"`
 	Kind        string `json:"kind"`
 	DeliveryID  string `json:"deliveryId,omitempty"`

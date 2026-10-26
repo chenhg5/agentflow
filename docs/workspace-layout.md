@@ -9,6 +9,7 @@ my-workflow/
 ├── executors.json                   # named executor registrations
 ├── DESIGN.md                        # contracts, roles/context/tools, routing, human feedback
 ├── triggers.json                    # optional schedules/webhooks
+├── resources.json                   # optional shared capacities
 ├── executors/
 │   ├── agents/
 │   │   ├── author/
@@ -22,7 +23,9 @@ my-workflow/
 ├── output/                          # optional business artifacts
 ├── runs/<run-id>/                    # generated engine evidence
 ├── dispatch/                        # generated shared durable run queue
-└── trigger-deliveries/               # generated delivery records
+├── trigger-deliveries/               # generated delivery records
+├── trigger-cursors/                  # generated schedule baselines/plans
+└── resource-state/                   # generated capacity claims/owner locks
 ```
 
 For a workspace with multiple graphs, group **all** graph definitions under
@@ -101,12 +104,12 @@ configuration; registration does not silently widen them.
 | File/data | Location / owner |
 | --- | --- |
 | Graph definitions | Root `workflow.json` for one graph; `workflows/<name>.json` for multiple graphs, authored |
-| Executor registry, optional triggers | Workspace root, authored |
+| Executor registry, optional triggers/resources | Workspace root, authored |
 | Agent instructions, skills and tools | Executor workspace, authored or externally owned |
 | Graph snapshot, run state and events | `runs/<run-id>/`, engine |
 | Candidate-attempt input/config/result/session | `runs/<run-id>/artifacts/<node-id>.<visit>.candidate-<n>.attempt-<n>.*`, engine |
 | Candidate-attempt stdout/stderr | `runs/<run-id>/artifacts/logs/`, engine |
-| Dispatch queue and delivery evidence | `dispatch/`, `queue.json`, `worker.json`, `trigger-deliveries/`, shared worker and trigger service |
+| Dispatch queue and delivery evidence | `dispatch/`, `queue.json`, `worker.json`, `trigger-deliveries/`, `trigger-cursors/`, shared worker and trigger service |
 | Business reports/files | Program-selected, e.g. `output/`; return paths in result |
 | Provider session history | Provider-managed store; run metadata records session ID |
 

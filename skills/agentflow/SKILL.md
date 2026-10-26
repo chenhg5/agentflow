@@ -1,7 +1,7 @@
 ---
 name: agentflow
 metadata:
-  version: "3.8.0"
+  version: "3.9.0"
 description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与显式条件边组成的本地工作流。"
 ---
 
@@ -163,3 +163,11 @@ agentflow run resume <run-id> --format json
 worker concurrency 限制活动 run，resources 限制实际占资源 attempt，二者独立；要限制全部进程，给所有对应节点声明同一 quota。多项资源原子申请；不足进入 waiting_resource，不消耗 attempt/retry/fallback。仅剩资源等待时会让出 run 名额；额度释放后 worker 自动唤醒。external 不占主动资源。fallback/retry 为新 attempt 重新申请，正常退出后释放；程序须在返回前结束自己派生的写入任务，不得后台脱离 claim 生命周期。
 
 `resource list`、`run queue` 可查额度、持有者和 orphaned claim。owner 消失不表示进程/后代已退出，额度不会按 TTL 被抢占。先确认整个遗留执行范围停止，再用 `resource resolve <claim> --confirm-stopped --reason <已观察到的清理证据>`；仍存活的已记录 PID 会被拒绝。PID 已退出也不能代替后代进程核对。首版只覆盖同机同 store，不能当作跨机器分布式锁。
+
+## 稳定定时上下文与补触发
+
+需要按计划日期处理时，在 triggers.json 的 bindings 用 {"from":"event","path":"scheduled_at"}，并按需映射 received_at、trigger_id、delivery_id、schedule_timezone、catch_up 到 workflow inputs。这些是只读事件事实，不能用 attributes 假冒；节点仍消费普通 JSON。scheduled_at 是原计划 UTC 时刻，received_at 是首次实际接收，排队/重试/重启不能重新按执行时间算日期。日期和时区换算放普通 normalization 程序，图引擎不懂日报。
+
+misfire 默认 skip；显式 fire-once 才会在恢复后最多新增补最新一个漏掉的 occurrence，更早项只记录 skipped 数量/范围。已持久化的计划/receipt 先恢复到同一个 run，不因 forbid 误判自己的恢复；不是 catch-up-all，也不保证全部漏日报已补齐。首次启用、定义改变及观察到的重新启用都会建立当前基线，不回补更早历史；删除的触发器不再调度，未完成计划保留在 status，恢复定义后处理。配置改动需重启服务。
+
+用 trigger status 检查 baselines、pending plan、skipped 范围和 active_run 决策。保留 trigger-cursors/、trigger-deliveries/ 和 runs/ 的持久记录，不删除它们来“重置”生产定时。先在隔离 store 用可注入时钟/确定性替身验证；切换现有 host timer 时只能保留一个调度来源。CLI trigger fire 是显式临时投递，带自定义 delivery ID 时不属于自动 cron occurrence 流。

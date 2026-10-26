@@ -30,7 +30,7 @@
           "type": "object",
           "properties": {
             "concurrency": { "enum": ["forbid", "allow"], "default": "forbid", "description": "Overlap policy for runs of this trigger; does not lock shared repositories or sessions." },
-            "misfire": { "const": "skip" }
+            "misfire": { "enum": ["skip", "fire-once"], "default": "skip" }
           },
           "additionalProperties": false
         }
@@ -65,11 +65,21 @@
       "type": "object",
       "required": ["from"],
       "properties": {
-        "from": { "enum": ["json", "payload", "header", "headers", "attribute", "attributes"] },
-        "path": { "type": "string" },
+        "from": { "enum": ["json", "payload", "header", "headers", "attribute", "attributes", "event"] },
+        "path": { "type": "string", "description": "JSON path for payload; a readonly event fact name for from=event." },
         "name": { "type": "string" }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [{
+        "if": {"properties": {"from": {"const": "event"}}},
+        "then": {
+          "required": ["path"],
+          "properties": {
+            "path": {"enum": ["scheduled_at", "received_at", "trigger_id", "delivery_id", "schedule_timezone", "catch_up"]},
+            "name": {"const": ""}
+          }
+        }
+      }]
     }
   }
 }

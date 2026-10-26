@@ -121,6 +121,16 @@ func triggerCommand(args []string, root, cwd string) error {
 	switch verb {
 	case "list":
 		return writeData(map[string]any{"ok": true, "triggers": config.Triggers}, parsed.Output())
+	case "status":
+		cursors, err := trigger.CronStatus(root)
+		if err != nil {
+			return internalError(err)
+		}
+		deliveries, err := trigger.DeliveryStatus(root)
+		if err != nil {
+			return internalError(err)
+		}
+		return writeData(map[string]any{"ok": true, "schedules": cursors, "deliveries": deliveries}, parsed.Output())
 	case "validate":
 		return writeData(map[string]any{"ok": true, "valid": true, "count": len(config.Triggers)}, parsed.Output())
 	case "fire":
@@ -149,7 +159,7 @@ func triggerCommand(args []string, root, cwd string) error {
 		if deliveryID == "" {
 			deliveryID = definition.ID + ":" + now.Format(time.RFC3339)
 		}
-		event := trigger.Event{TriggerID: definition.ID, SourceKind: definition.Source.Kind, DeliveryID: deliveryID, ReceivedAt: time.Now().UTC(), ScheduledAt: &now, Attributes: map[string]string{}}
+		event := trigger.Event{Manual: true, TriggerID: definition.ID, SourceKind: definition.Source.Kind, DeliveryID: deliveryID, ReceivedAt: time.Now().UTC(), ScheduledAt: &now, Attributes: map[string]string{}}
 		dispatcher := &trigger.Dispatcher{Root: root, Config: config, Starter: runtime}
 		result, err := dispatcher.Dispatch(ctx, event)
 		if err != nil {
@@ -1399,6 +1409,7 @@ func commandSchema() map[string]any {
 		{"name": "schema", "description": "Inspect command metadata or workflow/trigger/executor schemas.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "trigger", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
 		{"name": "config init", "description": "Create local executor configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
 		{"name": "doctor", "description": "Check local setup and configured executors.", "flags": []map[string]any{formatFlag}},
+		{"name": "trigger status", "description": "Inspect durable schedule baselines, missed ranges, pending plans and delivery decisions.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger list", "description": "List configured cron and webhook triggers.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger validate", "description": "Validate triggers.json.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger fire", "description": "Emit one trigger event through the durable dispatcher.", "arguments": []map[string]any{{"name": "trigger-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--scheduled-at", "RFC3339", "Scheduled occurrence time", false), flag("--delivery-id", "string", "Stable event id used for idempotency", false), formatFlag}},
@@ -1481,6 +1492,7 @@ Commands:
   schema             Inspect commands or the workflow schema
   config init        Create executor configuration
   doctor             Check local setup
+  trigger status     Inspect occurrence cursors and delivery decisions
   trigger list       List configured triggers
   trigger validate   Validate trigger configuration
   trigger fire       Emit one trigger event
@@ -1591,6 +1603,7 @@ Examples:
 func printTriggerHelp() {
 	fmt.Println(`Usage:
   agentflow trigger list [--format json|table]
+  agentflow trigger status [--format json|table]
   agentflow trigger validate [--format json|table]
   agentflow trigger fire <trigger-id> [--scheduled-at RFC3339] [--delivery-id ID]
   agentflow trigger serve [--host 127.0.0.1] [--port 7071]

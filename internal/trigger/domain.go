@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"time"
+
+	"github.com/chenhg5/agentflow/internal/model"
 )
 
 type Config struct {
@@ -54,25 +56,31 @@ type Policy struct {
 }
 
 type Event struct {
-	TriggerID   string
-	SourceKind  string
-	DeliveryID  string
-	ReceivedAt  time.Time
-	ScheduledAt *time.Time
-	Payload     json.RawMessage
-	Headers     map[string]string
-	Attributes  map[string]string
+	TriggerID   string            `json:"trigger_id"`
+	SourceKind  string            `json:"source_kind"`
+	DeliveryID  string            `json:"delivery_id"`
+	ReceivedAt  time.Time         `json:"received_at"`
+	ScheduledAt *time.Time        `json:"scheduled_at,omitempty"`
+	Payload     json.RawMessage   `json:"payload,omitempty"`
+	Headers     map[string]string `json:"headers,omitempty"`
+	Attributes  map[string]string `json:"attributes,omitempty"`
+	Timezone    string            `json:"schedule_timezone,omitempty"`
+	CatchUp     bool              `json:"catch_up,omitempty"`
+	Manual      bool              `json:"manual,omitempty"`
 }
 
 type StartRunCommand struct {
-	WorkflowPath   string
-	Inputs         map[string]string
-	TriggerID      string
-	TriggerKind    string
-	DeliveryID     string
-	ScheduledAt    *time.Time
-	ReceivedAt     time.Time
-	IdempotencyKey string
+	WorkflowPath   string            `json:"workflow_path"`
+	Inputs         map[string]string `json:"inputs"`
+	TriggerID      string            `json:"trigger_id"`
+	TriggerKind    string            `json:"trigger_kind"`
+	DeliveryID     string            `json:"delivery_id"`
+	ScheduledAt    *time.Time        `json:"scheduled_at,omitempty"`
+	ReceivedAt     time.Time         `json:"received_at"`
+	IdempotencyKey string            `json:"idempotency_key"`
+	Timezone       string            `json:"schedule_timezone,omitempty"`
+	CatchUp        bool              `json:"catch_up,omitempty"`
+	Workflow       *model.Workflow   `json:"workflow_snapshot,omitempty"`
 }
 
 type RunRef struct {
@@ -81,6 +89,7 @@ type RunRef struct {
 }
 
 type RunStarter interface {
+	Prepare(context.Context, StartRunCommand) (StartRunCommand, error)
 	Start(context.Context, StartRunCommand) (RunRef, error)
 	ValidateReplay(context.Context, StartRunCommand, RunRef) error
 }
