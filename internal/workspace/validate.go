@@ -19,20 +19,25 @@ import (
 )
 
 type Issue struct {
-	Severity string `json:"severity"`
-	Path     string `json:"path"`
-	Message  string `json:"message"`
+	Severity   string `json:"severity"`
+	Path       string `json:"path"`
+	Message    string `json:"message"`
+	Node       string `json:"node,omitempty"`
+	Candidate  *int   `json:"candidate,omitempty"`
+	Source     string `json:"source,omitempty"`
+	ReasonCode string `json:"reason_code"`
 }
 
 type Validation struct {
-	Root              string           `json:"root"`
-	LayoutVersion     string           `json:"layout_version"`
-	Valid             bool             `json:"valid"`
-	ExecutionVerified bool             `json:"execution_verified"`
-	Issues            []Issue          `json:"issues"`
-	Bindings          []map[string]any `json:"bindings"`
-	RunStore          string           `json:"run_store"`
-	AgentResources    []AgentResources `json:"agent_resources"`
+	Root              string              `json:"root"`
+	LayoutVersion     string              `json:"layout_version"`
+	Valid             bool                `json:"valid"`
+	ExecutionVerified bool                `json:"execution_verified"`
+	Issues            []Issue             `json:"issues"`
+	Bindings          []map[string]any    `json:"bindings"`
+	RunStore          string              `json:"run_store"`
+	AgentResources    []AgentResources    `json:"agent_resources"`
+	Analysis          []AvailabilityCheck `json:"analysis"`
 }
 
 func Validate(root, workflowPath string) Validation {
@@ -42,9 +47,13 @@ func Validate(root, workflowPath string) Validation {
 // ValidateWithInputs resolves the static subset of candidate bindings using
 // representative run inputs. It does not execute nodes or simulate their output.
 func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Validation {
-	result := Validation{Root: root, LayoutVersion: LayoutVersion, Valid: true, Issues: []Issue{}, Bindings: []map[string]any{}, RunStore: filepath.Join(root, "runs"), AgentResources: []AgentResources{}}
+	result := Validation{Root: root, LayoutVersion: LayoutVersion, Valid: true, Issues: []Issue{}, Bindings: []map[string]any{}, RunStore: filepath.Join(root, "runs"), AgentResources: []AgentResources{}, Analysis: []AvailabilityCheck{}}
 	issue := func(severity, path, message string) {
-		result.Issues = append(result.Issues, Issue{severity, path, message})
+		code := "static_warning"
+		if severity == "error" {
+			code = "validation_error"
+		}
+		result.Issues = append(result.Issues, Issue{Severity: severity, Path: path, Message: message, ReasonCode: code})
 		if severity == "error" {
 			result.Valid = false
 		}
@@ -84,9 +93,31 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 		if incomingKnown {
 			label += ":incoming-" + incomingSource
 		}
+		node := workflowNode(flow, nodeID)
+		var selectedIncoming *string
+		if incomingKnown {
+			selectedIncoming = &incomingSource
+		}
+		checks := candidateAvailabilityChecks(root, path, flow, node, index, candidate, entry, executors, inputs, selectedIncoming, selectedSessions)
+		result.Analysis = append(result.Analysis, checks...)
+		report := func(code, message string) {
+			issue("warning", label, message)
+			entry := &result.Issues[len(result.Issues)-1]
+			entry.Node, entry.Candidate, entry.ReasonCode = nodeID, &index, code
+			entry.Source = candidate.Session.From
+			if entry.Source == "" && incomingKnown {
+				entry.Source = incomingSource
+			}
+		}
+		for _, check := range checks {
+			if check.ReasonCode == "source_protocol_conditional" || check.ReasonCode == "fixed_revisit_launch_failure" || check.ReasonCode == "completion_conditional" {
+				report(check.ReasonCode, check.Message)
+				result.Issues[len(result.Issues)-1].Source = check.Source
+			}
+		}
 		possibleFailures := []*model.ExecutionFailure{}
 		unavailable := func(kind, message string) (bool, []*model.ExecutionFailure) {
-			issue("warning", label, message)
+			report(kind, message)
 			possibleFailures = append(possibleFailures, &model.ExecutionFailure{Kind: kind, Started: false, TimedOut: false, Message: message, Executor: candidate.Executor, Attempt: 0})
 			return false, possibleFailures
 		}
@@ -95,7 +126,6 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 		// cases here so an impossible inherit/fork source is reported as
 		// session_incompatible instead of a startup failure that a
 		// start_failed-only default fallback could incorrectly select.
-		node := workflowNode(flow, nodeID)
 		if failure := staticSessionFailureForRoute(root, flow, node, candidate, inputs, executors, incomingSource, incomingKnown, selectedSessions); failure != nil {
 			return unavailable(failure.Kind, failure.Message)
 		}
@@ -138,16 +168,12 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 			result.Bindings = append(result.Bindings, map[string]any{"workflow": path, "node": nodeID, "candidate": index, "executor": candidate.Executor, "environment": driver.EnvironmentDescription(entry.Environment)})
 			return true, nil
 		}
-		var selectedIncoming *string
-		if incomingKnown {
-			selectedIncoming = &incomingSource
-		}
 		probe := probeCandidateLaunch(root, flow, node, candidate, entry, inputs, mode, sessionID, selectedIncoming, executors)
 		for _, warning := range fixedSessionWarnings(candidate.Executor, entry, candidate) {
 			issue("warning", label, warning)
 		}
 		if probe.failure != nil {
-			issue("warning", label, probe.failure.Message)
+			report(probe.failure.Kind, probe.failure.Message)
 			possibleFailures = append(possibleFailures, probe.preLaunchFailures(candidate.Executor, 0)...)
 			return false, possibleFailures
 		}
@@ -166,7 +192,7 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 			}
 		}
 		if probe.inconclusive {
-			issue("warning", label, probe.inconclusiveMessage)
+			report("launch_inconclusive", probe.inconclusiveMessage)
 			return true, nil
 		}
 		result.Bindings = append(result.Bindings, map[string]any{"workflow": path, "node": nodeID, "candidate": index, "executor": candidate.Executor, "workspace": probe.directory, "resolved_workspace": probe.resolvedDirectory, "environment": driver.EnvironmentDescription(entry.Environment)})
@@ -338,11 +364,17 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 							message += " for incoming route from " + incomingSource
 						}
 						issue("error", label, message)
+						problem := &result.Issues[len(result.Issues)-1]
+						problem.Node, problem.ReasonCode = node.ID, "no_usable_execution_candidate"
+						if incomingKnown {
+							problem.Source = incomingSource
+						}
 					}
 				}
 			}
 		}
 	}
+	sortAvailabilityChecks(result.Analysis)
 	return result
 }
 
@@ -673,10 +705,11 @@ func nodeResultAvailability(root string, flow model.Workflow, source, target str
 	if sameWave == staticValuePresent {
 		return staticValueMissing
 	}
-	completed := source == flow.Entry || nodeCompletedBefore(flow, source, target) ||
+	strictCompletion := source == flow.Entry || nodeGraphCompletedBefore(flow, source, target) ||
 		(incomingSource != nil && nodeCompletedBeforeOnSelectedRoute(flow, source, target, *incomingSource, inputs))
+	completed := strictCompletion || nodeCompletedBefore(flow, source, target)
 	if completed {
-		if sameWave == staticValueUnknown || nodeDefersCompletion(root, flow, source, inputs, executors, availabilityVisiting) {
+		if sameWave == staticValueUnknown || (!strictCompletion && nodeDefersCompletion(root, flow, source, inputs, executors, availabilityVisiting)) {
 			return staticValueUnknown
 		}
 		return staticValuePresent
@@ -910,6 +943,9 @@ func nodeDefersCompletionForRoute(root string, flow model.Workflow, source strin
 				launchPossible = false
 			} else {
 				sessionID = "static-existing-session"
+				if sessionFailurePossible(root, flow, node, candidate, inputs, executors, map[string]bool{}, incomingSource, nil) {
+					failures = append(failures, &model.ExecutionFailure{Kind: "session_incompatible", Executor: candidate.Executor})
+				}
 			}
 		}
 		if launchPossible && entry.Kind == "external" {
@@ -935,7 +971,7 @@ func nodeDefersCompletionForRoute(root string, flow model.Workflow, source strin
 			} else {
 				failures = append(failures, probe.preLaunchFailures(candidate.Executor, attempt)...)
 			}
-			if mode == "fixed" && candidate.Session.ID == "" && guaranteedRevisit(flow, source, inputs) {
+			if mode == "fixed" && candidate.Session.ID == "" && possibleRevisit(flow, source, inputs) {
 				resumed := probeCandidateLaunch(root, flow, node, candidate, entry, inputs, mode, "static-existing-session", incomingSource, executors, visiting)
 				if resumed.failure == nil {
 					if resumed.configurationFailurePossible {
@@ -1313,6 +1349,7 @@ type staticSourceSessionScenario struct {
 	protocol        string
 	protocolKnown   bool
 	sessionPossible bool
+	alternatives    []staticSourceSessionScenario
 }
 
 // staticSourceSessionScenariosWithStack preserves each statically reachable
@@ -1364,30 +1401,39 @@ func staticSourceSessionScenariosWithStack(root string, flow model.Workflow, nod
 			}
 		}
 		for _, selection := range selections {
-			protocol, known, possible := staticSourceSessionForRouteWithStack(root, flow, nodeID, inputs, executors, visiting, route, selection)
-			label := ""
-			if route != nil {
-				label = *route
+			outcomes := staticSourceSessionForRouteWithStack(root, flow, nodeID, inputs, executors, visiting, route, selection)
+			// Activation routes remain separate obligations. Candidate outcomes
+			// within one route are conditional alternatives, not separate routes
+			// that every downstream candidate must handle deterministically.
+			scenario := outcomes[0]
+			if len(outcomes) > 1 {
+				scenario = staticSourceSessionScenario{alternatives: outcomes}
+				for _, outcome := range outcomes {
+					scenario.sessionPossible = scenario.sessionPossible || outcome.sessionPossible
+				}
 			}
-			scenarios = append(scenarios, staticSourceSessionScenario{route: label, protocol: protocol, protocolKnown: known, sessionPossible: possible})
+			if route != nil {
+				scenario.route = *route
+			}
+			scenarios = append(scenarios, scenario)
 		}
 	}
 	return scenarios
 }
 
-func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, nodeID string, inputs map[string]string, executors map[string]driver.Executor, visiting map[string]bool, incomingSource *string, selectedSessions map[string]staticSourceSessionScenario) (protocol string, protocolKnown bool, sessionPossible bool) {
+func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, nodeID string, inputs map[string]string, executors map[string]driver.Executor, visiting map[string]bool, incomingSource *string, selectedSessions map[string]staticSourceSessionScenario) []staticSourceSessionScenario {
 	if !workflowHasNode(flow, nodeID) {
-		return "", false, false
+		return []staticSourceSessionScenario{{}}
 	}
 	if visiting[nodeID] {
 		// A recursive source chain needs runtime history to bootstrap. Keep the
 		// genuinely cyclic case inconclusive rather than recursing forever.
-		return "", false, true
+		return []staticSourceSessionScenario{{sessionPossible: true}}
 	}
 	visiting[nodeID] = true
 	defer delete(visiting, nodeID)
 	node := workflowNode(flow, nodeID)
-	sawProtocol := false
+	var outcomes []staticSourceSessionScenario
 	reachable := true
 	maxAttempts := node.Retry.MaxAttempts
 	if maxAttempts < 1 {
@@ -1395,17 +1441,22 @@ func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, node
 	}
 	attemptCursor := 1
 	addProtocol := func(next string) {
-		sessionPossible = true
-		if sawProtocol && protocol != next {
-			protocol = ""
-			protocolKnown = false
-			return
+		for _, outcome := range outcomes {
+			if outcome.protocolKnown && outcome.protocol == next {
+				return
+			}
 		}
-		if sawProtocol && !protocolKnown {
-			return
-		}
-		protocol, protocolKnown, sawProtocol = next, true, true
+		outcomes = append(outcomes, staticSourceSessionScenario{protocol: next, protocolKnown: true, sessionPossible: true})
 	}
+	addNoSession := func() {
+		for _, outcome := range outcomes {
+			if !outcome.sessionPossible {
+				return
+			}
+		}
+		outcomes = append(outcomes, staticSourceSessionScenario{})
+	}
+
 	for index, candidate := range node.Execution.Candidates {
 		if !reachable {
 			continue
@@ -1414,7 +1465,7 @@ func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, node
 		if !ok {
 			// The registration error is reported elsewhere; do not invent a
 			// session failure on top of it.
-			return "", false, true
+			return []staticSourceSessionScenario{{sessionPossible: true}}
 		}
 		mode := candidate.Session.Mode
 		if mode == "" {
@@ -1445,6 +1496,9 @@ func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, node
 				launchPossible = false
 			} else {
 				sessionID = "static-existing-session"
+				if sessionFailurePossible(root, flow, node, candidate, inputs, executors, visiting, incomingSource, selectedSessions) {
+					possibleFailures = append(possibleFailures, &model.ExecutionFailure{Kind: "session_incompatible", Executor: candidate.Executor})
+				}
 			}
 		}
 		// Runtime resolves every session policy before consulting the adapter.
@@ -1458,8 +1512,9 @@ func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, node
 				possibleFailures = append(possibleFailures, &model.ExecutionFailure{Kind: "configuration_failed", Message: fmt.Sprintf("external executor %s does not support session mode %s", candidate.Executor, mode), Executor: candidate.Executor})
 				launchPossible = false
 			default:
-				// A valid external candidate waits and can only complete without a
-				// provider session. Later candidates are never selected.
+				// External completion has no provider session. Keep this outcome
+				// beside successful process protocols, never merge it into them.
+				addNoSession()
 				reachable = false
 				attemptCursor += maxAttempts
 				continue
@@ -1469,6 +1524,11 @@ func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, node
 			probe := probeCandidateLaunch(root, flow, node, candidate, entry, inputs, mode, sessionID, incomingSource, executors)
 			if probe.failure == nil {
 				addProtocol(driver.SessionProtocol(candidate.Executor, entry))
+				// New-mode completion does not enforce a session ID. Only
+				// fixed/fork enforce it, or inherit already has a nonempty ID.
+				if mode == "new" {
+					addNoSession()
+				}
 				if index < len(node.Execution.Candidates)-1 {
 					attempt := attemptCursor + maxAttempts - 1
 					failures := append(possibleFailures, staticPostLaunchFailures(candidate.Executor, mode, attempt)...)
@@ -1510,7 +1570,10 @@ func staticSourceSessionForRouteWithStack(root string, flow model.Workflow, node
 		}
 		attemptCursor += maxAttempts
 	}
-	return protocol, protocolKnown, sessionPossible
+	if len(outcomes) == 0 {
+		return []staticSourceSessionScenario{{}}
+	}
+	return outcomes
 }
 
 func nodeHasSessionPolicy(node model.Node) bool {
@@ -1693,8 +1756,10 @@ func staticSessionFailureWithStack(root string, flow model.Workflow, node model.
 			scenarios = staticSourceSessionScenariosWithStack(root, flow, sourceID, inputs, executors, visiting)
 		}
 		for _, scenario := range scenarios {
-			if scenario.sessionPossible && (!scenario.protocolKnown || driver.SessionProtocolCompatible(candidate.Executor, target, scenario.protocol)) {
-				return nil
+			for _, outcome := range sessionOutcomes(scenario) {
+				if outcome.sessionPossible && (!outcome.protocolKnown || driver.SessionProtocolCompatible(candidate.Executor, target, outcome.protocol)) {
+					return nil
+				}
 			}
 		}
 	}
@@ -1929,7 +1994,7 @@ func nodeCompletedBeforeOnSelectedRoute(flow model.Workflow, source, target, inc
 // source reached only after target is removed by an entry path that bypasses
 // it, while a source on the genuine entry path remains available on later
 // visits as well.
-func nodeCompletedBefore(flow model.Workflow, source, target string) bool {
+func nodeGraphCompletedBefore(flow model.Workflow, source, target string) bool {
 	if source == "" || target == "" || source == target || target == flow.Entry {
 		return false
 	}
@@ -2002,7 +2067,14 @@ func nodeCompletedBefore(flow model.Workflow, source, target string) bool {
 			}
 		}
 	}
-	if completed[target][source] {
+	return completed[target][source]
+}
+
+func nodeCompletedBefore(flow model.Workflow, source, target string) bool {
+	if source == "" || target == "" || source == target || target == flow.Entry {
+		return false
+	}
+	if nodeGraphCompletedBefore(flow, source, target) {
 		return true
 	}
 	// Parallel execution advances in waves: all runnable tasks prepared in one

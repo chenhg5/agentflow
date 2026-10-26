@@ -1,7 +1,7 @@
 ---
 name: agentflow
 metadata:
-  version: "3.9.0"
+  version: "3.10.0"
 description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与显式条件边组成的本地工作流。"
 ---
 
@@ -171,3 +171,11 @@ worker concurrency 限制活动 run，resources 限制实际占资源 attempt，
 misfire 默认 skip；显式 fire-once 才会在恢复后最多新增补最新一个漏掉的 occurrence，更早项只记录 skipped 数量/范围。已持久化的计划/receipt 先恢复到同一个 run，不因 forbid 误判自己的恢复；不是 catch-up-all，也不保证全部漏日报已补齐。首次启用、定义改变及观察到的重新启用都会建立当前基线，不回补更早历史；删除的触发器不再调度，未完成计划保留在 status，恢复定义后处理。配置改动需重启服务。
 
 用 trigger status 检查 baselines、pending plan、skipped 范围和 active_run 决策。保留 trigger-cursors/、trigger-deliveries/ 和 runs/ 的持久记录，不删除它们来“重置”生产定时。先在隔离 store 用可注入时钟/确定性替身验证；切换现有 host timer 时只能保留一个调度来源。CLI trigger fire 是显式临时投递，带自定义 delivery ID 时不属于自动 cron occurrence 流。
+
+## 解读静态 session / 并行可用性
+
+workspace validate 的 analysis 按 node/candidate/source/reference 给出 guaranteed、conditional、unavailable，另有 incoming/source_route、source_protocols 和 reason_code。guaranteed 只证明该 input/result 容器的图上先后，不证明字段存在、任务质量或真实 provider session；顶层始终 execution_verified:false。不要把 valid:true 或发现了候选 binding 当成启动/业务成功。
+
+同一来源路线内的多个 provider/no-session 候选是条件分支，逐一保留协议：有兼容也有不兼容时标 conditional；全部确定不兼容仍是 error，不统一降级成 warning。不同已知 activation route 仍分别检查。new 模式的程序成功也可能没有 session ID，保留没有 ID 的分支；fixed/fork 的成功完成由运行时强制检查 ID。external 等待不产出完成结果或 provider session，不能让 sibling 读到尚未完成的结果。要强保证先后，用显式边和 join.from；nodes 数组顺序不保证先后。缺少确定性 ordering 时按 conditional 处理，不假装已有结果。
+
+fixed 无 ID 首访从空白开始，后续只有历史中已记录的兼容 session 才复用。条件回访仍可能因 resumeCommand/协议失败选到 external，不能据首访成功推断后面一定完成。看到 fixed_revisit_launch_failure / source_protocol_conditional / completion_conditional 时，检查候选策略、补正确 resume/fork 入口或设计同步/缺失处理；用真实节点输出和 preserved lease/history 验证对应路径。任意程序的语义无法静态证明，未知保持 inconclusive；不能用全放宽或全拒绝掩盖问题。

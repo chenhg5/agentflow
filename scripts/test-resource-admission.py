@@ -126,8 +126,12 @@ if mode!="fast":
  token=os.environ["AGENTFLOW_NODE_TOKEN"]
  record={"pid":os.getpid(),"run":os.environ["AGENTFLOW_RUN_ID"],"node":os.environ["AGENTFLOW_NODE_ID"],"token":token,"claim":os.environ.get("AGENTFLOW_RESOURCE_CLAIM"),"mode":mode}
  payload=json.dumps(record)
- (root/"started"/(token+".json")).write_text(payload)
- active=root/"active"/(token+".json");active.write_text(payload)
+ def publish_marker(path):
+  temporary=path.with_suffix(".tmp-"+str(os.getpid()))
+  temporary.write_text(payload)
+  temporary.replace(path)
+ publish_marker(root/"started"/(token+".json"))
+ active=root/"active"/(token+".json");publish_marker(active)
  try:
   if mode=="fail" or (mode=="retryable" and not (root/"allow-retry").exists()):sys.exit(71)
   name=config.get("gate","")

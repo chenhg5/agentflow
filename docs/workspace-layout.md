@@ -196,3 +196,45 @@ argument, unresolved runtime workspace templates or business behavior. [Workspac
 authoring benchmark](../benchmarks/workspace-authoring/README.md)
 checks fresh agent submissions using real programs and a deterministic model
 transport; native model smoke tests are recorded separately.
+
+
+## Session and parallel availability diagnostics
+
+`workspace validate` also returns `analysis` entries with node, zero-based
+candidate, executor, source, incoming/source_route, reference, source_protocols,
+status and reason_code. Status is `guaranteed`, `conditional` or `unavailable`.
+For input/result references, **guaranteed means container ordering**, not the
+existence/type of every nested property or successful business execution. Keep
+output/input schemas for those contracts. Session IDs are never certified by a
+static file check; `execution_verified` remains false even for a workspace that
+already contains successful runs.
+
+Protocols and no-session outcomes from candidates on the same activation route
+remain alternatives. Some compatible and some incompatible outcomes produce an
+inconclusive/conditional check; all known-incompatible outcomes still make the
+candidate unavailable. Distinct known activation routes are checked separately,
+so a compatible route does not erase a definite failure on another route.
+Native aliases share their runtime provider protocol; arbitrary custom commands
+retain their registration-specific protocol. A successful external submission
+has an output but no provider session. A successful `new` process can also omit
+a session ID; that no-session outcome is preserved. Fixed/fork completion enforces
+a session ID, while inherit begins with an existing ID.
+
+A fixed node without an explicit ID starts fresh on the first visit. Reuse on a
+later visit requires actual compatible history; a conditional revisit may select
+an external fallback if its resumed launch fails. That possible wait makes a
+prior-wave sibling's result conditional. In contrast, a direct completion path
+or `join.from` barrier proves the source container exists before activation,
+even if the source previously waited for human input. Node array order has no
+scheduling meaning. A future explicit session source still fails preflight;
+optional arbitrary config references can deliberately render missing/null, and
+container diagnostics do not invent business requirements for those fields.
+
+Common reason codes include `session_incompatible`,
+`source_protocol_conditional`, `fixed_first_visit_new`,
+`fixed_revisit_launch_failure`, `fixed_history_unverified`,
+`container_ordered`, `completion_conditional`, `container_unavailable` and
+`no_usable_execution_candidate`. Resolve a diagnostic by inspecting that specific
+route/candidate, adding a real ordering/join or configuring the appropriate
+resume/fork entry. A warning is not a promise that a provider will launch; an
+inconclusive program branch is not silently promoted to a guarantee.
