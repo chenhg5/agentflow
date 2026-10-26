@@ -58,8 +58,11 @@ func TestRuntimeQueuesAndExecutesShellWorkflow(t *testing.T) {
 		t.Fatal(err)
 	}
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	runtime.StartWorkers(ctx)
+	if err := runtime.StartWorkers(ctx); err != nil {
+		cancel()
+		t.Fatal(err)
+	}
+	defer func() { cancel(); runtime.Wait() }()
 	run, err := runtime.Start(ctx, StartRunCommand{WorkflowPath: workflowPath, Inputs: map[string]string{}, TriggerID: "manual", TriggerKind: "cron", DeliveryID: "d-1", ReceivedAt: time.Now().UTC(), IdempotencyKey: "manual:d-1"})
 	if err != nil {
 		t.Fatal(err)

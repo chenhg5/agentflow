@@ -77,11 +77,11 @@ func renameStoreFile(from, to string) error {
 	}
 	var layout renameLayout
 	offset := int(unsafe.Offsetof(layout.FileName))
-	length := (len(target) - 1) * 2 // UTF-16 bytes, excluding the trailing NUL.
-	buffer := make([]byte, offset+length)
+	length := (len(target) - 1) * 2                                                   // UTF-16 bytes, excluding the trailing NUL.
+	buffer := make([]byte, offset+length+2)                                           // Win32 path conversion also needs a trailing NUL.
 	binary.LittleEndian.PutUint32(buffer, renameReplaceExisting|renamePOSIXSemantics) // REPLACE_IF_EXISTS | POSIX_SEMANTICS
 	binary.LittleEndian.PutUint32(buffer[unsafe.Offsetof(layout.FileNameLength):], uint32(length))
-	for i, char := range target[:len(target)-1] {
+	for i, char := range target {
 		binary.LittleEndian.PutUint16(buffer[offset+i*2:], char)
 	}
 	result, _, err := setFileInformation.Call(uintptr(handle), fileRenameInfoEx, uintptr(unsafe.Pointer(&buffer[0])), uintptr(len(buffer)))
