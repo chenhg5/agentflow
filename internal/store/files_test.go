@@ -7,7 +7,7 @@ import (
 )
 
 func TestAtomicCheckpointWithOpenReader(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "state.json")
+	path := filepath.Join(t.TempDir(), "状态-🙂.json")
 	if err := writeCreationJSON(path, map[string]int{"value": 1}); err != nil {
 		t.Fatal(err)
 	}
