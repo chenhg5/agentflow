@@ -82,6 +82,55 @@
             "items": {
               "type": "string"
             }
+          },
+          "environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "inherit",
+                  "allowlist",
+                  "empty"
+                ]
+              },
+              "inherit": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^=\\x00\\r\\n]+$",
+                  "not": {
+                    "pattern": "^[Aa][Gg][Ee][Nn][Tt][Ff][Ll][Oo][Ww]_"
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "mode": {
+                      "enum": [
+                        "inherit",
+                        "empty"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "inherit": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              }
+            ]
           }
         },
         "additionalProperties": false

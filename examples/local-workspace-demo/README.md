@@ -1,6 +1,6 @@
 # 独立 workflow 工作区（目录规范 v1）
 
-这个目录本身就是 workflow 工作区，可以复制成一个独立 Git 仓库。它调度外部项目、不同 worktree 和已有 agent，运行记录也归它所有。CLI 从本目录启动，直接读取根目录文件并写入 `runs/`。单条图直接用 `workflow.json`；多条图时可按需使用 `workflows/` 分类，引擎不要求目录名。
+这个目录本身就是 workflow 工作区，可以复制成一个独立 Git 仓库。它调度外部项目、不同 worktree 和已有 agent，运行记录也归它所有。CLI 从本目录启动，直接读取根目录文件并写入 `runs/`。本例只有一张图，使用根目录 `workflow.json`；扩展为多图时，把所有图统一放入 `workflows/<name>.json`，移走根目录图并同步 trigger、程序和文档引用。引擎按显式路径读取图，目录名不定义图间关系。
 
 ```text
 my-workflow/

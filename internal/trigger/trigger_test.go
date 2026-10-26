@@ -191,6 +191,8 @@ type fakeStarter struct {
 	calls int
 }
 
+func (f *fakeStarter) ValidateReplay(context.Context, StartRunCommand, RunRef) error { return nil }
+
 func (f *fakeStarter) Start(context.Context, StartRunCommand) (RunRef, error) {
 	f.calls++
 	return RunRef{RunID: f.next, Status: "queued"}, nil

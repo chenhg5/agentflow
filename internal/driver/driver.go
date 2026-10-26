@@ -16,9 +16,10 @@ import (
 )
 
 type Executor struct {
-	Env        map[string]string `json:"env,omitempty"`
-	Workspace  string            `json:"workspace,omitempty"`
-	PromptMode string            `json:"promptMode,omitempty"`
+	Environment *EnvironmentPolicy `json:"environment,omitempty"`
+	Env         map[string]string  `json:"env,omitempty"`
+	Workspace   string             `json:"workspace,omitempty"`
+	PromptMode  string             `json:"promptMode,omitempty"`
 	// Kind selects a built-in executor implementation. Supported values are
 	// claude-code, codex, and command. When Command is set it takes precedence
 	// and preserves an explicitly configured command executor.
@@ -66,10 +67,11 @@ type Status struct {
 }
 
 type CommandOptions struct {
-	Dir       string
-	Env       map[string]string
-	Stdin     string
-	TimeoutMs int
+	Environment *EnvironmentPolicy
+	Dir         string
+	Env         map[string]string
+	Stdin       string
+	TimeoutMs   int
 }
 
 type CommandResult struct {
@@ -105,7 +107,41 @@ func LoadExecutors(cwd string) (map[string]Executor, error) {
 	if config.Executors == nil {
 		return nil, fmt.Errorf("executor config %s must contain an executors object", file)
 	}
+	var raw struct {
+		Executors map[string]map[string]json.RawMessage `json:"executors"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return nil, err
+	}
 	for name, configuredExecutor := range config.Executors {
+		for field := range raw.Executors[name] {
+			if strings.EqualFold(field, "environment") && field != "environment" {
+				return nil, fmt.Errorf("executor %s: use the environment field with its schema spelling", name)
+			}
+		}
+		if configuredExecutor.Environment != nil && raw.Executors[name]["environment"] == nil {
+			return nil, fmt.Errorf("executor %s: use the environment field with its schema spelling", name)
+		}
+		if value, ok := raw.Executors[name]["environment"]; ok {
+			if bytes.Equal(bytes.TrimSpace(value), []byte("null")) {
+				return nil, fmt.Errorf("executor %s: environment must be an object", name)
+			}
+			var fields map[string]json.RawMessage
+			if err := json.Unmarshal(value, &fields); err != nil {
+				return nil, fmt.Errorf("executor %s: invalid environment object", name)
+			}
+			for field := range fields {
+				if field != "mode" && field != "inherit" {
+					return nil, fmt.Errorf("executor %s: unknown environment policy field", name)
+				}
+			}
+			if inherited, ok := fields["inherit"]; ok && bytes.Equal(bytes.TrimSpace(inherited), []byte("null")) {
+				return nil, fmt.Errorf("executor %s: environment.inherit must be an array", name)
+			}
+		}
+		if err := ValidateEnvironment(configuredExecutor); err != nil {
+			return nil, fmt.Errorf("executor %s: %w", name, err)
+		}
 		if configuredExecutor.Kind == "" && len(configuredExecutor.Command) > 0 {
 			configuredExecutor.Kind = "command"
 		}
@@ -178,6 +214,9 @@ func CheckExecutor(name string, executor Executor) Status {
 }
 
 func merge(base, override Executor) Executor {
+	if override.Environment != nil {
+		base.Environment = override.Environment
+	}
 	if override.Env != nil {
 		base.Env = override.Env
 	}
@@ -237,6 +276,7 @@ type Invocation struct {
 }
 
 type Prepared struct {
+	Environment *EnvironmentPolicy
 	Env         map[string]string
 	Command     []string
 	Workspace   string
@@ -249,6 +289,9 @@ type Prepared struct {
 // Prepare owns adapter-specific input conventions. The graph engine only
 // receives a process to invoke or a request to await external JSON output.
 func Prepare(name string, executor Executor, invocation Invocation) (Prepared, error) {
+	if err := ValidateEnvironment(executor); err != nil {
+		return Prepared{}, err
+	}
 	if executor.Kind == "external" {
 		if len(executor.Command) > 0 {
 			return Prepared{}, fmt.Errorf("external executor %s cannot define command", name)
@@ -268,9 +311,13 @@ func Prepare(name string, executor Executor, invocation Invocation) (Prepared, e
 	if err != nil {
 		return Prepared{}, err
 	}
-	prepared := Prepared{Workspace: workspace, Env: map[string]string{}}
+	prepared := Prepared{Workspace: workspace, Env: map[string]string{}, Environment: executor.Environment}
 	for key, value := range executor.Env {
-		prepared.Env[key] = template.Render(value, context)
+		rendered := template.Render(value, context)
+		if strings.ContainsRune(rendered, 0) {
+			return Prepared{}, fmt.Errorf("executor.env contains a rendered value with a NUL character")
+		}
+		prepared.Env[key] = rendered
 	}
 	if !isAgent {
 		if executor.Kind != "command" && executor.Kind != "" {
@@ -517,10 +564,11 @@ func RunCommand(command []string, options CommandOptions) CommandResult {
 	}
 	cmd := exec.CommandContext(ctx, command[0], command[1:]...)
 	cmd.Dir = options.Dir
-	cmd.Env = os.Environ()
-	for key, value := range options.Env {
-		cmd.Env = append(cmd.Env, key+"="+value)
+	env, err := executionEnvironment(options.Environment, options.Env)
+	if err != nil {
+		return CommandResult{Code: -1, Error: err.Error()}
 	}
+	cmd.Env = env
 	if options.Stdin != "" {
 		cmd.Stdin = strings.NewReader(options.Stdin)
 	}
@@ -531,7 +579,7 @@ func RunCommand(command []string, options CommandOptions) CommandResult {
 		return CommandResult{Code: -1, Stdout: stdout.String(), Stderr: stderr.String(), Error: err.Error()}
 	}
 	result := CommandResult{Code: 0, Started: true}
-	err := cmd.Wait()
+	err = cmd.Wait()
 	result.Stdout, result.Stderr = stdout.String(), stderr.String()
 	if ctx.Err() == context.DeadlineExceeded {
 		result.Code = 124

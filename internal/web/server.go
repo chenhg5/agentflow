@@ -165,11 +165,13 @@ func dashboardView(root string) map[string]any {
 		return map[string]any{"mode": "dashboard", "runs": []any{}, "error": err.Error()}
 	}
 	type runSummary struct {
-		RunID     string `json:"run_id"`
-		Workflow  string `json:"workflow"`
-		Status    string `json:"status"`
-		CreatedAt string `json:"created_at"`
-		UpdatedAt string `json:"updated_at"`
+		ParentRunID string            `json:"parent_run_id,omitempty"`
+		Correlation map[string]string `json:"correlation,omitempty"`
+		RunID       string            `json:"run_id"`
+		Workflow    string            `json:"workflow"`
+		Status      string            `json:"status"`
+		CreatedAt   string            `json:"created_at"`
+		UpdatedAt   string            `json:"updated_at"`
 	}
 	runs := make([]runSummary, 0, len(entries))
 	for _, entry := range entries {
@@ -181,16 +183,29 @@ func dashboardView(root string) map[string]any {
 			continue
 		}
 		runs = append(runs, runSummary{
+			ParentRunID: run.State.ParentRunID, Correlation: run.State.Correlation,
 			RunID: run.RunID, Workflow: run.State.WorkflowName, Status: run.State.Status,
 			CreatedAt: run.State.CreatedAt, UpdatedAt: run.State.UpdatedAt,
 		})
 	}
 	sort.Slice(runs, func(i, j int) bool { return runs[i].UpdatedAt > runs[j].UpdatedAt })
-	return map[string]any{"mode": "dashboard", "runs": runs}
+	view := map[string]any{"mode": "dashboard", "runs": runs}
+	if snapshot, err := store.QueueSnapshot(root); err == nil {
+		view["queue"] = snapshot
+	} else {
+		view["queue_error"] = err.Error()
+	}
+	return view
 }
 
 func runView(run *model.Run, root string) map[string]any {
+	children, counts, relationErr := store.Children(root, run.RunID)
+	refs := []map[string]any{}
+	for _, child := range children {
+		refs = append(refs, map[string]any{"run_id": child.RunID, "status": child.State.Status, "parent_node_id": child.State.ParentNodeID, "correlation": child.State.Correlation})
+	}
 	view := map[string]any{
+		"relations":        map[string]any{"parent_run_id": run.State.ParentRunID, "parent_node_id": run.State.ParentNodeID, "correlation": run.State.Correlation, "children": refs, "child_status_counts": counts},
 		"mode":             "run",
 		"workflow":         run.Workflow,
 		"graph":            graph.Describe(run.Workflow),
@@ -202,6 +217,9 @@ func runView(run *model.Run, root string) map[string]any {
 			"state":   run.State,
 			"metrics": metrics.Snapshot(run, time.Now().UTC()),
 		},
+	}
+	if relationErr != nil {
+		view["relations_error"] = relationErr.Error()
 	}
 	switch run.State.Status {
 	case "succeeded", "failed", "cancelled":

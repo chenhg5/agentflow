@@ -52,7 +52,7 @@ The starter graph runs immediately; adapt it for your task. Fill in `DESIGN.md` 
 
 Run CLI commands from `my-workflow/`. Register external agent or repository paths through `workspace`; reuse existing session history through a candidate's `session`. Repository URLs, refs, and commit IDs are ordinary executor config or result data; repository checkout and version capture are performed by the executor.
 
-`workflows/` is optional organization for multiple graphs. The CLI and trigger targets accept an explicit JSON path; a workspace with one graph can keep `workflow.json` directly at its root.
+Use root `workflow.json` for a single graph. For multiple graphs, group all definitions under `workflows/<name>.json` without a separate root graph. These are layout conventions: CLI commands and trigger targets accept explicit JSON paths, and folder nesting does not connect graphs. See [workspace layout](docs/workspace-layout.md) for both structures and moving from one to several graphs.
 
 ## Workflow
 
@@ -101,6 +101,8 @@ Built-in executors are `codex`, `claude-code`, `process`, and `external`. Codex 
 
 Candidate order is priority order. Retries are per candidate. By default the next candidate is tried only when the OS process could not start; a launched nonzero exit, timeout, missing/invalid result, or output-contract failure stops the node. Set `execution.fallback.when` to an Expr over structured `failure` fields to opt into another policy, for example `failure.kind == 'exit_code' && failure.code == 75`. See the [runnable fallback example](examples/executor-fallback.json).
 
+Executor registrations can set `"environment":{"mode":"allowlist","inherit":["PATH","LANG"]}` to select host variables, or `"environment":{"mode":"empty"}` to omit them. The default is `inherit`. Explicit `env` entries and fresh engine file/session channels are added afterward. See [environment and creation guarantees](docs/execution-semantics.md#executor-environment) for boundaries and recovery behavior.
+
 ## Program contract
 
 The runner starts the configured program whenever the graph reaches its node. The program reads incoming JSON from `AGENTFLOW_INPUT_FILE`, optional executor configuration from `AGENTFLOW_CONFIG_FILE`, writes one JSON object to `AGENTFLOW_RESULT_FILE`, and exits successfully. It may write a newly created session ID to `AGENTFLOW_SESSION_FILE`. stdout and stderr are logs. The runner validates output and selects the next edge.
@@ -139,7 +141,7 @@ Serial graphs run one active node at a time; `dispatch: "all"` can run siblings 
 
 Cron and webhook configuration lives in `triggers.json`. `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher; the persistent scheduler requires `trigger serve` to stay running. See [trigger architecture](docs/trigger-architecture.md).
 
-Each workspace runs its own trigger service. One service can schedule several graph files from its `triggers.json`; it has one run worker by default, so separate triggered runs queue while a run executes. Services in different workspaces have separate receipts and run stores. Cron-only services do not bind HTTP ports. Webhooks share one listener per workspace: use distinct explicit ports across workspaces, or port `0` for an automatically assigned port (reported on stderr). A second service for the same workspace is rejected. Delivery deduplication and the default `forbid` overlap policy are scoped to each trigger, not to the repositories or sessions its executors use.
+Each workspace runs its own trigger service. One service can schedule several graph files from its `triggers.json`; its shared run worker defaults to one active run. Set `run worker --concurrency N` or `trigger serve --concurrency N` to change admission; an existing worker owns the budget. Services in different workspaces have separate receipts and run stores. Cron-only services do not bind HTTP ports. Webhooks share one listener per workspace: use distinct explicit ports across workspaces, or port `0` for an automatically assigned port (reported on stderr). A second service for the same workspace is rejected. Delivery deduplication and the default `forbid` overlap policy are scoped to each trigger, not to the repositories or sessions its executors use.
 
 CLI stdout contains data; diagnostics go to stderr. Piped output defaults to JSON. Exit codes are `0` success, `1` execution failure, `2` invalid input, `3` not found, `4` permission denied, `5` conflict, and `10` successful dry run. Start requests support idempotency keys. Controls are queued when another process owns the run lock.
 
@@ -154,3 +156,7 @@ Run `make check` and `make test-e2e` for deterministic verification. Real model 
 ## Feishu human review example
 
 Follow the [five-step Lark adapter setup guide](examples/lark-review/SETUP.md) for configurable content, buttons, bots and reviewers. It includes a complete workflow, registry, config schema and local checker. The graph uses the generic external executor contract.
+
+### Durable batch dispatch
+
+Use `run enqueue` to persist requests and `run worker --concurrency N` to execute them. Managed start/submit/retry/resume/cancel requests share admission. Parent/child links and opaque labels are creation metadata; CLI and Web expose child status counts and navigation. See [queue usage and recovery boundaries](docs/durable-queue.md).

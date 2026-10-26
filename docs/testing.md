@@ -102,3 +102,7 @@ agentflow run logs <run-id> --format ndjson
 ## Cold-context workflow authoring
 
 See [the authoring benchmark](../benchmarks/workflow-authoring/README.md). `make test-benchmark` runs only deterministic golden/reference checks. It also tests that alternate node names/order are accepted and defective workflows are rejected. A separate fresh agent process can author a solution from the binary and skill; its output is evaluated against behavior rather than an exact JSON answer. Live agent calls are not part of CI.
+
+## Durable queue contract
+
+`make test-e2e` also runs `scripts/test-durable-queue.py` against a temporary workspace. It starts actual CLI, worker, trigger and Web processes with deterministic Python/external fixtures; the proof JSON distinguishes model/IM coverage. Use `AGENTFLOW_QUEUE_WORKSPACE` and `AGENTFLOW_QUEUE_REPORT` to retain evidence at specific paths. See [queue contracts](durable-queue.md).

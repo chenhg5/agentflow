@@ -3,6 +3,13 @@
 Describe the actual task and its acceptance criteria before replacing the starter.
 This document is an authoring aid, not an engine schema or execution evidence.
 
+## Workspace and graphs
+
+Keep a single graph at root `workflow.json`. If this workspace needs multiple
+graphs, put every definition in `workflows/<name>.json` and remove the root graph.
+List their purposes and explicit trigger/operator targets. Share the root registry
+and run store; directory nesting does not define execution relationships.
+
 ## Nodes and data
 
 For each node, record its responsibility, executor, input/output schema, data

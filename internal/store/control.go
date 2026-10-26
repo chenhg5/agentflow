@@ -18,7 +18,7 @@ func EnqueueControl(runDir string, control model.Control) error {
 		control.At = time.Now().UTC().Format(time.RFC3339Nano)
 	}
 	name := time.Now().UTC().Format("20060102T150405.000000000") + "-" + randomSuffix() + ".json"
-	return writeJSON(filepath.Join(runDir, controlDir, name), control)
+	return writeCreationJSON(filepath.Join(runDir, controlDir, name), control)
 }
 
 // QueuedControl pairs a control with the queue file that holds it so the

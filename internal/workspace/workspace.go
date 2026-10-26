@@ -38,14 +38,14 @@ type Change struct {
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
 
-const Ignore = "/runs/\n/dispatch/\n/trigger-deliveries/\n/scheduler.lock\n/trigger-dispatch.lock\n/output/\n__pycache__/\n"
+const Ignore = "/runs/\n/dispatch/\n/trigger-deliveries/\n/scheduler.lock\n/trigger-dispatch.lock\n/queue.json\n/queue.lock\n/worker.lock\n/worker.json\n/output/\n__pycache__/\n"
 
 func Contract() map[string]any {
 	return map[string]any{
 		"layout_version": LayoutVersion,
 		"root":           "Invoke commands from the standalone workflow workspace root.",
-		"files":          map[string]string{"workflow.json": "Default single graph; explicit other paths are supported.", "executors.json": "Named executor registrations.", "triggers.json": "Optional cron/webhook triggers.", "DESIGN.md": "Authoring notes for contracts, roles/context/tools, transitions, human participation and verification; not an engine schema."},
-		"directories":    map[string]string{"executors/agents/<name>": "Owned agent workspaces or symlinks; external paths also work.", "executors/programs/<name>": "Program executor source and working directory.", "workflows": "Optional organization for multiple graphs.", "runs/<run-id>": "Generated workflow snapshot, state, events and node artifacts.", "output": "Optional user program outputs; not the engine result store."},
+		"files":          map[string]string{"workflow.json": "Recommended single graph location; omit at root for multiple graphs.", "executors.json": "Shared named executor registrations.", "triggers.json": "Optional cron/webhook triggers with explicit graph targets; reload service after edits when no work is executing.", "DESIGN.md": "Authoring notes for contracts, roles/context/tools, transitions, human participation and verification; not an engine schema."},
+		"directories":    map[string]string{"executors/agents/<name>": "Owned agent workspaces or symlinks; external paths also work.", "executors/programs/<name>": "Program executor source and working directory.", "workflows": "Recommended home of all <name>.json graphs in a multi graph workspace; keep no separate root graph or compatibility copy. Engine accepts explicit paths; directory nesting does not connect graphs.", "runs/<run-id>": "Generated workflow snapshot, state, events and node artifacts.", "output": "Optional user program outputs; not the engine result store."},
 		"node_artifacts": "runs/<run-id>/artifacts/<node-id>.<visit>.candidate-<n>.attempt-<n>.{input,config,result}.json; per-attempt logs live under artifacts/logs/",
 		"environment":    map[string]string{"AGENTFLOW_ROOT": "Workflow workspace root.", "AGENTFLOW_WORKSPACE": "Executor working directory.", "AGENTFLOW_INPUT_FILE": "Absolute JSON input path.", "AGENTFLOW_CONFIG_FILE": "Absolute executor config path.", "AGENTFLOW_RESULT_FILE": "Absolute JSON result path."},
 		"commands":       []string{"workspace init", "executor init", "executor add", "workspace validate"},
@@ -71,7 +71,7 @@ func Init(root string, dryRun bool) (Change, error) {
 		return Change{}, err
 	}
 	files["DESIGN.md"] = string(design)
-	files["README.md"] = "# Workflow workspace\n\nLayout version 1. Run commands from this directory.\n\n```sh\nagentflow workspace validate\nagentflow run start workflow.json\n```\n\nThe starter program passes incoming JSON through. Adapt the graph and executor to your task. Add an owned agent with `agentflow executor init <name> --kind codex`, or bind an existing directory with `agentflow executor add <name> --kind codex --workspace /existing/path`. Each ordered execution candidate owns its config and session policy. Generated per-attempt evidence lives in runs/; inspect it with run get/logs/metrics.\n"
+	files["README.md"] = "# Workflow workspace\n\nLayout version 1. Run commands from this directory. Single graph: root workflow.json. Multiple graphs: move every graph into workflows/<name>.json, remove the root graph, and update trigger/operator targets. Definitions share the root executor registry and run store. See DESIGN.md.\n\n```sh\nagentflow workspace validate\nagentflow run start workflow.json\n```\n\nThe starter program passes incoming JSON through. Adapt the graph and executor to your task. Add an owned agent with `agentflow executor init <name> --kind codex`, or bind an existing directory with `agentflow executor add <name> --kind codex --workspace /existing/path`. Each ordered execution candidate owns its config and session policy. Generated per-attempt evidence lives in runs/; inspect it with run get/logs/metrics.\n"
 	created, err := createFiles(root, files, dryRun)
 	return Change{Root: root, LayoutVersion: LayoutVersion, Created: created}, err
 }

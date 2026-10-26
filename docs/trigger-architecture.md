@@ -2,7 +2,7 @@
 
 本文档定义外部触发能力的领域边界和第一版实现约束。当前 MVP 已提供 `trigger fire`、`trigger serve`、cron、webhook、幂等 delivery、持久化 dispatch 和 queued worker；新的事件源仍然不能直接实现成 engine 中的特殊分支。
 
-`trigger serve` 的范围是当前独立 workflow 工作区，不是机器上的全局服务。一个 `triggers.json` 可以指向多个图文件；图路径显式配置，`workflows/` 是可选分类，单条图可直接使用根目录 `workflow.json`。
+`trigger serve` 的范围是当前独立 workflow 工作区，不是机器上的全局服务。一个 `triggers.json` 可以指向多个图文件。推荐单图用根目录 `workflow.json`，多图全部放入 `workflows/<name>.json`，根目录不再留图副本；图路径显式配置，目录不赋予图调用关系。服务启动时读取配置，改动目标后需在无任务执行时重新加载服务。
 
 ## 1. Bounded contexts
 
@@ -305,3 +305,7 @@ cli / http / cron adapters
 后续可以增加 `queue`/`replace` 并发语义、misfire 补偿策略、外部队列 source 和 UI 中的 trigger delivery 视图，但这些扩展不需要修改 engine。
 
 Trigger 的单元测试使用 fake `RunStarter` 和本地 shell workflow，不调用真实 Claude Code/Codex；真实 provider smoke test 继续单独保留。
+
+## Shared durable admission
+
+The generic `internal/queue` owns worker admission. Trigger Runtime only validates and publishes creation requests; `trigger serve` uses the same OS worker lock as `run worker`. If another worker owns the workspace it only produces requests. Managed `trigger fire` returns acceptance, and its executions and subsequent controls share that budget. See [durable queue](durable-queue.md) for generations, ownership, recovery and relationships.

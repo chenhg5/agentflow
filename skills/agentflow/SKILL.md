@@ -1,7 +1,7 @@
 ---
 name: agentflow
 metadata:
-  version: "3.4.0"
+  version: "3.6.0"
 description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与显式条件边组成的本地工作流。"
 ---
 
@@ -32,7 +32,9 @@ agentflow executor init archive --kind command
 
 已有 agent 用 `executor add <name> --kind codex --workspace /existing/path` 只登记关联，也可登记工作区内的软链。不要对已有目录执行 init，不复制、覆盖或补写它的指令和工具。其他程序可用 `executor add <name> --kind command --workspace <existing-directory> --command '["node","main.js"]'` 登记，语言不限。先检查已有目录与 session 的真实信息，缺失时明确报告，不猜 ID。
 
-优先建立独立的 workflow 工作区或仓库，由它调度用户的项目、仓库版本和现有 agent。不要默认在业务仓库内创建工作流目录。单条图直接放根目录 `workflow.json`；多条图时可按需使用 `workflows/`，引擎不要求固定目录。根目录还放 `executors.json`、可选 `triggers.json` 与生成的 `runs/`，从这个根目录运行 CLI。
+优先建立独立的 workflow 工作区或仓库，由它调度用户的项目、仓库版本和现有 agent。不要默认在业务仓库内创建工作流目录。单图工作区用根目录 `workflow.json`；多图工作区将所有图统一放入 `workflows/<name>.json`，按用途命名，不在根目录额外保留“主图”或副本。这是推荐的搭建约定，引擎仍支持显式文件路径；目录层级不代表图之间的调用关系。根目录保留共享的 `executors.json`、可选 `triggers.json` 与生成的 `runs/`，从这个根目录运行 CLI。
+
+从单图扩展到多图时，将原图移入 `workflows/`，同步修改 trigger、程序入口、测试和文档的路径，不留兼容副本或软链。`workspace validate` 默认检查根目录图及启用的 trigger 目标；没有 trigger 的图要分别用 `--workflow workflows/<name>.json` 校验，不会自动扫描目录。运行中的 trigger 服务启动时读取配置，修改后需确认无执行中的任务再重新加载服务。
 
 推荐在 `executors/agents/<name>/` 聚合 agent 工作目录，在 `executors/programs/<name>/` 放普通程序。目录可以是软链，注册表的 `workspace` 也可以直接指向外部路径。用户已有 agent 时复用其目录、指令、skill 和工具，无需再建一份；修改前先确认是否属于当前任务范围。目录与 session 是两个独立关联：已有目录不代表已有 session，已有 session ID 不代表目录；在每个 `execution.candidates[]` 中用 `session` 显式指定 new/fixed/inherit/fork。恢复持久会话并不等于接管正在运行的交互进程。
 
@@ -102,7 +104,13 @@ Session 是引擎的执行策略，不属于节点 input。每个 execution cand
 
 内置执行器有 `codex`、`claude-code`、`process`、`external`。前两者读取 `config.instruction`、可选 `config.workspace`；`process` 读取 `config.command`；`external` 等待 `run submit`。缺少配置的程序入口须通过 `executors.json` 注册。
 
+环境继承属于 executor 注册配置。根据实际 `agentflow schema executors` 能力设置 `environment`：省略/`{"mode":"inherit"}` 继承宿主变量；`{"mode":"allowlist","inherit":["PATH","LANG"]}` 只继承指定变量；`{"mode":"empty"}` 不继承宿主变量。随后加入显式 env 与引擎保留通道；不能配置或继承 `AGENTFLOW_*` 来覆盖当前调用。原生 CLI 需要的 HOME/认证须显式安排。环境白名单不是文件系统 sandbox，获配秘密的程序也不能主动把值写入日志。workspace validate 和启动事件只报告模式/变量名，不报告值。
+
+同一 worker 运行模型角色和持有测试凭据的 runner 时，为它们分别选环境白名单；`env:{}` 不会清空宿主环境。秘密通过受控运行时/wrapper 获取，不放进 graph、input 或 config artifact。
+
 ## 验证与运行
+
+对可能重复派发的创建请求使用 `--idempotency-key`。工作区 + workflow name + key 对应同一图内容、inputs 和不可变 parent/correlation 元数据；并发复用只创建一条 run，变更请求返回 conflict/exit 5。CLI 和 trigger 共用创建事务。保留 runs/requests 创建日志及执行 outbox；创建中断后复用同 key 或重启 worker 恢复，不要删除 state/journal 来“重新开始”。这不保证任意程序外部副作用 exactly-once。
 
 ```bash
 agentflow workspace validate --format json
@@ -125,10 +133,18 @@ agentflow run resume <run-id> --format json
 
 `submit` 用于 external 节点。定时/webhook 配置放 `triggers.json`，先 validate 和 fire，再持续运行 `trigger serve`。交付前用本地替身检验分支、返工、次数上限和无效输出。`run start --dry-run` 的成功退出码为 10。需要观察耗时用 `run metrics/stats`，业务质量数值由外部评估器写入 `run evaluate`，再用 `run compare` 对比。
 
-`trigger serve` 按工作区运行，一个进程加载该工作区所有 trigger；一个工作区只启动一份服务。不同工作区使用独立的配置与运行记录。纯 cron 不占 HTTP 端口；启用 webhook 时各工作区使用不同固定端口或 `--port 0` 自动选择。当前 CLI 每个服务有一个 run worker，多条图会排队。trigger ID 和启用的 webhook path 在工作区内不得重复；delivery ID 的去重范围是该 trigger。默认同一 trigger 有活动 run 就跳过新 occurrence，显式 `policy.concurrency=allow` 才允许重叠入队；跨 trigger/工作区对同一仓库或 session 的访问没有自动资源互斥。
+`trigger serve` 按工作区运行，一个进程加载该工作区所有 trigger；一个工作区只启动一份服务。不同工作区使用独立的配置与运行记录。纯 cron 不占 HTTP 端口；启用 webhook 时各工作区使用不同固定端口或 `--port 0` 自动选择。worker 默认一个活动 run，可用 `run worker --concurrency N` 或 `trigger serve --concurrency N` 配置；两者共享所有者，已有 worker 时 trigger 只入队，不另开额度。trigger ID 和启用的 webhook path 在工作区内不得重复；delivery ID 的去重范围是该 trigger。默认同一 trigger 有活动 run 就跳过新 occurrence，显式 `policy.concurrency=allow` 才允许重叠入队；跨 trigger/工作区对同一仓库或 session 的访问没有自动资源互斥。
 
 人工交互可能持续很久或需要重启恢复时，优先把执行器注册为 `kind: external`，由独立适配器服务接收请求和提交结果。图只保存不透明 config；通信渠道、卡片和按钮输出归适配器/工作流配置。适配器必须持久化收到的选择，校验操作人、消息 ID 和本次调用 token；提交时传 waiting node 的 `leaseToken`，防止旧回调命中新一轮。发送前用 `run submit --dry-run --token ...` 校验每个按钮的输出。卡片更新应可重试；明确区分结果已接收和整个流程已完成。参考 `examples/lark-review/README.md`，保留连接离线时点击可能需重试的边界。
 
+
+## 持久队列与父子运行
+
+批量派发使用 `run enqueue <graph> --input key=value --idempotency-key <key>`，然后运行 `run worker --concurrency N`；producer 入队后即可退出。不能用异步 shell/Popen 代替持久队列。enqueue 或 --async 会持久启用托管队列；之后 start/trigger fire/submit/retry/resume/cancel 都返回持久接收状态，实际执行由同一 worker 准入，省略 --async 也不能绕过。worker 离线时请求保留在队列，须启动服务；用 `run queue` 查看 active/queued/waiting/terminal、owner 和 heartbeat，用 run get 查询最终结果。
+
+并发数约束活动 **run**；图内并行节点可能启动多个进程，不能声称限制了全局 executor 数。waiting_input 释放 run 槽位；同时还有运行节点则继续占位。中断恢复不重跑已确认完成的节点，但未确认完成的 attempt 可能重放，外部副作用应幂等。硬杀 worker 不保证杀死子进程；cancel 在执行边界处理。
+
+子运行在创建时用 `--parent <run> --parent-node <node>`、可重复 `--correlation key=value` 关联。程序可从 AGENTFLOW_RUN_ID 和 AGENTFLOW_NODE_ID 取父标识，cwd 使用 AGENTFLOW_ROOT。仅支持同 store 的已存在父/节点，关系和字符串标签不可变且参与创建幂等校验。`run list --parent <id> --correlation key=value` 查询子集，run get 父运行显示子状态计数，Web 双向跳转。父成功表示其派发工作完成；子状态独立，取消不级联。相同业务对象跨批次复用由业务 ledger 决定，图不理解标签业务含义。
 
 ## 复用飞书交互程序
 

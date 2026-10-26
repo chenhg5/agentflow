@@ -114,7 +114,12 @@ func printWorkspaceHelp() {
 Initialize a standalone layout-v1 workspace with a runnable program, or inspect
 graph/config/workspace bindings and discover agent instructions, skills and tool
 configuration. Supply representative inputs to resolve templated paths. Discovery
-does not verify provider loading, role quality or actual execution.`)
+does not verify provider loading, role quality or actual execution.
+
+Recommended layout: one graph at root workflow.json; multiple graphs all under
+workflows/<name>.json with no separate root graph. Run from the workspace root.
+Validation checks the root graph and enabled trigger targets, not every file in
+workflows/. Use --workflow <path> for graphs without an enabled trigger.`)
 }
 
 func printExecutorHelp() {

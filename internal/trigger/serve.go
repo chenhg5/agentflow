@@ -16,6 +16,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chenhg5/agentflow/internal/queue"
+	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/robfig/cron/v3"
 )
 
@@ -29,7 +31,7 @@ func (source WebhookSource) Handler(dispatcher *Dispatcher) http.Handler {
 	return webhookHandler(dispatcher, Config{Triggers: []Definition{source.Definition}})
 }
 
-func Serve(ctx context.Context, root, cwd string, options ServeOptions) error {
+func Serve(ctx context.Context, root, cwd string, options ServeOptions) (serveErr error) {
 	config, err := LoadConfig(root)
 	if err != nil {
 		return err
@@ -66,7 +68,28 @@ func Serve(ctx context.Context, root, cwd string, options ServeOptions) error {
 	}
 	// Reserve the listener before recovering queued jobs or starting timers.
 	// A port conflict must not launch work from a service that failed to start.
-	runtime.StartWorkers(ctx)
+	if options.Workers < 1 {
+		options.Workers = 1
+	}
+	worker, err := queue.Start(ctx, root, cwd, options.Workers, true)
+	if err != nil && !errors.Is(err, queue.ErrWorkerBusy) {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	// An existing worker owns admission. This scheduler only publishes requests.
+	if worker != nil {
+		defer func() {
+			cancel()
+			if err := worker.Wait(); serveErr == nil {
+				serveErr = err
+			}
+		}()
+		// An owned worker's fatal persistence error must stop the service and
+		// reach stderr, rather than leaving a scheduler with no admission owner.
+		go func() { _ = worker.Wait(); cancel() }()
+	}
 	cronStop, err := startCron(ctx, config, dispatcher)
 	if err != nil {
 		return err
@@ -210,6 +233,9 @@ func webhookHandler(dispatcher *Dispatcher, config Config) http.Handler {
 		result, err := dispatcher.Dispatch(request.Context(), event)
 		if err != nil {
 			status := http.StatusUnprocessableEntity
+			if errors.Is(err, store.ErrIdempotencyConflict) {
+				status = http.StatusConflict
+			}
 			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "disabled") {
 				status = http.StatusNotFound
 			}

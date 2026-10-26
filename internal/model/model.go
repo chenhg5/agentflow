@@ -163,6 +163,9 @@ type AttemptEvidence struct {
 }
 
 type RunState struct {
+	ParentRunID    string                    `json:"parentRunId,omitempty"`
+	ParentNodeID   string                    `json:"parentNodeId,omitempty"`
+	Correlation    map[string]string         `json:"correlation,omitempty"`
 	RunID          string                    `json:"runId"`
 	WorkflowName   string                    `json:"workflowName"`
 	WorkflowDigest string                    `json:"workflowDigest,omitempty"`

@@ -21,12 +21,40 @@ my-workflow/
 ├── lib/                             # optional shared code
 ├── output/                          # optional business artifacts
 ├── runs/<run-id>/                    # generated engine evidence
-├── dispatch/                        # generated trigger queue
+├── dispatch/                        # generated shared durable run queue
 └── trigger-deliveries/               # generated delivery records
 ```
 
-There is no `.agentflow/` container. `workflows/` is optional when organizing
-multiple graphs. Directory categories are authoring conventions; the graph
+For a workspace with multiple graphs, group **all** graph definitions under
+`workflows/` and name each by its purpose:
+
+```text
+my-workflows/
+├── workflows/
+│   ├── release.json
+│   ├── qa.json
+│   └── watchdog.json
+├── executors.json
+├── executors/
+├── triggers.json
+└── runs/
+```
+
+These graphs share the workspace registry, trigger configuration and run store.
+Directory nesting does not define parent/child graphs or connect their execution.
+Use explicit graph targets such as `workflows/release.json` in triggers and CLI
+commands, invoked from the workspace root.
+
+When expanding a single graph workspace, move `workflow.json` into `workflows/`
+and update triggers, operator programs, tests and documentation. Keep one source
+per graph; remove the root file instead of leaving a copy or compatibility link.
+The trigger service reads configuration at startup; reload it after changing
+targets when no work is executing. Stored run snapshots keep their own graph
+definitions and are not source files to move.
+
+There is no `.agentflow/` container. Single versus multiple graph placement is a
+recommended authoring convention; the engine accepts explicit file paths and
+does not require these directory names. Directory categories are authoring conventions; the graph
 engine resolves executor names through the registry and does not interpret them
 as business types. Built-in adapters ship with AgentFlow and need no local copy.
 The v1 layout version describes these conventions; graph format remains v3.
@@ -72,12 +100,13 @@ configuration; registration does not silently widen them.
 
 | File/data | Location / owner |
 | --- | --- |
-| Graph, executor registry, optional triggers | Workspace root, authored |
+| Graph definitions | Root `workflow.json` for one graph; `workflows/<name>.json` for multiple graphs, authored |
+| Executor registry, optional triggers | Workspace root, authored |
 | Agent instructions, skills and tools | Executor workspace, authored or externally owned |
 | Graph snapshot, run state and events | `runs/<run-id>/`, engine |
 | Candidate-attempt input/config/result/session | `runs/<run-id>/artifacts/<node-id>.<visit>.candidate-<n>.attempt-<n>.*`, engine |
 | Candidate-attempt stdout/stderr | `runs/<run-id>/artifacts/logs/`, engine |
-| Dispatch queue and delivery evidence | `dispatch/`, `trigger-deliveries/`, trigger service |
+| Dispatch queue and delivery evidence | `dispatch/`, `queue.json`, `worker.json`, `trigger-deliveries/`, shared worker and trigger service |
 | Business reports/files | Program-selected, e.g. `output/`; return paths in result |
 | Provider session history | Provider-managed store; run metadata records session ID |
 
@@ -118,8 +147,9 @@ provider tools, external skills and program-only workflows remain supported.
 
 1. Run `workspace validate` to check the default graph and enabled trigger
    targets, registrations, directory/symlink bindings and executable availability.
-   A trigger-only workspace need not have `workflow.json`. Select other graphs
-   explicitly with `--workflow <path>`.
+   A multi graph workspace does not need a root `workflow.json`. Graph directories
+   are not scanned automatically: validate each graph without an enabled trigger
+   explicitly with `--workflow workflows/<name>.json`.
 2. Validate the graph and dry-run representative input. Exit 10 means only that
    the dry-run passed.
 3. Execute a nonempty representative run. Inspect whether required nodes actually

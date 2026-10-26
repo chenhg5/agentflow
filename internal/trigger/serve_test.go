@@ -94,7 +94,7 @@ func TestWebhookPortFailureDoesNotStartQueuedWork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := runtime.saveJob(dispatchJob{RunID: run.RunID, Status: "queued"}); err != nil {
+	if err := runtime.saveJob(dispatchJob{RunID: run.RunID, Status: "queued", Generation: 1}); err != nil {
 		t.Fatal(err)
 	}
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -157,4 +157,40 @@ func TestWorkspaceLockHelper(t *testing.T) {
 		os.Exit(1)
 	}
 	os.Exit(0)
+}
+
+func TestOwnedWorkerPersistenceFailureStopsScheduler(t *testing.T) {
+	root := t.TempDir()
+	config := `{"triggers":[{"id":"daily","enabled":true,"source":{"kind":"cron","expression":"0 0 1 1 *"},"target":{"workflow":"workflow.json"}}]}`
+	if err := os.WriteFile(filepath.Join(root, "triggers.json"), []byte(config), 0600); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- Serve(ctx, root, root, ServeOptions{Workers: 1}) }()
+	deadline := time.Now().Add(3 * time.Second)
+	for {
+		if _, err := os.Stat(filepath.Join(root, "worker.json")); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("worker did not start")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "dispatch"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "dispatch", "broken.json"), []byte("{"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("worker persistence error swallowed")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("scheduler kept running without its worker")
+	}
 }

@@ -123,6 +123,9 @@
       .resize-handle::before { content: ""; position: absolute; left: 50%; top: 4px; width: 42px; height: 2px; border-radius: 999px; transform: translateX(-50%); background: var(--muted); opacity: .65; }
       .resize-handle:hover, .resize-handle.dragging, .resize-handle:focus-visible { background: var(--panel-2); outline: none; }
       .resize-handle:hover::before, .resize-handle.dragging::before, .resize-handle:focus-visible::before { background: var(--accent); opacity: 1; }
+      .relations { display: block !important; overflow-wrap: anywhere; }
+      .relations pre { white-space: pre-wrap; }
+      .status-queued { background: #6e7681; }
       .summary { flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--panel); padding: 12px 18px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
       .metric { min-width: 90px; }
       .metric-label { color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .06em; }
@@ -215,7 +218,10 @@
       Object.assign(messages["zh-TW"], {
         dataTab: "輸入 / 輸出", logsTab: "執行記錄", definitionTab: "節點定義", currentVisit: "最近一次", visit: "第 {value} 次", visitLabel: "節點執行次數", copy: "複製 JSON", copied: "已複製", copyFailed: "複製失敗", notStarted: "該節點尚未執行。", noInput: "沒有記錄到輸入。", outputPending: "執行中，尚未產生輸出。", noOutput: "沒有記錄到輸出。", noLogs: "暫無執行日誌。", emptyLog: "日誌為空", logTail: "顯示最後 64 KiB。", logsScope: "這裡顯示該節點本次執行器擷取的日誌，不包含完整 agent 對話。", detailFailed: "無法載入節點詳情，正在重試…", statusCancelled: "已取消"
       });
-      const statusMessageKeys = { succeeded: "statusSucceeded", running: "statusRunning", waiting_input: "statusWaitingInput", failed: "statusFailed", skipped: "statusSkipped", pending: "statusPending", cancelled: "statusCancelled" };
+      Object.assign(messages.en, {parentRun: "Parent run", childRuns: "Child runs", queue: "Queue", active: "Active", queued: "Queued", waiting: "Waiting", terminal: "Terminal"});
+      Object.assign(messages["zh-CN"], {parentRun: "父运行", childRuns: "子运行", queue: "队列", active: "执行中", queued: "排队", waiting: "等待输入", terminal: "已结束"});
+      Object.assign(messages["zh-TW"], {parentRun: "父執行", childRuns: "子執行", queue: "佇列", active: "執行中", queued: "排隊", waiting: "等待輸入", terminal: "已結束"});
+      const statusMessageKeys = { queued: "queued", succeeded: "statusSucceeded", running: "statusRunning", waiting_input: "statusWaitingInput", failed: "statusFailed", skipped: "statusSkipped", pending: "statusPending", cancelled: "statusCancelled" };
       const themePalettes = {
         dark: { grid: "#26313d", edge: "#52606d", condition: "#d29922", label: "#79c0ff", labelBackground: "#161b22" },
         light: { grid: "#d8e0e9", edge: "#718096", condition: "#a15c00", label: "#185b91", labelBackground: "#ffffff" },
@@ -548,6 +554,22 @@
         return h("div", { className: "resize-handle" + (dragging ? " dragging" : ""), role: "separator", "aria-orientation": "horizontal", "aria-label": t(language, "resizeInspector"), "aria-valuenow": height, tabIndex: 0, title: t(language, "resizeInspector"), onPointerDown: begin, onKeyDown, onDoubleClick: () => setHeight(280) });
       }
 
+      function Relations({view, language}) {
+        const relations = view.relations;
+        if (!relations) return null;
+        const children = relations.children || [];
+        return h("section", {className: "summary relations", "aria-label": t(language, "childRuns")},
+          relations.parent_run_id ? h("p", null, t(language, "parentRun") + ": ", h("a", {href: "?run=" + encodeURIComponent(relations.parent_run_id)}, relations.parent_run_id), relations.parent_node_id ? " / " + relations.parent_node_id : "") : null,
+          Object.keys(relations.correlation || {}).length ? h("pre", null, JSON.stringify(relations.correlation)) : null,
+          children.length ? h("details", null, h("summary", null, t(language, "childRuns") + " (" + children.length + ") · " + Object.entries(relations.child_status_counts || {}).map(([key,value]) => statusLabel(language,key) + ": " + value).join(" · ")),
+            children.map(child => h("p", {key: child.run_id}, h("a", {href: "?run=" + encodeURIComponent(child.run_id)}, child.run_id), " · " + statusLabel(language,child.status)))) : null);
+      }
+      function QueueSummary({view, language}) {
+        const queue=view.queue;
+        if (!queue || !queue.jobs?.length) return null;
+        return h("p", null, t(language,"queue") + " · " + Object.entries(queue.counts).map(([key,value]) => t(language,key) + ": " + value).join(" · "));
+      }
+
       function App() {
         const [view, setView] = useState(null);
         const [selectedNode, setSelectedNode] = useState(null);
@@ -590,7 +612,7 @@
           h(Sidebar, { view, language }),
           h("main", { className: "main" },
             h("div", { className: "toolbar" }, h("div", { className: "title" }, h("h2", null, "AgentFlow"), h("p", null, t(language, "selectRun"))), h(ViewControls, { language, setLanguage, theme, setTheme, onRefresh: load })),
-            h("div", { className: "content" }, h("div", { className: "empty" }, t(language, "chooseRun"))),
+            h("div", { className: "content" }, h(QueueSummary, {view, language}), h("div", { className: "empty" }, t(language, "chooseRun"))),
           ),
         );
         const state = view.mode === "run" ? view.run.state : null;
@@ -609,6 +631,7 @@
               h(ResizeHandle, { height: lowerPanelHeight, setHeight: setLowerPanelHeight, language }),
               h("div", { className: "lower-panel", style: { height: lowerPanelHeight + "px" } },
                 !selectedNode ? h(Summary, { view, language }) : null,
+                !selectedNode ? h(Relations, {view, language}) : null,
                 !selectedNode ? h(Comparison, { comparison: view.comparison, language }) : null,
                 h(Inspector, { key: (view.run?.run_id || "workflow") + ":" + (selectedNode?.id || ""), definition: selectedNode, state: selectedNode && state?.nodes?.[selectedNode.id], description: view.graph, language, runID: view.run?.run_id, history: state?.history, visits: state?.visits }),
               ),

@@ -55,6 +55,16 @@ func (d *Dispatcher) Dispatch(ctx context.Context, event Event) (DispatchResult,
 	if existing, err := d.loadReceipt(event.TriggerID, event.DeliveryID); err != nil {
 		return DispatchResult{}, err
 	} else if existing != nil {
+		if existing.Run.RunID != "" {
+			inputs, err := ResolveInputs(definition, event)
+			if err != nil {
+				return DispatchResult{}, err
+			}
+			command := StartRunCommand{WorkflowPath: definition.Target.Workflow, Inputs: inputs}
+			if err := d.Starter.ValidateReplay(ctx, command, existing.Run); err != nil {
+				return DispatchResult{}, err
+			}
+		}
 		return DispatchResult{TriggerID: existing.TriggerID, DeliveryID: existing.DeliveryID, Status: existing.Status, Run: existing.Run, Duplicate: true, Reason: existing.Reason}, nil
 	}
 	if !strings.EqualFold(definition.Policy.Concurrency, "allow") {
@@ -139,18 +149,12 @@ func (d *Dispatcher) saveReceipt(receipt DeliveryReceipt) error {
 }
 
 func (d *Dispatcher) hasActiveRun(triggerID string) (bool, error) {
-	entries, err := os.ReadDir(filepath.Join(d.Root, "runs"))
-	if os.IsNotExist(err) {
-		return false, nil
-	}
+	ids, err := store.RunIDs(d.Root)
 	if err != nil {
 		return false, err
 	}
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		run, err := store.LoadRun(d.Root, entry.Name())
+	for _, id := range ids {
+		run, err := store.LoadRun(d.Root, id)
 		if err != nil {
 			return false, err
 		}

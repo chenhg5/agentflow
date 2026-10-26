@@ -1,6 +1,7 @@
 package store
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -16,44 +17,8 @@ import (
 func EnsureDir(directory string) error { return os.MkdirAll(directory, 0o755) }
 
 func CreateRun(root string, workflow model.Workflow, inputs map[string]string, idempotencyKey string) (*model.Run, error) {
-	if workflow.Version != "3" || workflow.Entry == "" {
-		return nil, fmt.Errorf("only version 3 edge workflows can start")
-	}
-	if err := EnsureDir(filepath.Join(root, "runs")); err != nil {
-		return nil, err
-	}
-	timestamp := time.Now().UTC().Format("20060102150405")
-	runID := fmt.Sprintf("run_%s_%s", timestamp, randomSuffix())
-	runDir := filepath.Join(root, "runs", runID)
-	if err := EnsureDir(filepath.Join(runDir, "artifacts")); err != nil {
-		return nil, err
-	}
-	nodes := map[string]*model.NodeState{}
-	for _, node := range workflow.Nodes {
-		nodes[node.ID] = &model.NodeState{Status: "pending", Artifacts: map[string]string{}}
-	}
-	initialInput := map[string]any{}
-	for key, value := range inputs {
-		initialInput[key] = value
-	}
-	now := time.Now().UTC().Format(time.RFC3339Nano)
-	run := &model.Run{RunID: runID, RunDir: runDir, Workflow: workflow, State: model.RunState{
-		RunID: runID, WorkflowName: workflow.Name, WorkflowDigest: model.Digest(workflow), Status: "pending", Inputs: inputs, IdempotencyKey: idempotencyKey, Nodes: nodes, CreatedAt: now, UpdatedAt: now,
-	}}
-	run.State.ActiveNode = workflow.Entry
-	run.State.Visits = map[string]int{workflow.Entry: 1}
-	run.State.Traversals = map[string]int{}
-	run.State.Nodes[workflow.Entry].Input = initialInput
-	if err := writeJSON(filepath.Join(runDir, "workflow.json"), workflow); err != nil {
-		return nil, err
-	}
-	if err := SaveState(run); err != nil {
-		return nil, err
-	}
-	if err := AppendEvent(runDir, map[string]any{"type": "run.created", "runId": runID, "inputs": inputs}); err != nil {
-		return nil, err
-	}
-	return run, nil
+	result, err := CreateOrGetRun(context.Background(), root, CreateRequest{Workflow: workflow, Inputs: inputs, IdempotencyKey: idempotencyKey})
+	return result.Run, err
 }
 
 func FindRunByIdempotency(root, workflowName, idempotencyKey string) (*model.Run, error) {

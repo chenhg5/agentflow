@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"reflect"
 	"slices"
 	"sort"
 	"strconv"
@@ -23,6 +22,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/graph"
 	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
+	"github.com/chenhg5/agentflow/internal/queue"
 	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/trigger"
@@ -135,7 +135,6 @@ func triggerCommand(args []string, root, cwd string) error {
 		}
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
-		runtime.StartWorkers(ctx)
 		now := time.Now().UTC()
 		if parsed.ScheduledAt != "" {
 			parsedTime, parseErr := time.Parse(time.RFC3339, parsed.ScheduledAt)
@@ -152,16 +151,23 @@ func triggerCommand(args []string, root, cwd string) error {
 		dispatcher := &trigger.Dispatcher{Root: root, Config: config, Starter: runtime}
 		result, err := dispatcher.Dispatch(ctx, event)
 		if err != nil {
+			if errors.Is(err, store.ErrIdempotencyConflict) {
+				return conflictError(err.Error(), "Reuse the original workflow and inputs or choose a new delivery ID.", parsed.Format)
+			}
 			return internalError(err)
 		}
 		payload := map[string]any{"ok": true, "trigger": result}
 		if result.Run.RunID != "" && result.Status == "queued" {
-			run, waitErr := runtime.WaitForRun(ctx, result.Run.RunID)
+			run, waitErr := queue.Drive(ctx, root, cwd, result.Run.RunID)
 			if waitErr != nil && ctx.Err() != context.Canceled {
 				return internalError(waitErr)
 			}
 			if run != nil {
 				payload["run_id"] = run.RunID
+				if job, err := store.LoadDispatch(root, run.RunID); err == nil {
+					payload["dispatch"] = job
+					payload["queued"] = job.Generation > job.Completed
+				}
 				payload["status"] = run.State.Status
 				if run.State.Status == "failed" {
 					_ = writeData(payload, parsed.Output())
@@ -173,7 +179,7 @@ func triggerCommand(args []string, root, cwd string) error {
 	case "serve":
 		ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer cancel()
-		err := trigger.Serve(ctx, root, cwd, trigger.ServeOptions{Host: parsed.Host, Port: parsed.Port, Workers: 1})
+		err := trigger.Serve(ctx, root, cwd, trigger.ServeOptions{Host: parsed.Host, Port: parsed.Port, Workers: parsed.workerConcurrency()})
 		if errors.Is(err, trigger.ErrServiceBusy) {
 			return conflictError(err.Error(), "Use the trigger service already running for this workspace.", parsed.Format)
 		}
@@ -331,6 +337,17 @@ func runCommand(args []string, root, cwd string) error {
 		return nil
 	}
 	switch verb {
+	case "enqueue":
+		parsed.Enqueue = true
+		return runStart(parsed, root, cwd)
+	case "worker":
+		return runWorker(parsed, root, cwd)
+	case "queue":
+		data, err := store.QueueSnapshot(root)
+		if err != nil {
+			return internalError(err)
+		}
+		return writeData(data, parsed.Output())
 	case "start":
 		return runStart(parsed, root, cwd)
 	case "list":
@@ -401,31 +418,34 @@ func runStart(parsed parsedArgs, root, cwd string) error {
 	if err := store.EnsureDir(root); err != nil {
 		return internalError(err)
 	}
-	if parsed.IdempotencyKey != "" {
-		existing, err := store.FindRunByIdempotency(root, workflow.Name, parsed.IdempotencyKey)
-		if err != nil {
+	if parsed.Enqueue || parsed.Async {
+		if err := store.EnableQueue(context.Background(), root); err != nil {
 			return internalError(err)
 		}
-		if existing != nil {
-			if !sameInputs(existing.State.Inputs, parsed.Inputs) || !reflect.DeepEqual(existing.Workflow, workflow) {
-				return conflictError(fmt.Sprintf("idempotency key already belongs to run %s with a different request", existing.RunID), "Reuse the original workflow and inputs or choose a new `--idempotency-key`.", parsed.Format)
-			}
-			payload := runPayload(existing)
-			payload["idempotent_reused"] = true
-			return writeData(payload, parsed.Output())
-		}
 	}
-	run, err := store.CreateRun(root, workflow, parsed.Inputs, parsed.IdempotencyKey)
+	created, err := store.CreateOrGetRun(context.Background(), root, store.CreateRequest{Workflow: workflow, Inputs: parsed.Inputs, IdempotencyKey: parsed.IdempotencyKey, Queued: true, ParentRunID: parsed.ParentRunID, ParentNodeID: parsed.ParentNodeID, Correlation: parsed.Correlation})
+	if errors.Is(err, store.ErrIdempotencyConflict) {
+		return conflictError(err.Error(), "Reuse the original workflow and inputs or choose a new `--idempotency-key`.", parsed.Format)
+	}
 	if err != nil {
 		return internalError(err)
 	}
-	if err := engine.Execute(run, executors); err != nil {
-		return internalError(err)
+	run := created.Run
+	if !parsed.Enqueue && !parsed.Async {
+		run, err = queue.Drive(context.Background(), root, cwd, run.RunID)
+		if err != nil {
+			return internalError(err)
+		}
 	}
-	if err := writeData(runPayload(run), parsed.Output()); err != nil {
+
+	payload := runPayload(run)
+	if !created.Created {
+		payload["idempotent_reused"] = true
+	}
+	if err := writeData(payload, parsed.Output()); err != nil {
 		return err
 	}
-	if run.State.Status == "failed" {
+	if run.State.Status == "failed" && !dispatchPending(run) {
 		return &CommandError{Code: ExitGeneralError, Kind: "workflow_failed", Message: "workflow failed", Suggestion: fmt.Sprintf("Inspect with `agentflow run get %s` and `agentflow run logs %s`.", run.RunID, run.RunID), Retryable: false, Format: parsed.Format, Silent: true}
 	}
 	return nil
@@ -438,10 +458,26 @@ func runList(parsed parsedArgs, root string) error {
 	}
 	summaries := make([]map[string]any, 0, len(runs))
 	for _, run := range runs {
+		if parsed.ParentRunID != "" && run.State.ParentRunID != parsed.ParentRunID {
+			continue
+		}
+		matches := true
+		for key, value := range parsed.Correlation {
+			if actual, ok := run.State.Correlation[key]; !ok || actual != value {
+				matches = false
+				break
+			}
+		}
+		if !matches {
+			continue
+		}
 		summary := map[string]any{"run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
 		if run.State.FinishedAt != "" {
 			summary["finished_at"] = run.State.FinishedAt
 		}
+		summary["parent_run_id"] = run.State.ParentRunID
+		summary["parent_node_id"] = run.State.ParentNodeID
+		summary["correlation"] = run.State.Correlation
 		summaries = append(summaries, summary)
 		if parsed.PageSize > 0 && len(summaries) >= parsed.PageSize && !parsed.PageAll {
 			break
@@ -499,7 +535,18 @@ func runGet(parsed parsedArgs, root string) error {
 	if err != nil {
 		return notFoundError("run", parsed.Positionals[0], parsed.Format)
 	}
-	return writeData(runPayload(run), parsed.Output())
+	payload := runPayload(run)
+	children, counts, err := store.Children(root, run.RunID)
+	if err != nil {
+		return internalError(err)
+	}
+	refs := []map[string]any{}
+	for _, child := range children {
+		refs = append(refs, map[string]any{"run_id": child.RunID, "status": child.State.Status, "parent_node_id": child.State.ParentNodeID, "correlation": child.State.Correlation})
+	}
+	payload["children"] = refs
+	payload["child_status_counts"] = counts
+	return writeData(payload, parsed.Output())
 }
 
 func runLogs(parsed parsedArgs, root string) error {
@@ -730,33 +777,34 @@ func enqueueAndExecute(run *model.Run, control model.Control, parsed parsedArgs,
 	if err := store.EnqueueControl(run.RunDir, control); err != nil {
 		return internalError(err)
 	}
+	root := filepath.Dir(filepath.Dir(run.RunDir))
+	if _, err := store.WakeRun(context.Background(), root, run.RunID, control.Kind); err != nil {
+		return internalError(err)
+	}
 	return executeRun(run, parsed, cwd, true)
 }
 
 func executeRun(run *model.Run, parsed parsedArgs, cwd string, queueOnBusy bool) error {
-	executors, err := driver.LoadExecutors(cwd)
+	root := filepath.Dir(filepath.Dir(run.RunDir))
+	if parsed.Async {
+		if err := store.EnableQueue(context.Background(), root); err != nil {
+			return internalError(err)
+		}
+	}
+	if !queueOnBusy {
+		if _, err := store.WakeRun(context.Background(), root, run.RunID, "resume"); err != nil {
+			return internalError(err)
+		}
+	}
+	run, err := queue.Drive(context.Background(), root, cwd, run.RunID)
 	if err != nil {
 		return internalError(err)
 	}
-	err = engine.Execute(run, executors)
-	if errors.Is(err, store.ErrRunBusy) {
-		if !queueOnBusy {
-			return conflictError(err.Error(), "Wait for the executing process to pause, or inspect it with `agentflow run get`.", parsed.Format)
-		}
-		if reloadErr := store.ReloadState(run); reloadErr != nil {
-			return internalError(reloadErr)
-		}
-		payload := runPayload(run)
-		payload["queued"] = true
-		return writeData(payload, parsed.Output())
-	}
-	if err != nil {
-		return internalError(err)
-	}
+
 	if err := writeData(runPayload(run), parsed.Output()); err != nil {
 		return err
 	}
-	if run.State.Status == "failed" {
+	if run.State.Status == "failed" && !dispatchPending(run) {
 		return &CommandError{Code: ExitGeneralError, Kind: "workflow_failed", Message: "workflow failed", Suggestion: fmt.Sprintf("Inspect with `agentflow run get %s`, then `agentflow run retry %s` after fixing the cause.", run.RunID, run.RunID), Format: parsed.Format, Silent: true}
 	}
 	return nil
@@ -970,7 +1018,7 @@ func assertValid(workflow model.Workflow, format string) error {
 }
 
 func parseArgs(args []string) (parsedArgs, error) {
-	parsed := parsedArgs{Inputs: map[string]string{}}
+	parsed := parsedArgs{Inputs: map[string]string{}, Correlation: map[string]string{}}
 	for index := 0; index < len(args); index++ {
 		arg := args[index]
 		if arg == "--" {
@@ -990,6 +1038,9 @@ func parseArgs(args []string) (parsedArgs, error) {
 			continue
 		}
 		switch arg {
+		case "--async":
+			parsed.Async = true
+			continue
 		case "--check-executors":
 			parsed.CheckExecutors = true
 			continue
@@ -1036,6 +1087,22 @@ func parseArgs(args []string) (parsedArgs, error) {
 				return parsed, usageError("--format must be json, table, or ndjson", "Use `--format json` for agents.", "invalid_format")
 			}
 			parsed.Format = value
+		case "--concurrency":
+			n, err := strconv.Atoi(value)
+			if err != nil || n < 1 {
+				return parsed, usageError("--concurrency must be positive", "Choose the maximum active run count.", "invalid_concurrency")
+			}
+			parsed.Concurrency = n
+		case "--parent":
+			parsed.ParentRunID = value
+		case "--parent-node":
+			parsed.ParentNodeID = value
+		case "--correlation":
+			name, v, ok := strings.Cut(value, "=")
+			if !ok || name == "" {
+				return parsed, usageError("--correlation must use key=value", "Repeat for multiple labels.", "invalid_correlation")
+			}
+			parsed.Correlation[name] = v
 		case "--input":
 			name, input, ok := strings.Cut(value, "=")
 			if !ok || name == "" {
@@ -1115,6 +1182,12 @@ func validIdempotencyKey(value string) bool {
 }
 
 type parsedArgs struct {
+	Enqueue           bool
+	Async             bool
+	Concurrency       int
+	ParentRunID       string
+	ParentNodeID      string
+	Correlation       map[string]string
 	Kind              string
 	ExecutorWorkspace string
 	CommandJSON       string
@@ -1145,6 +1218,13 @@ type parsedArgs struct {
 	Force             bool
 	ByVersion         bool
 	Help              bool
+}
+
+func (p parsedArgs) workerConcurrency() int {
+	if p.Concurrency == 0 {
+		return 1
+	}
+	return p.Concurrency
 }
 
 func (p parsedArgs) Output() OutputOptions { return OutputOptions{Format: p.Format} }
@@ -1228,6 +1308,10 @@ func stdoutTTY() bool {
 	return err == nil && info.Mode()&os.ModeCharDevice != 0
 }
 
+func dispatchPending(run *model.Run) bool {
+	job, err := store.LoadDispatch(filepath.Dir(filepath.Dir(run.RunDir)), run.RunID)
+	return err == nil && job.Generation > job.Completed
+}
 func runPayload(run *model.Run) map[string]any {
 	history := run.State.History
 	if history == nil {
@@ -1241,6 +1325,13 @@ func runPayload(run *model.Run) map[string]any {
 		activeNodes = []string{}
 	}
 	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "outcome": run.State.Outcome, "active_node": run.State.ActiveNode, "active_nodes": activeNodes, "visits": run.State.Visits, "history": history, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+	if job, err := store.LoadDispatch(filepath.Dir(filepath.Dir(run.RunDir)), run.RunID); err == nil {
+		payload["dispatch"] = job
+		payload["queued"] = job.Generation > job.Completed
+	}
+	payload["parent_run_id"] = run.State.ParentRunID
+	payload["parent_node_id"] = run.State.ParentNodeID
+	payload["correlation"] = run.State.Correlation
 	if run.State.StartedAt != "" {
 		payload["started_at"] = run.State.StartedAt
 	}
@@ -1262,24 +1353,15 @@ func runPayload(run *model.Run) map[string]any {
 	return payload
 }
 
-func sameInputs(left, right map[string]string) bool {
-	if len(left) != len(right) {
-		return false
-	}
-	for key, value := range left {
-		if right[key] != value {
-			return false
-		}
-	}
-	return true
-}
-
 func commandSchema() map[string]any {
 	flag := func(name, valueType, description string, required bool) map[string]any {
 		return map[string]any{"name": name, "type": valueType, "description": description, "required": required}
 	}
 	formatFlag := map[string]any{"name": "--format", "type": "enum", "enum": []string{"json", "table", "ndjson"}, "default": "json_when_piped_table_when_tty", "description": "Output format", "required": false}
 	commands := []map[string]any{
+		{"name": "run enqueue", "description": "Atomically persist a graph snapshot, inputs and queue request; return without executing. Requires run worker or trigger serve.", "arguments": []map[string]any{{"name": "workflow.json", "type": "path", "required": true}}, "flags": []map[string]any{flag("--input", "key=value", "Run inputs (repeatable)", false), flag("--idempotency-key", "string", "Immutable request identity", false), flag("--parent", "run-id", "Existing parent in this workspace", false), flag("--parent-node", "node-id", "Existing node in parent snapshot", false), flag("--correlation", "key=value", "Immutable opaque string labels (repeatable)", false), formatFlag}},
+		{"name": "run worker", "description": "Own and recover this workspace durable queue; concurrency counts active runs. Waiting input releases admission.", "flags": []map[string]any{flag("--concurrency", "integer", "Maximum active runs; default 1", false), formatFlag}},
+		{"name": "run queue", "description": "Inspect durable jobs, generations, owner heartbeat and queue counts.", "flags": []map[string]any{formatFlag}},
 		{"name": "workspace init", "description": "Create a standalone layout-v1 workspace with a runnable program; never overwrite files.", "arguments": []map[string]any{{"name": "directory", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview file creation", false), formatFlag}},
 		{"name": "workspace validate", "description": "Check graph, trigger targets and executor paths; discover workspace-local agent instructions, skills and tool configuration without executing them.", "flags": []map[string]any{flag("--workflow", "path", "Graph path; default workflow.json", false), flag("--input", "key=value", "Representative run input for resolving candidate paths; repeatable", false), formatFlag}},
 		{"name": "executor init", "description": "Create and register an owned Codex or Claude agent or a program in the layout-v1 directories.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|claude-code|command", "Scaffold kind", true), flag("--model", "string", "Optional agent model", false), flag("--dry-run", "boolean", "Preview creation", false), formatFlag}},
@@ -1313,7 +1395,7 @@ func commandSchema() map[string]any {
 
 func isRunVerb(value string) bool {
 	switch value {
-	case "start", "list", "latest", "get", "logs", "metrics", "stats", "evaluate", "compare", "submit", "resume", "retry", "cancel":
+	case "enqueue", "worker", "queue", "start", "list", "latest", "get", "logs", "metrics", "stats", "evaluate", "compare", "submit", "resume", "retry", "cancel":
 		return true
 	default:
 		return false
@@ -1412,8 +1494,11 @@ func printRunHelp() {
   agentflow run <verb> [arguments] [flags]
 
 Verbs:
-  start <workflow.json>   Execute a workflow
-  list                    List runs, newest first (--workflow, --status)
+  start <workflow.json>   Execute inline outside a managed queue; otherwise enqueue
+  enqueue <workflow.json> Persist a run and return immediately
+  worker --concurrency N Serve this workspace queue (one owner)
+  queue                   Inspect queue counts, jobs, owner and heartbeat
+  list                    List runs (--workflow, --status, --parent, --correlation)
   latest <workflow-name>  Get the newest run of a workflow (--status)
   get <run-id>            Get one run
   logs <run-id>           Read events
@@ -1431,7 +1516,10 @@ Verbs:
 Common flags:
   --format json|table|ndjson   Output format (default: JSON when piped)
   --dry-run                    Preview side effects
-  --idempotency-key UUID       Reuse an existing run safely (start only)
+  --idempotency-key UUID       Reuse an immutable creation request (start/enqueue)
+  --parent ID --parent-node ID Associate creation with a run/node in this workspace
+  --correlation key=value      Opaque immutable creation labels / list filter
+  --async                      Persist and return; opt into service admission
   --no-interactive             Never prompt
 
 Examples:

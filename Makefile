@@ -1,7 +1,7 @@
 APP        := agentflow
 CMD        := ./cmd/agentflow
 DIST       := dist
-VERSION    := v0.3.0
+VERSION    := v0.4.0
 COMMIT     := $(shell git rev-parse --short HEAD 2>/dev/null || echo none)
 BUILD_TIME := $(shell date -u '+%Y-%m-%dT%H:%M:%SZ')
 
@@ -35,6 +35,7 @@ test-e2e: build
 	./scripts/e2e-contract-smoke.sh
 	./scripts/e2e-execution-smoke.sh
 	./scripts/e2e-trigger-smoke.sh
+	AGENTFLOW_BIN="$(CURDIR)/bin/$(APP)" python3 scripts/test-durable-queue.py
 
 test-e2e-triggers: build
 	./scripts/e2e-trigger-smoke.sh

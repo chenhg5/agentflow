@@ -134,7 +134,7 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 			if mode != "new" {
 				return unavailable("configuration_failed", fmt.Sprintf("external executor %s does not support session mode %s", candidate.Executor, mode))
 			}
-			result.Bindings = append(result.Bindings, map[string]any{"workflow": path, "node": nodeID, "candidate": index, "executor": candidate.Executor})
+			result.Bindings = append(result.Bindings, map[string]any{"workflow": path, "node": nodeID, "candidate": index, "executor": candidate.Executor, "environment": driver.EnvironmentDescription(entry.Environment)})
 			return true, nil
 		}
 		var selectedIncoming *string
@@ -168,7 +168,7 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 			issue("warning", label, probe.inconclusiveMessage)
 			return true, nil
 		}
-		result.Bindings = append(result.Bindings, map[string]any{"workflow": path, "node": nodeID, "candidate": index, "executor": candidate.Executor, "workspace": probe.directory, "resolved_workspace": probe.resolvedDirectory})
+		result.Bindings = append(result.Bindings, map[string]any{"workflow": path, "node": nodeID, "candidate": index, "executor": candidate.Executor, "workspace": probe.directory, "resolved_workspace": probe.resolvedDirectory, "environment": driver.EnvironmentDescription(entry.Environment)})
 		return true, nil
 	}
 	seen := map[string]bool{}

@@ -372,8 +372,9 @@ func (t *nodeTask) runAttempt(state *model.NodeState, candidateIndex, candidateA
 		"type": "node.attempt.started", "nodeId": t.node.ID, "executor": candidate.Executor,
 		"candidate": candidateIndex, "candidateAttempt": candidateAttempt, "attempt": sequence,
 		"workspace": prepared.Workspace, "sessionId": prepared.SessionID, "sessionProtocol": attempt.SessionProtocol, "artifacts": attempt.Artifacts,
+		"environment": driver.EnvironmentDescription(prepared.Environment),
 	})
-	result := driver.RunCommand(prepared.Command, driver.CommandOptions{Dir: prepared.Workspace, Env: env, Stdin: prepared.Stdin, TimeoutMs: t.node.TimeoutMs})
+	result := driver.RunCommand(prepared.Command, driver.CommandOptions{Dir: prepared.Workspace, Env: env, Environment: prepared.Environment, Stdin: prepared.Stdin, TimeoutMs: t.node.TimeoutMs})
 	if err := store.WriteArtifact(t.workflowRun.RunDir, stdoutArtifact, []byte(result.Stdout)); err != nil {
 		return attempt, nil, err
 	}

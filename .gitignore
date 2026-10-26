@@ -4,6 +4,10 @@
 /trigger-deliveries/
 /scheduler.lock
 /trigger-dispatch.lock
+/queue.json
+/queue.lock
+/worker.lock
+/worker.json
 node_modules/
 /agentflow
 bin/

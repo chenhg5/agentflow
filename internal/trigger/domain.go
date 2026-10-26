@@ -82,6 +82,7 @@ type RunRef struct {
 
 type RunStarter interface {
 	Start(context.Context, StartRunCommand) (RunRef, error)
+	ValidateReplay(context.Context, StartRunCommand, RunRef) error
 }
 
 type DispatchResult struct {
