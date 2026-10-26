@@ -1,7 +1,7 @@
 ---
 name: agentflow
 metadata:
-  version: "3.7.0"
+  version: "3.8.0"
 description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与显式条件边组成的本地工作流。"
 ---
 
@@ -151,6 +151,10 @@ agentflow run resume <run-id> --format json
 用户要求飞书人工确认时，先定位同版本源码/完整发行包的 `examples/lark-review/SETUP.md`，按五步指引操作。仅安装二进制不保证附带该目录；找不到时获取匹配的源码/示例，不猜开发者机器路径。配套文件包含完整 workflow.json、executors.json、config.example.json、config.schema.json 和 lark_adapter.py。
 
 确认卡片内容、按钮任意 JSON 输出、机器人 profile 和同应用用户 open_id；同步调整输出契约与边。profile 与服务参数一致；executor 名称在注册表/节点/服务三处一致。用 --check-config 本地检查，再验证图和 dry-run；external 注册不会自动启动服务。保持单消费者，由用户真实点击验证自动推进，不自行 submit 伪装飞书成功。身份/权限参考 lark-shared，查人参考 lark-contact，发送与卡片遵循 lark-im。
+
+需要自由意见时，用 adapter config 的 form.fields（text/multiline，每项 maxLength 1–1000），actions[].formOutput 以新 output 键映射字段名；不得覆盖固定的审核对象或版本键，不用引擎模板引用尚未填写的值。requiredFormFields 按动作生效，合并后的真实输出才做 schema preflight。sections 展示报告链接和版本，固定 output 携带对应标识。可配只读/幂等 preSubmit argv hook；严格应用批准前仍需确定性业务 gate，不能用预检冒充原子业务操作。
+
+需要审核期限时，adapter config.deadline 使用 at（含时区）或 afterSeconds，加显式 timeout output。相对时间从外部候选 attempt 开始，deadline 和首次选择持久化，重启不延长。超时输出经普通边到结束/超时节点；没有默认批准，不用 run-wide cancel 误取消后续轮次。node.timeoutMs 不控制 external 等待。UI 区分已保存、引擎已接收及整个 run 已成功；模拟表单测试不能代替已授权的真人飞书输入/回调验收。
 
 ## 跨 run 资源额度
 

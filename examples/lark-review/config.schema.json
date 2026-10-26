@@ -107,9 +107,135 @@
             "type": "string",
             "minLength": 1,
             "pattern": "\\S"
+          },
+          "formOutput": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Map fresh top-level output keys to known form names. Must not overlap fixed output."
+          },
+          "requiredFormFields": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": {
+              "type": "string"
+            }
           }
         }
       }
+    },
+    "form": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "fields"
+      ],
+      "properties": {
+        "fields": {
+          "type": "array",
+          "maxItems": 8,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "name",
+              "type",
+              "label",
+              "maxLength"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^(?!af_)[A-Za-z][A-Za-z0-9_]{0,63}$"
+              },
+              "type": {
+                "enum": [
+                  "text",
+                  "multiline"
+                ]
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "pattern": "\\S"
+              },
+              "maxLength": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1000
+              }
+            }
+          }
+        }
+      }
+    },
+    "deadline": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "output"
+      ],
+      "properties": {
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "afterSeconds": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "output": {
+          "type": "object",
+          "description": "Explicit timeout output; no implicit choice. Must satisfy node outputSchema."
+        }
+      },
+      "oneOf": [
+        {
+          "required": [
+            "at"
+          ],
+          "not": {
+            "required": [
+              "afterSeconds"
+            ]
+          }
+        },
+        {
+          "required": [
+            "afterSeconds"
+          ],
+          "not": {
+            "required": [
+              "at"
+            ]
+          }
+        }
+      ]
+    },
+    "preSubmit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "command",
+        "timeoutSeconds"
+      ],
+      "properties": {
+        "command": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 60
+        }
+      },
+      "description": "Read-only/idempotent argv hook; immutable request envelope on stdin. Must emit JSON {ok:true}. Business freshness application should also be gated atomically downstream."
     }
   }
 }

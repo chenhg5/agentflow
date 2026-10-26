@@ -35,6 +35,7 @@ test-e2e: build
 	./scripts/e2e-contract-smoke.sh
 	./scripts/e2e-execution-smoke.sh
 	./scripts/e2e-trigger-smoke.sh
+	AGENTFLOW_BIN="$(CURDIR)/bin/$(APP)" python3 -m unittest discover -s examples/lark-review -v
 	AGENTFLOW_BIN="$(CURDIR)/bin/$(APP)" python3 scripts/test-durable-queue.py
 	AGENTFLOW_BIN="$(CURDIR)/bin/$(APP)" python3 scripts/test-resource-admission.py
 

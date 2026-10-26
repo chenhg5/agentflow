@@ -72,6 +72,11 @@ lark-cli contact +search-user --query '用户姓名' --profile my-bot --as user
 | actions[].color | 结果颜色：blue / green / orange / red / grey / default |
 | actions[].confirm | 点击前的确认文案，可选 |
 | actions[].confirmation | 工作流接收结果后的文案，可选；不能声称下游已经完成 |
+| form.fields | 带 name/type/label/maxLength 的 text 或 multiline 字段；Card 2.0 每项最多 1000 字 |
+| actions[].formOutput | 新 output 键 → 表单字段名；不能覆盖固定 output 键，不用模板表达式 |
+| actions[].requiredFormFields | 仅此动作要求非空的表单字段；空白、超长、未知字段会拒绝且保持等待 |
+| deadline | at 或 afterSeconds，加显式 timeout output；重启不延长，没有默认批准 |
+| preSubmit | command argv 和 timeoutSeconds；只读/幂等校验 hook，stdin 为持久化选择，stdout 必须是 {"ok":true} |
 
 config.schema.json 约束的是适配器配置，不能代替业务 outputSchema。
 config.example.json 是独立参考，**不会自动被 workflow 引用**：真正运行读的是 candidate.config。
@@ -102,7 +107,9 @@ agentflow run start workflow.json --input topic='一个小改进' --input review
 
 AgentFlow dry-run 成功退出码 10；适配器 --check-config 成功 0，错误 2。
 本地检查只验证配置字段和 profile，不检查联网权限、模板引用或业务 outputSchema。
-运行时每个按钮在发送前都会经过 run submit --dry-run --token ... 的输出契约验证。
+固定输出和超时输出在发送前经过 run submit --dry-run --token ... 验证；含表单映射的动作必须等真实填写后合并，再校验实际输出，不伪造占位意见。
+示例要求“需要调整”填写 comments；comments 会进入 review 输出，返工节点可以读取。审核一小时后提交 score=0 的显式超时输出，经普通边结束；这由 adapter 的持久化 deadline 实现，不能用 node.timeoutMs 替代。
+业务需要审核报告/版本时在 sections 展示，并放入固定 output。preSubmit 校验与业务系统的后续应用之间仍有竞争窗口；应用批准前要在确定性 gate 中按业务系统的并发控制再次核验。具体契约见 README。
 
 验收：draft 成功 → review waiting_input → 卡片送达 → **用户真实点击** → review 输出正确 → 下一节点自动执行 → 卡片结果更新。
 不能手工 submit 后声称飞书验证成功。无模型/网络可用隔离副本的替身验证，但必须明确范围。
@@ -118,6 +125,9 @@ AgentFlow dry-run 成功退出码 10；适配器 --check-config 成功 0，错�
 | 已记录但未继续 | journal 旁 run 日志；输出 schema；--token 支持 |
 | 已接收但没更新卡片 | 服务 card_error 日志、更新权限；服务会重试 |
 | 重启/搬迁 | 保留同一 journal；使用同一 workspace、profile、executor |
+| 表单不推进 | journal rejections 的 reason_code；检查必填、1000 字上限、未知键、合并后的 outputSchema |
+| 提交被拦截 | submit_error、preSubmit 输出和 run 状态；选择不会自动改成其他结果，检查后创建新请求 |
+| 到期但还没结束 | deadline_at、记录的 source=timeout、adapter 是否恢复运行、超时 output 是否满足 schema；卡片已接收不等于后续已完成 |
 
 默认 journal 在 executors/programs/lark/state.sqlite3。一份服务可处理工作区内多个图/节点。
 同机器人集中到一个服务；不同机器人服务必须指定不同 --state 文件，不能共享默认 journal。

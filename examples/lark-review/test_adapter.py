@@ -109,7 +109,7 @@ class Integration(unittest.TestCase):
         record['card_retry_after']=0
         self.adapter.journal.save(record)
         self.adapter.tick()
-        self.assertEqual(self.adapter.journal.records()[0]['painted'],'accepted')
+        self.assertEqual(json.loads(self.adapter.journal.records()[0]['painted'])[:2],['accepted','succeeded'])
         self.assertNotIn('"tag":"button"',encode(self.transport.patches[-1]))
         self.assertEqual(len(self.transport.sends),1)
 

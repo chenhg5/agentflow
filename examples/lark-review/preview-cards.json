@@ -16,7 +16,7 @@
       },
       "subtitle": {
         "tag": "plain_text",
-        "content": "AgentFlow · 每日改进提案"
+        "content": "AgentFlow · 带意见的人工确认"
       },
       "icon": {
         "tag": "standard_icon",
@@ -53,11 +53,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**改进提案**"
+                  "content": "**提案**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                  "content": "每次运行结束后，生成耗时、等待时间和质量评分对比卡。"
                 }
               ]
             }
@@ -77,106 +77,103 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**怎样算完成**"
+                  "content": "**审核对象**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                  "content": "Case case-1 · 版本 sha-one\n报告：https://example.org/case/case-1"
                 }
               ]
             }
           ]
         },
         {
-          "tag": "column_set",
-          "flex_mode": "none",
-          "horizontal_spacing": "8px",
-          "columns": [
+          "tag": "form",
+          "name": "af_form_preview_only",
+          "elements": [
             {
-              "tag": "column",
-              "width": "weighted",
-              "weight": 1,
-              "elements": [
+              "tag": "input",
+              "name": "comments",
+              "label": {
+                "tag": "plain_text",
+                "content": "补充意见（要求修改时必填）"
+              },
+              "input_type": "multiline_text",
+              "max_length": 1000,
+              "width": "fill",
+              "required": false
+            },
+            {
+              "tag": "column_set",
+              "flex_mode": "none",
+              "horizontal_spacing": "8px",
+              "columns": [
                 {
-                  "tag": "button",
-                  "text": {
-                    "tag": "plain_text",
-                    "content": "通过"
-                  },
-                  "type": "primary_filled",
-                  "width": "fill",
-                  "size": "medium",
-                  "behaviors": [
+                  "tag": "column",
+                  "width": "weighted",
+                  "weight": 1,
+                  "elements": [
                     {
-                      "type": "callback",
-                      "value": {
-                        "invocation": "preview-only",
-                        "actionIndex": 0
+                      "tag": "button",
+                      "text": {
+                        "tag": "plain_text",
+                        "content": "满意，继续"
+                      },
+                      "type": "primary_filled",
+                      "width": "fill",
+                      "size": "medium",
+                      "name": "af_preview_only_0",
+                      "form_action_type": "submit"
+                    }
+                  ]
+                },
+                {
+                  "tag": "column",
+                  "width": "weighted",
+                  "weight": 1,
+                  "elements": [
+                    {
+                      "tag": "button",
+                      "text": {
+                        "tag": "plain_text",
+                        "content": "需要调整"
+                      },
+                      "type": "default",
+                      "width": "fill",
+                      "size": "medium",
+                      "name": "af_preview_only_1",
+                      "form_action_type": "submit"
+                    }
+                  ]
+                },
+                {
+                  "tag": "column",
+                  "width": "weighted",
+                  "weight": 1,
+                  "elements": [
+                    {
+                      "tag": "button",
+                      "text": {
+                        "tag": "plain_text",
+                        "content": "结束本次"
+                      },
+                      "type": "danger",
+                      "width": "fill",
+                      "size": "medium",
+                      "name": "af_preview_only_2",
+                      "form_action_type": "submit",
+                      "confirm": {
+                        "title": {
+                          "tag": "plain_text",
+                          "content": "结束本次"
+                        },
+                        "text": {
+                          "tag": "plain_text",
+                          "content": "确定结束本次流程？"
+                        }
                       }
                     }
                   ]
-                }
-              ]
-            },
-            {
-              "tag": "column",
-              "width": "weighted",
-              "weight": 1,
-              "elements": [
-                {
-                  "tag": "button",
-                  "text": {
-                    "tag": "plain_text",
-                    "content": "要求修改"
-                  },
-                  "type": "default",
-                  "width": "fill",
-                  "size": "medium",
-                  "behaviors": [
-                    {
-                      "type": "callback",
-                      "value": {
-                        "invocation": "preview-only",
-                        "actionIndex": 1
-                      }
-                    }
-                  ]
-                }
-              ]
-            },
-            {
-              "tag": "column",
-              "width": "weighted",
-              "weight": 1,
-              "elements": [
-                {
-                  "tag": "button",
-                  "text": {
-                    "tag": "plain_text",
-                    "content": "结束本次"
-                  },
-                  "type": "danger",
-                  "width": "fill",
-                  "size": "medium",
-                  "behaviors": [
-                    {
-                      "type": "callback",
-                      "value": {
-                        "invocation": "preview-only",
-                        "actionIndex": 2
-                      }
-                    }
-                  ],
-                  "confirm": {
-                    "title": {
-                      "tag": "plain_text",
-                      "content": "结束本次"
-                    },
-                    "text": {
-                      "tag": "plain_text",
-                      "content": "结束这次提案流程？本次流程不会继续执行后续节点。"
-                    }
-                  }
                 }
               ]
             }
@@ -184,7 +181,7 @@
         },
         {
           "tag": "markdown",
-          "content": "<font color='grey'>通过后整理行动方案；要求修改后重新提案；结束后不再推进。</font>",
+          "content": "<font color='grey'>继续将整理行动方案；修改将重新起草；结束将关闭本次流程。 · 审核期限：2026-10-26T05:00:00+00:00</font>",
           "text_size": "notation"
         }
       ]
@@ -197,7 +194,7 @@
       "width_mode": "default",
       "enable_forward": false,
       "summary": {
-        "content": "[已记录] 这份提案，可以继续吗？"
+        "content": "[已保存] 这份提案，可以继续吗？"
       }
     },
     "header": {
@@ -207,7 +204,7 @@
       },
       "subtitle": {
         "tag": "plain_text",
-        "content": "AgentFlow · 每日改进提案"
+        "content": "AgentFlow · 带意见的人工确认"
       },
       "icon": {
         "tag": "standard_icon",
@@ -219,7 +216,7 @@
           "tag": "text_tag",
           "text": {
             "tag": "plain_text",
-            "content": "已记录"
+            "content": "已保存"
           },
           "color": "orange"
         }
@@ -244,11 +241,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**改进提案**"
+                  "content": "**提案**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                  "content": "每次运行结束后，生成耗时、等待时间和质量评分对比卡。"
                 }
               ]
             }
@@ -268,11 +265,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**怎样算完成**"
+                  "content": "**审核对象**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                  "content": "Case case-1 · 版本 sha-one\n报告：https://example.org/case/case-1"
                 }
               ]
             }
@@ -292,11 +289,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**已记录**"
+                  "content": "**已保存**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "已记录：通过。正在提交，暂时无需再次操作。"
+                  "content": "需要调整。选择已持久化，等待工作流接收。"
                 }
               ]
             }
@@ -304,20 +301,20 @@
         },
         {
           "tag": "markdown",
-          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "content": "<font color='grey'>记录时间：2026-10-26T04:10:00+00:00 · 审核期限：2026-10-26T05:00:00+00:00</font>",
           "text_size": "notation"
         }
       ]
     }
   },
-  "approved": {
+  "accepted": {
     "schema": "2.0",
     "config": {
       "update_multi": true,
       "width_mode": "default",
       "enable_forward": false,
       "summary": {
-        "content": "[已处理] 这份提案，可以继续吗？"
+        "content": "[已接收] 这份提案，可以继续吗？"
       }
     },
     "header": {
@@ -327,7 +324,127 @@
       },
       "subtitle": {
         "tag": "plain_text",
-        "content": "AgentFlow · 每日改进提案"
+        "content": "AgentFlow · 带意见的人工确认"
+      },
+      "icon": {
+        "tag": "standard_icon",
+        "token": "approval_colorful"
+      },
+      "template": "orange",
+      "text_tag_list": [
+        {
+          "tag": "text_tag",
+          "text": {
+            "tag": "plain_text",
+            "content": "已接收"
+          },
+          "color": "orange"
+        }
+      ]
+    },
+    "body": {
+      "direction": "vertical",
+      "padding": "12px",
+      "vertical_spacing": "12px",
+      "elements": [
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "grey-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**提案**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "每次运行结束后，生成耗时、等待时间和质量评分对比卡。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "default",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**审核对象**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "Case case-1 · 版本 sha-one\n报告：https://example.org/case/case-1"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "column_set",
+          "flex_mode": "none",
+          "columns": [
+            {
+              "tag": "column",
+              "width": "weighted",
+              "weight": 1,
+              "background_style": "orange-50",
+              "padding": "12px",
+              "vertical_spacing": "8px",
+              "elements": [
+                {
+                  "tag": "markdown",
+                  "content": "**已接收**"
+                },
+                {
+                  "tag": "markdown",
+                  "content": "结果已接收，将重新起草方案。"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "tag": "markdown",
+          "content": "<font color='grey'>记录时间：2026-10-26T04:10:00+00:00 · 审核期限：2026-10-26T05:00:00+00:00</font>",
+          "text_size": "notation"
+        }
+      ]
+    }
+  },
+  "completed": {
+    "schema": "2.0",
+    "config": {
+      "update_multi": true,
+      "width_mode": "default",
+      "enable_forward": false,
+      "summary": {
+        "content": "[后续已完成] 这份提案，可以继续吗？"
+      }
+    },
+    "header": {
+      "title": {
+        "tag": "plain_text",
+        "content": "这份提案，可以继续吗？"
+      },
+      "subtitle": {
+        "tag": "plain_text",
+        "content": "AgentFlow · 带意见的人工确认"
       },
       "icon": {
         "tag": "standard_icon",
@@ -339,7 +456,7 @@
           "tag": "text_tag",
           "text": {
             "tag": "plain_text",
-            "content": "已处理"
+            "content": "后续已完成"
           },
           "color": "green"
         }
@@ -364,11 +481,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**改进提案**"
+                  "content": "**提案**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                  "content": "每次运行结束后，生成耗时、等待时间和质量评分对比卡。"
                 }
               ]
             }
@@ -388,11 +505,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**怎样算完成**"
+                  "content": "**审核对象**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                  "content": "Case case-1 · 版本 sha-one\n报告：https://example.org/case/case-1"
                 }
               ]
             }
@@ -412,11 +529,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**已处理**"
+                  "content": "**后续已完成**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "已通过。工作流已接收结果，将继续整理行动方案。"
+                  "content": "本次选择已接收，且已观察到整个 run 成功结束。"
                 }
               ]
             }
@@ -424,20 +541,20 @@
         },
         {
           "tag": "markdown",
-          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "content": "<font color='grey'>记录时间：2026-10-26T04:10:00+00:00 · 审核期限：2026-10-26T05:00:00+00:00</font>",
           "text_size": "notation"
         }
       ]
     }
   },
-  "changes": {
+  "blocked": {
     "schema": "2.0",
     "config": {
       "update_multi": true,
       "width_mode": "default",
       "enable_forward": false,
       "summary": {
-        "content": "[已处理] 这份提案，可以继续吗？"
+        "content": "[提交被拦截] 这份提案，可以继续吗？"
       }
     },
     "header": {
@@ -447,127 +564,7 @@
       },
       "subtitle": {
         "tag": "plain_text",
-        "content": "AgentFlow · 每日改进提案"
-      },
-      "icon": {
-        "tag": "standard_icon",
-        "token": "approval_colorful"
-      },
-      "template": "orange",
-      "text_tag_list": [
-        {
-          "tag": "text_tag",
-          "text": {
-            "tag": "plain_text",
-            "content": "已处理"
-          },
-          "color": "orange"
-        }
-      ]
-    },
-    "body": {
-      "direction": "vertical",
-      "padding": "12px",
-      "vertical_spacing": "12px",
-      "elements": [
-        {
-          "tag": "column_set",
-          "flex_mode": "none",
-          "columns": [
-            {
-              "tag": "column",
-              "width": "weighted",
-              "weight": 1,
-              "background_style": "grey-50",
-              "padding": "12px",
-              "vertical_spacing": "8px",
-              "elements": [
-                {
-                  "tag": "markdown",
-                  "content": "**改进提案**"
-                },
-                {
-                  "tag": "markdown",
-                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "tag": "column_set",
-          "flex_mode": "none",
-          "columns": [
-            {
-              "tag": "column",
-              "width": "weighted",
-              "weight": 1,
-              "background_style": "default",
-              "padding": "12px",
-              "vertical_spacing": "8px",
-              "elements": [
-                {
-                  "tag": "markdown",
-                  "content": "**怎样算完成**"
-                },
-                {
-                  "tag": "markdown",
-                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "tag": "column_set",
-          "flex_mode": "none",
-          "columns": [
-            {
-              "tag": "column",
-              "width": "weighted",
-              "weight": 1,
-              "background_style": "orange-50",
-              "padding": "12px",
-              "vertical_spacing": "8px",
-              "elements": [
-                {
-                  "tag": "markdown",
-                  "content": "**已处理**"
-                },
-                {
-                  "tag": "markdown",
-                  "content": "已要求修改。工作流已接收结果，将按配置重新生成提案。"
-                }
-              ]
-            }
-          ]
-        },
-        {
-          "tag": "markdown",
-          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
-          "text_size": "notation"
-        }
-      ]
-    }
-  },
-  "rejected": {
-    "schema": "2.0",
-    "config": {
-      "update_multi": true,
-      "width_mode": "default",
-      "enable_forward": false,
-      "summary": {
-        "content": "[已处理] 这份提案，可以继续吗？"
-      }
-    },
-    "header": {
-      "title": {
-        "tag": "plain_text",
-        "content": "这份提案，可以继续吗？"
-      },
-      "subtitle": {
-        "tag": "plain_text",
-        "content": "AgentFlow · 每日改进提案"
+        "content": "AgentFlow · 带意见的人工确认"
       },
       "icon": {
         "tag": "standard_icon",
@@ -579,7 +576,7 @@
           "tag": "text_tag",
           "text": {
             "tag": "plain_text",
-            "content": "已处理"
+            "content": "提交被拦截"
           },
           "color": "red"
         }
@@ -604,11 +601,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**改进提案**"
+                  "content": "**提案**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                  "content": "每次运行结束后，生成耗时、等待时间和质量评分对比卡。"
                 }
               ]
             }
@@ -628,11 +625,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**怎样算完成**"
+                  "content": "**审核对象**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                  "content": "Case case-1 · 版本 sha-one\n报告：https://example.org/case/case-1"
                 }
               ]
             }
@@ -652,11 +649,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**已处理**"
+                  "content": "**提交被拦截**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "已结束。工作流已接收结果，将结束本次流程。"
+                  "content": "选择已保存，但当前校验未通过。请核对 adapter 记录和引擎接收状态；不会自动重新选择。"
                 }
               ]
             }
@@ -664,7 +661,7 @@
         },
         {
           "tag": "markdown",
-          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "content": "<font color='grey'>记录时间：2026-10-26T04:10:00+00:00 · 审核期限：2026-10-26T05:00:00+00:00</font>",
           "text_size": "notation"
         }
       ]
@@ -687,7 +684,7 @@
       },
       "subtitle": {
         "tag": "plain_text",
-        "content": "AgentFlow · 每日改进提案"
+        "content": "AgentFlow · 带意见的人工确认"
       },
       "icon": {
         "tag": "standard_icon",
@@ -724,11 +721,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**改进提案**"
+                  "content": "**提案**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "在每次流程结束后，自动生成一张运行对比卡：展示耗时、等待时间和质量评分，让团队一眼看出这次有哪些改进。"
+                  "content": "每次运行结束后，生成耗时、等待时间和质量评分对比卡。"
                 }
               ]
             }
@@ -748,11 +745,11 @@
               "elements": [
                 {
                   "tag": "markdown",
-                  "content": "**怎样算完成**"
+                  "content": "**审核对象**"
                 },
                 {
                   "tag": "markdown",
-                  "content": "运行同一案例两次，能看到两次的指标差异；缺少质量评分时明确显示「尚未评估」。"
+                  "content": "Case case-1 · 版本 sha-one\n报告：https://example.org/case/case-1"
                 }
               ]
             }
@@ -784,7 +781,7 @@
         },
         {
           "tag": "markdown",
-          "content": "<font color='grey'>记录时间：2026-10-25 15:32</font>",
+          "content": "<font color='grey'>记录时间：2026-10-26T04:00:00+00:00 · 审核期限：2026-10-26T05:00:00+00:00</font>",
           "text_size": "notation"
         }
       ]

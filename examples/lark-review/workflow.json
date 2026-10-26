@@ -76,7 +76,10 @@
                     "mood": "happy",
                     "score": 90
                   },
-                  "confirmation": "结果已接收，将继续整理行动方案。"
+                  "confirmation": "结果已接收，将继续整理行动方案。",
+                  "formOutput": {
+                    "comments": "comments"
+                  }
                 },
                 {
                   "label": "需要调整",
@@ -86,7 +89,13 @@
                     "mood": "sad",
                     "score": 40
                   },
-                  "confirmation": "结果已接收，将重新起草方案。"
+                  "confirmation": "结果已接收，将重新起草方案。",
+                  "formOutput": {
+                    "comments": "comments"
+                  },
+                  "requiredFormFields": [
+                    "comments"
+                  ]
                 },
                 {
                   "label": "结束本次",
@@ -97,9 +106,30 @@
                     "mood": "sad",
                     "score": 0
                   },
-                  "confirmation": "结果已接收，将结束本次流程。"
+                  "confirmation": "结果已接收，将结束本次流程。",
+                  "formOutput": {
+                    "comments": "comments"
+                  }
                 }
-              ]
+              ],
+              "form": {
+                "fields": [
+                  {
+                    "name": "comments",
+                    "type": "multiline",
+                    "label": "补充意见（要求修改时必填）",
+                    "maxLength": 1000
+                  }
+                ]
+              },
+              "deadline": {
+                "afterSeconds": 3600,
+                "output": {
+                  "mood": "sad",
+                  "score": 0,
+                  "comments": "审核期限已到，结束本次流程。"
+                }
+              }
             }
           }
         ]
@@ -126,7 +156,8 @@
         "type": "object",
         "required": [
           "mood",
-          "score"
+          "score",
+          "comments"
         ],
         "additionalProperties": false,
         "properties": {
@@ -135,6 +166,10 @@
           },
           "score": {
             "type": "number"
+          },
+          "comments": {
+            "type": "string",
+            "maxLength": 1000
           }
         }
       }
