@@ -2,6 +2,7 @@ package web
 
 import (
 	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -192,6 +193,11 @@ func dashboardView(root string) map[string]any {
 	view := map[string]any{"mode": "dashboard", "runs": runs}
 	if snapshot, err := store.QueueSnapshot(root); err == nil {
 		view["queue"] = snapshot
+		if resources, err := store.ResourceStatus(context.Background(), root); err == nil {
+			view["resources"] = resources
+		} else {
+			view["resources_error"] = err.Error()
+		}
 	} else {
 		view["queue_error"] = err.Error()
 	}

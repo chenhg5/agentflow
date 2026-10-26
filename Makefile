@@ -36,6 +36,7 @@ test-e2e: build
 	./scripts/e2e-execution-smoke.sh
 	./scripts/e2e-trigger-smoke.sh
 	AGENTFLOW_BIN="$(CURDIR)/bin/$(APP)" python3 scripts/test-durable-queue.py
+	AGENTFLOW_BIN="$(CURDIR)/bin/$(APP)" python3 scripts/test-resource-admission.py
 
 test-e2e-triggers: build
 	./scripts/e2e-trigger-smoke.sh
@@ -64,7 +65,7 @@ release-all: release-preflight clean check
 		echo "Building $(NAME)" && \
 		mkdir -p $(DIST)/$(NAME) && \
 		GOOS=$(GOOS) GOARCH=$(GOARCH) CGO_ENABLED=0 go build -trimpath -ldflags "$(LDFLAGS)" -o $(DIST)/$(NAME)/$(APP)$(EXT) $(CMD) && \
-		git archive HEAD README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json examples skills docs scripts benchmarks changelogs | tar -x -C $(DIST)/$(NAME) && \
+		git archive HEAD README.md INSTALL.md executors.example.json workflow.schema.json trigger.schema.json executors.schema.json resources.schema.json examples skills docs scripts benchmarks changelogs | tar -x -C $(DIST)/$(NAME) && \
 		$(if $(EXT),(cd $(DIST) && zip -Xqr $(NAME).zip $(NAME)),COPYFILE_DISABLE=1 tar -C $(DIST) -czf $(DIST)/$(NAME).tar.gz $(NAME)) && \
 		rm -rf $(DIST)/$(NAME) && \
 	) true

@@ -3,6 +3,8 @@
 /trigger-deliveries/
 /scheduler.lock
 /trigger-dispatch.lock
+/resource-state/
+/resources.lock
 /queue.json
 /queue.lock
 /worker.lock

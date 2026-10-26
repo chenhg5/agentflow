@@ -160,3 +160,7 @@ Follow the [five-step Lark adapter setup guide](examples/lark-review/SETUP.md) f
 ### Durable batch dispatch
 
 Use `run enqueue` to persist requests and `run worker --concurrency N` to execute them. Managed start/submit/retry/resume/cancel requests share admission. Parent/child links and opaque labels are creation metadata; CLI and Web expose child status counts and navigation. See [queue usage and recovery boundaries](docs/durable-queue.md).
+
+### Resource quotas
+
+Declare workspace capacities in `resources.json` and per-node `resources` requests to limit actual executor attempts across runs and parallel branches. Resource waits release run admission; abandoned claims remain quarantined until verified cleanup. See [resource contracts](docs/resources.md).

@@ -1,7 +1,9 @@
 package engine
 
 import (
+	stdctx "context"
 	"fmt"
+	"path/filepath"
 	"sort"
 	"strings"
 	"sync"
@@ -120,6 +122,15 @@ func executeParallelGraph(run *model.Run, executors map[string]driver.Executor) 
 		preparedPending := false
 		for _, id := range run.State.ActiveNodes {
 			state := run.State.Nodes[id]
+			if state.Status == "waiting_resource" {
+				ready, err := store.ResourcesReady(stdctx.Background(), filepath.Dir(filepath.Dir(run.RunDir)), state.ResourceWait)
+				if err != nil {
+					return err
+				}
+				if ready {
+					state.Status = "pending"
+				}
+			}
 			if state.Status != "pending" {
 				continue
 			}
@@ -193,8 +204,12 @@ func executeParallelGraph(run *model.Run, executors map[string]driver.Executor) 
 			continue
 		}
 		waiting := false
+		resourceWaiting := false
 		for _, id := range run.State.ActiveNodes {
-			if run.State.Nodes[id].Status == "waiting_input" {
+			if run.State.Nodes[id].Status == "waiting_resource" {
+				waiting = true
+				resourceWaiting = true
+			} else if run.State.Nodes[id].Status == "waiting_input" {
 				waiting = true
 			} else if run.State.Nodes[id].Status != "failed" {
 				return fmt.Errorf("active node %s has unexpected status %s", id, run.State.Nodes[id].Status)
@@ -202,6 +217,9 @@ func executeParallelGraph(run *model.Run, executors map[string]driver.Executor) 
 		}
 		if waiting {
 			run.State.Status = "waiting_input"
+			if resourceWaiting {
+				run.State.Status = "waiting_resource"
+			}
 			return store.SaveState(run)
 		}
 	}

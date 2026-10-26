@@ -79,6 +79,9 @@ func CreateOrGetRun(ctx context.Context, root string, request CreateRequest) (Cr
 		return CreateResult{}, err
 	}
 	defer release()
+	if err := ValidateResources(root, request.Workflow); err != nil {
+		return CreateResult{}, err
+	}
 	if err := validateParent(root, request); err != nil {
 		return CreateResult{}, err
 	}

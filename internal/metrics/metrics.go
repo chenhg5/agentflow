@@ -71,12 +71,13 @@ type Distribution struct {
 }
 
 type RunCounts struct {
-	Total        int `json:"total"`
-	Succeeded    int `json:"succeeded"`
-	Failed       int `json:"failed"`
-	WaitingInput int `json:"waiting_input"`
-	Running      int `json:"running"`
-	Cancelled    int `json:"cancelled"`
+	WaitingResource int `json:"waiting_resource"`
+	Total           int `json:"total"`
+	Succeeded       int `json:"succeeded"`
+	Failed          int `json:"failed"`
+	WaitingInput    int `json:"waiting_input"`
+	Running         int `json:"running"`
+	Cancelled       int `json:"cancelled"`
 }
 
 type NodeAggregate struct {
@@ -453,6 +454,8 @@ func Aggregate(runs []*model.Run, filter Filter, asOf time.Time) AggregateSnapsh
 			result.Runs.Succeeded++
 		case "failed":
 			result.Runs.Failed++
+		case "waiting_resource":
+			result.Runs.WaitingResource++
 		case "waiting_input":
 			result.Runs.WaitingInput++
 		case "running":

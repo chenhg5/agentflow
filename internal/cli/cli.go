@@ -76,6 +76,8 @@ func Run(args []string) error {
 		return executorCommand(args[1:], cwd)
 	case "workflow":
 		return workflowCommand(args[1:])
+	case "resource":
+		return resourceCommand(args[1:], root)
 	case "run":
 		return runCommand(args[1:], root, cwd)
 	case "schema":
@@ -345,6 +347,11 @@ func runCommand(args []string, root, cwd string) error {
 	case "queue":
 		data, err := store.QueueSnapshot(root)
 		if err != nil {
+			return internalError(err)
+		}
+		if resources, err := store.ResourceStatus(context.Background(), root); err == nil {
+			data["resources"] = resources
+		} else {
 			return internalError(err)
 		}
 		return writeData(data, parsed.Output())
@@ -946,7 +953,7 @@ func schemaCommand(args []string, cwd string) error {
 		return writeData(workspace.Contract(), parsed.Output())
 	case "--all", "all":
 		return writeData(commandSchema(), parsed.Output())
-	case "workflow", "trigger", "executors":
+	case "workflow", "trigger", "executors", "resources":
 		data, err := schemaassets.ReadSchema(target)
 		if err != nil {
 			return internalError(err)
@@ -1038,6 +1045,9 @@ func parseArgs(args []string) (parsedArgs, error) {
 			continue
 		}
 		switch arg {
+		case "--confirm-stopped":
+			parsed.ConfirmStopped = true
+			continue
 		case "--async":
 			parsed.Async = true
 			continue
@@ -1087,6 +1097,8 @@ func parseArgs(args []string) (parsedArgs, error) {
 				return parsed, usageError("--format must be json, table, or ndjson", "Use `--format json` for agents.", "invalid_format")
 			}
 			parsed.Format = value
+		case "--reason":
+			parsed.Reason = value
 		case "--concurrency":
 			n, err := strconv.Atoi(value)
 			if err != nil || n < 1 {
@@ -1182,6 +1194,8 @@ func validIdempotencyKey(value string) bool {
 }
 
 type parsedArgs struct {
+	ConfirmStopped    bool
+	Reason            string
 	Enqueue           bool
 	Async             bool
 	Concurrency       int
@@ -1359,8 +1373,10 @@ func commandSchema() map[string]any {
 	}
 	formatFlag := map[string]any{"name": "--format", "type": "enum", "enum": []string{"json", "table", "ndjson"}, "default": "json_when_piped_table_when_tty", "description": "Output format", "required": false}
 	commands := []map[string]any{
+		{"name": "resource list", "description": "Inspect workspace resource capacity, holders and orphaned claims.", "flags": []map[string]any{formatFlag}},
+		{"name": "resource resolve", "description": "Release an orphan only after its complete execution scope is stopped; rejects a live recorded process.", "arguments": []map[string]any{{"name": "claim-id", "type": "string", "required": true}}, "flags": []map[string]any{flag("--confirm-stopped", "boolean", "Acknowledge all relevant processes and descendants have stopped", true), flag("--reason", "string", "Observed cleanup evidence", true), formatFlag}},
 		{"name": "run enqueue", "description": "Atomically persist a graph snapshot, inputs and queue request; return without executing. Requires run worker or trigger serve.", "arguments": []map[string]any{{"name": "workflow.json", "type": "path", "required": true}}, "flags": []map[string]any{flag("--input", "key=value", "Run inputs (repeatable)", false), flag("--idempotency-key", "string", "Immutable request identity", false), flag("--parent", "run-id", "Existing parent in this workspace", false), flag("--parent-node", "node-id", "Existing node in parent snapshot", false), flag("--correlation", "key=value", "Immutable opaque string labels (repeatable)", false), formatFlag}},
-		{"name": "run worker", "description": "Own and recover this workspace durable queue; concurrency counts active runs. Waiting input releases admission.", "flags": []map[string]any{flag("--concurrency", "integer", "Maximum active runs; default 1", false), formatFlag}},
+		{"name": "run worker", "description": "Own and recover this workspace durable queue; concurrency counts active runs. Waiting input/resources releases admission.", "flags": []map[string]any{flag("--concurrency", "integer", "Maximum active runs; default 1", false), formatFlag}},
 		{"name": "run queue", "description": "Inspect durable jobs, generations, owner heartbeat and queue counts.", "flags": []map[string]any{formatFlag}},
 		{"name": "workspace init", "description": "Create a standalone layout-v1 workspace with a runnable program; never overwrite files.", "arguments": []map[string]any{{"name": "directory", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--dry-run", "boolean", "Preview file creation", false), formatFlag}},
 		{"name": "workspace validate", "description": "Check graph, trigger targets and executor paths; discover workspace-local agent instructions, skills and tool configuration without executing them.", "flags": []map[string]any{flag("--workflow", "path", "Graph path; default workflow.json", false), flag("--input", "key=value", "Representative run input for resolving candidate paths; repeatable", false), formatFlag}},
@@ -1416,6 +1432,8 @@ func printHelp(args []string) {
 		printExecutorHelp()
 	case "workflow":
 		printWorkflowHelp()
+	case "resource":
+		_ = resourceCommand(nil, "")
 	case "run":
 		printRunHelp()
 	case "schema":
@@ -1447,6 +1465,8 @@ Commands:
   executor init      Create an owned agent or program executor
   executor add       Register an existing executor directory
   workflow validate  Validate a workflow JSON definition
+  resource list      Inspect resource capacity, holders and orphaned claims
+  resource resolve   Release a verified stopped orphan
   run start          Start a workflow run
   run list           List runs
   run get            Get one run
@@ -1532,6 +1552,7 @@ func printSchemaHelp() {
   agentflow schema --all
   agentflow schema workflow
   agentflow schema trigger
+  agentflow schema resources
   agentflow schema executors
   agentflow schema workspace
   agentflow schema run start

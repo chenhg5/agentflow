@@ -67,6 +67,7 @@ type Status struct {
 }
 
 type CommandOptions struct {
+	OnStart     func(int) error
 	Environment *EnvironmentPolicy
 	Dir         string
 	Env         map[string]string
@@ -579,6 +580,15 @@ func RunCommand(command []string, options CommandOptions) CommandResult {
 		return CommandResult{Code: -1, Stdout: stdout.String(), Stderr: stderr.String(), Error: err.Error()}
 	}
 	result := CommandResult{Code: 0, Started: true}
+	if options.OnStart != nil {
+		if startErr := options.OnStart(cmd.Process.Pid); startErr != nil {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+			result.Code = -1
+			result.Error = "process registration failed: " + startErr.Error()
+			return result
+		}
+	}
 	err = cmd.Wait()
 	result.Stdout, result.Stderr = stdout.String(), stderr.String()
 	if ctx.Err() == context.DeadlineExceeded {

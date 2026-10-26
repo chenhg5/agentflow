@@ -145,6 +145,27 @@
           },
           "additionalProperties": false
         },
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "units"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "units": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        },
         "execution": {
           "type": "object",
           "required": ["candidates"],

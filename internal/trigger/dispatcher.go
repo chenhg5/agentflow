@@ -162,7 +162,7 @@ func (d *Dispatcher) hasActiveRun(triggerID string) (bool, error) {
 			continue
 		}
 		switch run.State.Status {
-		case "pending", "queued", "running", "waiting_input":
+		case "pending", "queued", "running", "waiting_input", "waiting_resource":
 			return true, nil
 		}
 	}

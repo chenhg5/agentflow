@@ -1,7 +1,7 @@
 ---
 name: agentflow
 metadata:
-  version: "3.6.0"
+  version: "3.7.0"
 description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与显式条件边组成的本地工作流。"
 ---
 
@@ -151,3 +151,11 @@ agentflow run resume <run-id> --format json
 用户要求飞书人工确认时，先定位同版本源码/完整发行包的 `examples/lark-review/SETUP.md`，按五步指引操作。仅安装二进制不保证附带该目录；找不到时获取匹配的源码/示例，不猜开发者机器路径。配套文件包含完整 workflow.json、executors.json、config.example.json、config.schema.json 和 lark_adapter.py。
 
 确认卡片内容、按钮任意 JSON 输出、机器人 profile 和同应用用户 open_id；同步调整输出契约与边。profile 与服务参数一致；executor 名称在注册表/节点/服务三处一致。用 --check-config 本地检查，再验证图和 dry-run；external 注册不会自动启动服务。保持单消费者，由用户真实点击验证自动推进，不自行 submit 伪装飞书成功。身份/权限参考 lark-shared，查人参考 lark-contact，发送与卡片遵循 lark-im。
+
+## 跨 run 资源额度
+
+涉及共享写入、固定 session 或全局 executor 上限时，在工作区 `resources.json` 统一声明 key 的 capacity，在需要启动进程的节点写 `resources: [{"key":"writer","units":1}]`。key 仅标识通用资源，图不理解仓库/审批含义；同路径或同 session 不会自动加锁。未知 key、重复 key、零/超额 units 会在创建/执行前拒绝。先查 `schema resources`。
+
+worker concurrency 限制活动 run，resources 限制实际占资源 attempt，二者独立；要限制全部进程，给所有对应节点声明同一 quota。多项资源原子申请；不足进入 waiting_resource，不消耗 attempt/retry/fallback。仅剩资源等待时会让出 run 名额；额度释放后 worker 自动唤醒。external 不占主动资源。fallback/retry 为新 attempt 重新申请，正常退出后释放；程序须在返回前结束自己派生的写入任务，不得后台脱离 claim 生命周期。
+
+`resource list`、`run queue` 可查额度、持有者和 orphaned claim。owner 消失不表示进程/后代已退出，额度不会按 TTL 被抢占。先确认整个遗留执行范围停止，再用 `resource resolve <claim> --confirm-stopped --reason <已观察到的清理证据>`；仍存活的已记录 PID 会被拒绝。PID 已退出也不能代替后代进程核对。首版只覆盖同机同 store，不能当作跨机器分布式锁。

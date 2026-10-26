@@ -160,6 +160,16 @@ func ClaimDispatch(ctx context.Context, root, owner string, active map[string]bo
 			job.Generation++
 			job.Reason = "recovered_control"
 		}
+		if job.Generation == job.Completed && job.Status == "waiting_resource" {
+			ready, err := ResourceRunReady(ctx, root, job.RunID)
+			if err != nil {
+				return nil, err
+			}
+			if ready {
+				job.Generation++
+				job.Reason = "resources_available"
+			}
+		}
 		if job.Generation <= job.Completed {
 			continue
 		}
@@ -236,13 +246,16 @@ func QueueSnapshot(root string) (map[string]any, error) {
 	if infoErr != nil && !os.IsNotExist(infoErr) {
 		return nil, infoErr
 	}
-	counts := map[string]int{"queued": 0, "active": 0, "waiting": 0, "terminal": 0}
+	counts := map[string]int{"queued": 0, "active": 0, "waiting": 0, "terminal": 0, "resource_waiting": 0}
 	for _, job := range jobs {
 		switch {
 		case job.Status == "running" && online && job.Owner == info.Owner:
 			counts["active"]++
 		case job.Generation > job.Completed:
 			counts["queued"]++
+		case job.Status == "waiting_resource":
+			counts["waiting"]++
+			counts["resource_waiting"]++
 		case job.Status == "waiting_input":
 			counts["waiting"]++
 		default:

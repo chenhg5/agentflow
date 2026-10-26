@@ -38,7 +38,7 @@ type Change struct {
 
 var namePattern = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$`)
 
-const Ignore = "/runs/\n/dispatch/\n/trigger-deliveries/\n/scheduler.lock\n/trigger-dispatch.lock\n/queue.json\n/queue.lock\n/worker.lock\n/worker.json\n/output/\n__pycache__/\n"
+const Ignore = "/runs/\n/dispatch/\n/trigger-deliveries/\n/scheduler.lock\n/trigger-dispatch.lock\n/resource-state/\n/resources.lock\n/queue.json\n/queue.lock\n/worker.lock\n/worker.json\n/output/\n__pycache__/\n"
 
 func Contract() map[string]any {
 	return map[string]any{

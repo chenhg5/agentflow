@@ -32,8 +32,14 @@ type Retry struct {
 	MaxAttempts int `json:"maxAttempts,omitempty"`
 }
 
+type ResourceRequest struct {
+	Key   string `json:"key"`
+	Units int    `json:"units"`
+}
+
 type Node struct {
-	ID string `json:"id"`
+	Resources []ResourceRequest `json:"resources,omitempty"`
+	ID        string            `json:"id"`
 	// Dispatch selects one matching outgoing edge by default, or all matching
 	// edges when set to "all".
 	Dispatch string `json:"dispatch,omitempty"`
@@ -95,6 +101,7 @@ type SessionSpec struct {
 }
 
 type NodeState struct {
+	ResourceWait            []ResourceRequest `json:"resourceWait,omitempty"`
 	Status                  string            `json:"status"`
 	IncomingNode            string            `json:"incomingNode,omitempty"`
 	IncomingSessionID       string            `json:"incomingSessionId,omitempty"`
@@ -143,6 +150,7 @@ type ExecutionFailure struct {
 // AttemptEvidence preserves every command attempt, including failed fallback
 // candidates, without turning those intermediate failures into graph nodes.
 type AttemptEvidence struct {
+	ResourceClaimID  string            `json:"resourceClaimId,omitempty"`
 	Sequence         int               `json:"sequence"`
 	Candidate        int               `json:"candidate"`
 	CandidateAttempt int               `json:"candidateAttempt"`

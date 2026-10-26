@@ -125,6 +125,7 @@
       .resize-handle:hover::before, .resize-handle.dragging::before, .resize-handle:focus-visible::before { background: var(--accent); opacity: 1; }
       .relations { display: block !important; overflow-wrap: anywhere; }
       .relations pre { white-space: pre-wrap; }
+      .status-waiting_resource { background: #a371f7; }
       .status-queued { background: #6e7681; }
       .summary { flex: 0 0 auto; border-bottom: 1px solid var(--border); background: var(--panel); padding: 12px 18px; display: flex; gap: 22px; flex-wrap: wrap; align-items: center; }
       .metric { min-width: 90px; }
@@ -219,9 +220,12 @@
         dataTab: "輸入 / 輸出", logsTab: "執行記錄", definitionTab: "節點定義", currentVisit: "最近一次", visit: "第 {value} 次", visitLabel: "節點執行次數", copy: "複製 JSON", copied: "已複製", copyFailed: "複製失敗", notStarted: "該節點尚未執行。", noInput: "沒有記錄到輸入。", outputPending: "執行中，尚未產生輸出。", noOutput: "沒有記錄到輸出。", noLogs: "暫無執行日誌。", emptyLog: "日誌為空", logTail: "顯示最後 64 KiB。", logsScope: "這裡顯示該節點本次執行器擷取的日誌，不包含完整 agent 對話。", detailFailed: "無法載入節點詳情，正在重試…", statusCancelled: "已取消"
       });
       Object.assign(messages.en, {parentRun: "Parent run", childRuns: "Child runs", queue: "Queue", active: "Active", queued: "Queued", waiting: "Waiting", terminal: "Terminal"});
-      Object.assign(messages["zh-CN"], {parentRun: "父运行", childRuns: "子运行", queue: "队列", active: "执行中", queued: "排队", waiting: "等待输入", terminal: "已结束"});
-      Object.assign(messages["zh-TW"], {parentRun: "父執行", childRuns: "子執行", queue: "佇列", active: "執行中", queued: "排隊", waiting: "等待輸入", terminal: "已結束"});
-      const statusMessageKeys = { queued: "queued", succeeded: "statusSucceeded", running: "statusRunning", waiting_input: "statusWaitingInput", failed: "statusFailed", skipped: "statusSkipped", pending: "statusPending", cancelled: "statusCancelled" };
+      Object.assign(messages["zh-CN"], {parentRun: "父运行", childRuns: "子运行", queue: "队列", active: "执行中", queued: "排队", waiting: "等待", terminal: "已结束"});
+      Object.assign(messages["zh-TW"], {parentRun: "父執行", childRuns: "子執行", queue: "佇列", active: "執行中", queued: "排隊", waiting: "等待", terminal: "已結束"});
+      Object.assign(messages.en, {resource_waiting: "Resource wait", statusWaitingResource: "Waiting for resources"});
+      Object.assign(messages["zh-CN"], {resource_waiting: "资源等待", statusWaitingResource: "等待资源"});
+      Object.assign(messages["zh-TW"], {resource_waiting: "資源等待", statusWaitingResource: "等待資源"});
+      const statusMessageKeys = { waiting_resource: "statusWaitingResource", queued: "queued", succeeded: "statusSucceeded", running: "statusRunning", waiting_input: "statusWaitingInput", failed: "statusFailed", skipped: "statusSkipped", pending: "statusPending", cancelled: "statusCancelled" };
       const themePalettes = {
         dark: { grid: "#26313d", edge: "#52606d", condition: "#d29922", label: "#79c0ff", labelBackground: "#161b22" },
         light: { grid: "#d8e0e9", edge: "#718096", condition: "#a15c00", label: "#185b91", labelBackground: "#ffffff" },
@@ -413,7 +417,7 @@
         const input = detail?.input || recorded("input");
         const output = detail?.output || recorded("result");
         const pending = !runtime || runtime.status === "pending" || runtime.status === "skipped";
-        const waiting = runtime?.status === "running" || runtime?.status === "waiting_input";
+        const waiting = runtime?.status === "running" || runtime?.status === "waiting_input" || runtime?.status === "waiting_resource";
         const edges = (description?.edges || []).filter((edge) => edge.source === nodeID || edge.target === nodeID);
         const candidates = definition.execution?.candidates;
         const executorLabel = runtime?.selectedExecutor || candidates?.map((candidate) => candidate.executor).join(" → ") || "";

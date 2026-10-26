@@ -13,6 +13,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/model"
 	"github.com/chenhg5/agentflow/internal/policy"
 	"github.com/chenhg5/agentflow/internal/schema"
+	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/template"
 	"github.com/chenhg5/agentflow/internal/trigger"
 )
@@ -195,6 +196,9 @@ func ValidateWithInputs(root, workflowPath string, inputs map[string]string) Val
 		if err := decoder.Decode(&flow); err != nil {
 			issue("error", path, err.Error())
 			continue
+		}
+		if err := store.ValidateResources(root, flow); err != nil {
+			issue("error", path, err.Error())
 		}
 		for _, problem := range schema.Validate(flow) {
 			issue("error", path, problem)

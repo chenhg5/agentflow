@@ -2,7 +2,9 @@ package engine
 
 import (
 	"bytes"
+	stdctx "context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -130,6 +132,9 @@ func (t *nodeTask) run() (model.NodeState, error) {
 		advanced := false
 		for candidateAttempt <= maxAttempts {
 			attempt, failure, err := t.runAttempt(&state, candidateIndex, candidateAttempt, candidate)
+			if errors.Is(err, store.ErrResourceUnavailable) {
+				return state, nil
+			}
 			if err != nil {
 				return state, err
 			}
@@ -200,13 +205,47 @@ func failureMessage(failure *model.ExecutionFailure, fallback string) string {
 	return fallback
 }
 
-func (t *nodeTask) runAttempt(state *model.NodeState, candidateIndex, candidateAttempt int, candidate model.ExecutorCandidate) (model.AttemptEvidence, *model.ExecutionFailure, error) {
+func (t *nodeTask) runAttempt(state *model.NodeState, candidateIndex, candidateAttempt int, candidate model.ExecutorCandidate) (out model.AttemptEvidence, outFailure *model.ExecutionFailure, runErr error) {
 	sequence := t.sequenceBase + len(state.AttemptSequence) + 1
+	token := store.NewToken()
+	var reservation *store.Reservation
+	executorDef := t.executors[candidate.Executor]
+	if executorDef.Kind != "external" && len(t.node.Resources) > 0 {
+		root := filepath.Dir(filepath.Dir(t.workflowRun.RunDir))
+		var err error
+		reservation, err = store.AcquireResources(stdctx.Background(), root, store.ResourceClaim{RunID: t.workflowRun.RunID, NodeID: t.node.ID, Attempt: sequence, Token: token, Requests: t.node.Resources})
+		if errors.Is(err, store.ErrResourceUnavailable) {
+			state.Status = "waiting_resource"
+			state.Reason = "resource_capacity"
+			state.ResourceWait = t.node.Resources
+			state.Error = ""
+			state.Failure = nil
+			state.Continuation = &model.NodeContinuation{Kind: continuationResume, Candidate: candidateIndex, CandidateAttempt: candidateAttempt, At: time.Now().UTC().Format(time.RFC3339Nano)}
+			if persistErr := t.persistState(*state); persistErr != nil {
+				return out, nil, persistErr
+			}
+			_ = store.AppendEvent(t.workflowRun.RunDir, map[string]any{"type": "node.waiting_resource", "nodeId": t.node.ID, "requests": t.node.Resources, "candidate": candidateIndex, "candidateAttempt": candidateAttempt})
+			return out, nil, err
+		}
+		if err != nil {
+			return out, nil, err
+		}
+		defer func() {
+			if err := reservation.Release(); runErr == nil {
+				runErr = err
+			}
+		}()
+	}
+	state.ResourceWait = nil
+	state.Reason = ""
 	now := time.Now().UTC()
 	attempt := model.AttemptEvidence{
 		Sequence: sequence, Candidate: candidateIndex, CandidateAttempt: candidateAttempt,
 		Executor: candidate.Executor, Status: "running", StartedAt: now.Format(time.RFC3339Nano),
 		Artifacts: map[string]string{},
+	}
+	if reservation != nil {
+		attempt.ResourceClaimID = reservation.Claim.ID
 	}
 	selected := candidateIndex
 	state.SelectedCandidate = &selected
@@ -219,7 +258,7 @@ func (t *nodeTask) runAttempt(state *model.NodeState, candidateIndex, candidateA
 	// captured AGENTFLOW_NODE_TOKEN must not be able to submit output for a
 	// later fallback or retry that reuses the same node; the new token is part
 	// of the same durable checkpoint that installs the attempt.
-	state.LeaseToken = store.NewToken()
+	state.LeaseToken = token
 	// Consume the previous continuation in the same durable write that
 	// installs this running attempt. Until that write lands, recovery sees the
 	// earlier completed attempt and resumes its recorded continuation.
@@ -374,7 +413,12 @@ func (t *nodeTask) runAttempt(state *model.NodeState, candidateIndex, candidateA
 		"workspace": prepared.Workspace, "sessionId": prepared.SessionID, "sessionProtocol": attempt.SessionProtocol, "artifacts": attempt.Artifacts,
 		"environment": driver.EnvironmentDescription(prepared.Environment),
 	})
-	result := driver.RunCommand(prepared.Command, driver.CommandOptions{Dir: prepared.Workspace, Env: env, Environment: prepared.Environment, Stdin: prepared.Stdin, TimeoutMs: t.node.TimeoutMs})
+	var onStart func(int) error
+	if reservation != nil {
+		env["AGENTFLOW_RESOURCE_CLAIM"] = reservation.Claim.ID
+		onStart = reservation.Started
+	}
+	result := driver.RunCommand(prepared.Command, driver.CommandOptions{OnStart: onStart, Dir: prepared.Workspace, Env: env, Environment: prepared.Environment, Stdin: prepared.Stdin, TimeoutMs: t.node.TimeoutMs})
 	if err := store.WriteArtifact(t.workflowRun.RunDir, stdoutArtifact, []byte(result.Stdout)); err != nil {
 		return attempt, nil, err
 	}

@@ -1,8 +1,10 @@
 package engine
 
 import (
+	stdctx "context"
 	"errors"
 	"fmt"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -20,6 +22,9 @@ import (
 func Execute(run *model.Run, executors map[string]driver.Executor) error {
 	if run.Workflow.Version != "3" {
 		return fmt.Errorf("only version 3 edge workflows can execute")
+	}
+	if err := store.ValidateResources(filepath.Dir(filepath.Dir(run.RunDir)), run.Workflow); err != nil {
+		return err
 	}
 	executors = resolveExecutors(executors)
 	if err := validateExecutorRegistrations(run.Workflow, executors); err != nil {
@@ -271,6 +276,17 @@ func executeGraph(run *model.Run, executors map[string]driver.Executor) error {
 		state := run.State.Nodes[id]
 		if state == nil {
 			return fmt.Errorf("active node %s is missing", id)
+		}
+		if state.Status == "waiting_resource" {
+			ready, err := store.ResourcesReady(stdctx.Background(), filepath.Dir(filepath.Dir(run.RunDir)), state.ResourceWait)
+			if err != nil {
+				return err
+			}
+			if !ready {
+				run.State.Status = "waiting_resource"
+				return store.SaveState(run)
+			}
+			state.Status = "pending"
 		}
 		if state.Status == "waiting_input" {
 			run.State.Status = "waiting_input"

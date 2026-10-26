@@ -33,6 +33,13 @@ func Validate(workflow model.Workflow) []string {
 		if len(node.Execution.Candidates) == 0 {
 			errors = append(errors, fmt.Sprintf("node %s execution.candidates must be non-empty", node.ID))
 		}
+		seenResources := map[string]bool{}
+		for _, request := range node.Resources {
+			if strings.TrimSpace(request.Key) == "" || request.Units < 1 || seenResources[request.Key] {
+				errors = append(errors, fmt.Sprintf("node %s has invalid or duplicate resource request", node.ID))
+			}
+			seenResources[request.Key] = true
+		}
 		seenExecutors := map[string]bool{}
 		for index, candidate := range node.Execution.Candidates {
 			label := fmt.Sprintf("node %s candidate %d", node.ID, index+1)

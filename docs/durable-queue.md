@@ -47,9 +47,8 @@ agentflow run get <run> --format json
 ```
 
 Concurrency limits **active runs**, not individual executor processes. A run
-with `dispatch: all` can launch several executors within its slot. Cross-run
-executor quotas, repository locks and session resource claims require a separate
-resource admission feature. A run releases its slot when only external input is
+with `dispatch: all` can launch several executors within its slot. Explicit [workspace resource requests](resources.md) provide cross-run
+executor quotas and generic locks independently of this active-run limit. A run releases its slot when only external input is
 pending. A run with both executing and waiting nodes still occupies a slot.
 
 ## Persistence and recovery
