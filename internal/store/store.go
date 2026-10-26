@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -167,11 +168,16 @@ func writeJSON(file string, value any) error {
 	if err := os.WriteFile(temporary, append(data, '\n'), 0o644); err != nil {
 		return err
 	}
-	return os.Rename(temporary, file)
+	return replaceStoreFile(temporary, file)
 }
 
 func readJSON(file string, value any) error {
-	data, err := os.ReadFile(file)
+	handle, err := openStoreFile(file)
+	if err != nil {
+		return err
+	}
+	defer handle.Close()
+	data, err := io.ReadAll(handle)
 	if err != nil {
 		return err
 	}

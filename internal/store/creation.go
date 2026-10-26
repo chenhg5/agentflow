@@ -351,7 +351,7 @@ func writeCreationBytes(path string, data []byte) error {
 	if closeErr != nil {
 		return closeErr
 	}
-	if err := os.Rename(name, path); err != nil {
+	if err := replaceStoreFile(name, path); err != nil {
 		return err
 	}
 	return syncCreationDirectory(filepath.Dir(path))

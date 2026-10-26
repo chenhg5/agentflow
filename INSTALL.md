@@ -2,7 +2,7 @@
 
 AgentFlow is a local binary. Each workflow defines explicit edges and references named executors. Programs can be written in any language and communicate through JSON files.
 
-Use v0.4.0 or newer for the durable queue, run relationships and executor environment policies described here. Build the current checkout when testing unreleased changes.
+Use v0.4.1 or newer for the durable queue, run relationships and executor environment policies described here. Build the current checkout when testing unreleased changes.
 
 ```bash
 make build
