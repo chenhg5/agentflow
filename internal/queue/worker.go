@@ -100,8 +100,7 @@ func (w *Worker) loop(ctx context.Context) {
 	owner := w.Owner
 	active := map[string]bool{}
 	finished := make(chan string, w.Concurrency)
-	ticker := time.NewTicker(25 * time.Millisecond)
-	defer ticker.Stop()
+	poll := minPoll
 	stopping := false
 	lastHeartbeat := time.Time{}
 	for {
@@ -132,6 +131,7 @@ func (w *Worker) loop(ctx context.Context) {
 					break
 				}
 				active[claim.RunID] = true
+				poll = minPoll
 				go func(job store.DispatchJob) { w.execute(job); finished <- job.RunID }(*claim)
 			}
 		}
@@ -148,9 +148,32 @@ func (w *Worker) loop(ctx context.Context) {
 			stopping = true
 		case id := <-finished:
 			delete(active, id)
-		case <-ticker.C:
+			poll = minPoll
+		case <-time.After(poll):
+			poll = nextPoll(poll)
 		}
 	}
+}
+
+// Every poll takes the queue lock and reads every dispatch record and run
+// directory, so its cost grows with the workspace. A fixed 25 ms tick made an
+// idle service with a few hundred runs burn a CPU core's worth of reads (the
+// release workspace on 2026-11, ~880 runs). Idle polls now back off to maxPoll;
+// a claim or a finished job drops straight back to minPoll, so busy queues keep
+// their latency and an idle one notices new work within maxPoll.
+const (
+	minPoll = 25 * time.Millisecond
+	maxPoll = time.Second
+)
+
+func nextPoll(current time.Duration) time.Duration {
+	if current < minPoll {
+		return minPoll
+	}
+	if next := current * 2; next < maxPoll {
+		return next
+	}
+	return maxPoll
 }
 
 func (w *Worker) execute(claim store.DispatchJob) {
