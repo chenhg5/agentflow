@@ -151,3 +151,21 @@ func TestWaitingSynchronousCallerAdoptsManagedMode(t *testing.T) {
 		t.Fatal("caller ignored managed-mode transition")
 	}
 }
+
+func TestIdlePollBacksOffAndCaps(t *testing.T) {
+	poll := minPoll
+	steps := 0
+	for poll < maxPoll {
+		poll = nextPoll(poll)
+		steps++
+		if steps > 10 {
+			t.Fatalf("poll never reached the cap: %v", poll)
+		}
+	}
+	if poll != maxPoll || nextPoll(poll) != maxPoll {
+		t.Fatalf("poll should stay at %v, got %v then %v", maxPoll, poll, nextPoll(poll))
+	}
+	if nextPoll(0) != minPoll {
+		t.Fatalf("a zero interval must start at %v", minPoll)
+	}
+}
