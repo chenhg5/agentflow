@@ -59,11 +59,14 @@ def state(run):
 
 
 def stable(run, status):
-    try:
-        job = json.loads((ROOT / "dispatch" / (run + ".json")).read_text())
+    # Finished jobs move to dispatch/settled/ (see docs/durable-queue.md).
+    for path in (ROOT / "dispatch" / (run + ".json"), ROOT / "dispatch" / "settled" / (run + ".json")):
+        try:
+            job = json.loads(path.read_text())
+        except FileNotFoundError:
+            continue
         return state(run)["status"] == status and job["generation"] == job["completed"] and not job.get("owner")
-    except FileNotFoundError:
-        return False
+    return False
 
 
 def snapshot():

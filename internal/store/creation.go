@@ -284,10 +284,12 @@ func recoverCreationDispatch(root, runDir, runID string) error {
 	}
 	defer release()
 	path := filepath.Join(root, "dispatch", runID+".json")
-	if _, err := os.Stat(path); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
+	for _, existing := range []string{path, settledDispatchPath(root, runID)} {
+		if _, err := os.Stat(existing); err == nil {
+			return nil // already queued, or finished and settled: never queue it again
+		} else if !os.IsNotExist(err) {
+			return err
+		}
 	}
 	var job DispatchJob
 	if err := readJSON(filepath.Join(runDir, "dispatch.json"), &job); err != nil {

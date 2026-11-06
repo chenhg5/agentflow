@@ -263,3 +263,28 @@ func TestDeliveryStatusViewReadsTheRunsCurrentStatus(t *testing.T) {
 		t.Fatalf("receipt changed on disk: %+v, %v", receipt, err)
 	}
 }
+
+func TestADamagedRunOfAnotherWorkflowDoesNotBlockDispatch(t *testing.T) {
+	root := t.TempDir()
+	flow := `{"version":"3","name":"target","entry":"wait","nodes":[{"id":"wait","execution":{"candidates":[{"executor":"external"}]}}],"edges":[{"from":"wait","to":"$end"}]}`
+	if err := os.WriteFile(filepath.Join(root, "workflow.json"), []byte(flow), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// another workflow's run whose snapshot is damaged: its state says it is
+	// not this workflow, so neither the idempotency check nor the active-run
+	// check needs the rest of it
+	broken := filepath.Join(root, "runs", "run_20260101000000_broken")
+	os.MkdirAll(broken, 0o755)
+	os.WriteFile(filepath.Join(broken, "state.json"), []byte(`{"runId":"run_20260101000000_broken","workflowName":"other","idempotency_key":"k","status":"succeeded"}`), 0o644)
+	os.WriteFile(filepath.Join(broken, "workflow.json"), []byte("{not json"), 0o644)
+	runtime, err := NewRuntime(root, root, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	dispatcher := &Dispatcher{Root: root, Starter: runtime, Config: Config{Triggers: []Definition{
+		{ID: "hook", Enabled: true, Source: SourceConfig{Kind: "webhook"}, Target: TargetConfig{Workflow: "workflow.json"}}}}}
+	result, err := dispatcher.Dispatch(context.Background(), Event{TriggerID: "hook", SourceKind: "webhook", DeliveryID: "d1", ReceivedAt: time.Now().UTC()})
+	if err != nil || result.Status != "queued" {
+		t.Fatalf("a damaged run of another workflow must not block dispatch: %+v, %v", result, err)
+	}
+}

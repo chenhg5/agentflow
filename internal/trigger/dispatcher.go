@@ -266,29 +266,37 @@ func DeliveryStatusView(root string) ([]DeliveryView, error) {
 	return views, nil
 }
 
+// hasActiveRun reports whether triggerID has a delivery still being created
+// or a run not finished. Every run a trigger starts goes through a delivery
+// receipt, so only the runs those receipts name are read, and only their
+// status: reading every run in the workspace made each dispatch slower as
+// history grew.
 func (d *Dispatcher) hasActiveRun(triggerID string) (bool, error) {
 	receipts, err := DeliveryStatus(d.Root)
 	if err != nil {
 		return false, err
 	}
 	for _, receipt := range receipts {
-		if receipt.TriggerID == triggerID && receipt.Status == "pending" {
+		if receipt.TriggerID != triggerID {
+			continue
+		}
+		if receipt.Status == "pending" {
 			return true, nil
 		}
-	}
-	ids, err := store.RunIDs(d.Root)
-	if err != nil {
-		return false, err
-	}
-	for _, id := range ids {
-		run, err := store.LoadRun(d.Root, id)
+		if receipt.Run.RunID == "" || store.DispatchSettled(d.Root, receipt.Run.RunID) {
+			continue // no run, or its queue job settled: finished
+		}
+		run, err := store.LoadRunSummary(d.Root, receipt.Run.RunID)
+		if errors.Is(err, os.ErrNotExist) {
+			continue // the run was deleted: nothing of it is active
+		}
 		if err != nil {
 			return false, err
 		}
-		if run.State.Trigger == nil || run.State.Trigger.ID != triggerID {
+		if run.Trigger != nil && run.Trigger.ID != triggerID {
 			continue
 		}
-		switch run.State.Status {
+		switch run.Status {
 		case "pending", "queued", "running", "waiting_input", "waiting_resource":
 			return true, nil
 		}

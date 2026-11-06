@@ -26,3 +26,6 @@ dist/
 
 __pycache__/
 benchmarks/workflow-authoring/results/
+
+# go test binaries (e.g. from -cpuprofile)
+*.test

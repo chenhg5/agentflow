@@ -78,7 +78,9 @@ def wait(test, name, phase="", limit=30):
 
 def stable(rid, status):
     s = state(rid)
-    job = json.loads((ROOT / "dispatch" / (rid + ".json")).read_text())
+    # Finished jobs move to dispatch/settled/ (see docs/durable-queue.md).
+    live, settled = ROOT / "dispatch" / (rid + ".json"), ROOT / "dispatch" / "settled" / (rid + ".json")
+    job = json.loads((live if live.exists() else settled).read_text())
     return s["status"] == status and job["generation"] == job["completed"] and not job.get("owner")
 
 
