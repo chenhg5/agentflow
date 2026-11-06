@@ -143,12 +143,14 @@ SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo
 
 ## 7. 读接口
 
+网页上 workflow 显示的是它的 `title`（没写就显示 `name`），Workflow 页按 `group` 分组、可以点标签筛选，运行列表能按分组和标签筛。这些字段写在 workflow 文件顶部，随每次上报带过来，所以改完下一次运行就会更新。
+
 | 路径 | 说明 |
 | --- | --- |
 | `GET /api/v1/overview?days=14` | 总数、成功率、每天的运行、等人处理、最近失败、各 workflow 统计、机器数 |
-| `GET /api/v1/runs?workflow=&machine=&project=&run=&status=a,b&since=&until=&limit=&offset=` | 运行列表，新的在前，带 `total`；`run=` 按运行 id 找（不知道在哪台机器时用） |
+| `GET /api/v1/runs?workflow=&machine=&project=&run=&status=a,b&since=&until=&limit=&offset=` | 运行列表，新的在前，带 `total`；`run=` 按运行 id 找（不知道在哪台机器时用）；`tag=`（可重复，要全部带上）和 `group=` 按 workflow 的标签、分组筛 |
 | `GET /api/v1/runs/{machine}/{runId}` | 运行页上的全部：步骤（耗时、错误、summary/reason、日志尾、结果预览、产物）、`graph`（节点、边、`output_schema`）、`machine_info`（版本、`capabilities`）、`waiting_inputs`（等输入的步骤、`hub_can_submit`、`output_schema`）、`commands`（发给它的提交和结果） |
-| `GET /api/v1/workflows?days=30` | 各 workflow 的次数、成功率、P50/P95、最近结果 |
+| `GET /api/v1/workflows?days=30&tag=&group=` | 各 workflow 的显示名、描述、标签、分组、次数、成功率、P50/P95、最近结果；另给出这段时间所有的 `tags`（带数量）和 `groups` |
 | `GET /api/v1/machines` | 上报过的机器，带 `capabilities`（`submit` 表示收 Hub 的输入） |
 | `GET /api/v1/steps?workflow=&days=30` | 每个 workflow 每一步的统计：到达次数、各状态次数、`failure_rate`、`retried`、P50/P95、等待中位数、最常见的 5 种错误（各带最近一次的运行）；失败多的排前面 |
 
@@ -160,9 +162,9 @@ SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo
 
 ```bash
 agentflow hub overview [--days 14]
-agentflow hub runs [--workflow W] [--machine M] [--project P] [--status failed,waiting_input] [--since 2026-11-01] [--until ...] [--run ID] [--limit 50] [--offset 0]
+agentflow hub runs [--workflow W] [--machine M] [--project P] [--status failed,waiting_input] [--tag T]... [--group G] [--since 2026-11-01] [--until ...] [--run ID] [--limit 50] [--offset 0]
 agentflow hub run <machine>/<run-id>      # 或只给 run-id，Hub 上只有一台机器有它时自动找到
-agentflow hub workflows [--days 30]
+agentflow hub workflows [--days 30] [--tag T]... [--group G]
 agentflow hub machines
 agentflow hub steps [--workflow W] [--days 30]
 agentflow hub submit <machine>/<run-id> <node-id> --output '{...}' [--wait]

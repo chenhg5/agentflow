@@ -170,6 +170,9 @@ func dashboardView(root string) map[string]any {
 		Correlation map[string]string `json:"correlation,omitempty"`
 		RunID       string            `json:"run_id"`
 		Workflow    string            `json:"workflow"`
+		Title       string            `json:"title"`
+		Tags        []string          `json:"tags"`
+		Group       string            `json:"group,omitempty"`
 		Status      string            `json:"status"`
 		CreatedAt   string            `json:"created_at"`
 		UpdatedAt   string            `json:"updated_at"`
@@ -185,7 +188,8 @@ func dashboardView(root string) map[string]any {
 		}
 		runs = append(runs, runSummary{
 			ParentRunID: run.State.ParentRunID, Correlation: run.State.Correlation,
-			RunID: run.RunID, Workflow: run.State.WorkflowName, Status: run.State.Status,
+			RunID: run.RunID, Workflow: run.State.WorkflowName, Title: run.Workflow.Label(), Tags: nonNilTags(run.Workflow.Tags),
+			Group: run.Workflow.Group, Status: run.State.Status,
 			CreatedAt: run.State.CreatedAt, UpdatedAt: run.State.UpdatedAt,
 		})
 	}
@@ -275,4 +279,11 @@ func writeError(w http.ResponseWriter, status int, message string) {
 	w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	w.WriteHeader(status)
 	writeJSON(w, map[string]any{"ok": false, "error": message})
+}
+
+func nonNilTags(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }

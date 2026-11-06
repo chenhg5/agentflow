@@ -340,3 +340,54 @@ func TestNoFormForAMachineThatDidNotOptIn(t *testing.T) {
 		t.Fatalf("api submit to a machine that did not opt in: %d", response.StatusCode)
 	}
 }
+
+func TestWorkflowLabelsOnPagesAndAPI(t *testing.T) {
+	srv := server(t, hub.Options{}, true)
+	batch := sample()
+	labelled := batch.Reports[0]
+	labelled.WorkflowTitle, labelled.WorkflowDescription = "夜间巡检", "每晚检查 <b>服务</b> 是否正常"
+	labelled.Tags, labelled.Group = []string{"ops", "nightly", "ops"}, "infra"
+	other := batch.Reports[0]
+	other.RunID, other.Workflow, other.WorkflowDigest, other.Status, other.Error = "run_2", "pr-daily", "d2", "succeeded", ""
+	other.Tags = []string{"github"}
+	post(t, srv.URL, "", hubapi.Batch{Reports: []hubapi.RunReport{labelled, other}})
+
+	for path, want := range map[string][]string{
+		"/workflows":                    {"infra", "未分组", "夜间巡检", "nightly", "#ops", "#github", "&lt;b&gt;服务&lt;/b&gt;"},
+		"/workflows?tag=github":         {"pr-daily", "未分组"},
+		"/workflows?group=infra":        {"夜间巡检", "#ops"},
+		"/runs":                         {"夜间巡检", "全部分组", "全部标签"},
+		"/runs?group=infra":             {"run_1", "分组 infra"},
+		"/runs?workflow=nightly":        {"夜间巡检", "每晚检查"},
+		"/runs/laptop/run_1":            {"夜间巡检", "nightly · run_1", "#ops", ">infra<"},
+		"/api/v1/runs?tag=ops":          {`"total":1`, `"title":"夜间巡检"`, `"tags":["ops","nightly"]`, `"group":"infra"`},
+		"/api/v1/runs?tag=ops,github":   {`"total":0`},
+		"/api/v1/runs?group=infra":      {`"total":1`},
+		"/api/v1/workflows":             {`"title":"夜间巡检"`, `"title":"pr-daily"`, `"groups":["infra"]`, `"tag":"github"`},
+		"/api/v1/workflows?group=infra": {`"name":"nightly"`},
+		"/api/v1/runs/laptop/run_1":     {`"description":"每晚检查 ` + "\\u003cb\\u003e" + `服务`},
+	} {
+		status, body := get(t, srv.URL+path, nil)
+		if status != http.StatusOK {
+			t.Errorf("%s: status %d", path, status)
+			continue
+		}
+		for _, fragment := range want {
+			if !strings.Contains(body, fragment) {
+				t.Errorf("%s: missing %q", path, fragment)
+			}
+		}
+	}
+	for path, absent := range map[string]string{
+		"/workflows?tag=github":         "夜间巡检",
+		"/workflows?group=infra":        "pr-daily",
+		"/api/v1/workflows?group=infra": `"name":"pr-daily"`,
+	} {
+		if _, body := get(t, srv.URL+path, nil); strings.Contains(body, absent) {
+			t.Errorf("%s: should not list %q", path, absent)
+		}
+	}
+	if _, body := get(t, srv.URL+"/workflows", nil); strings.Contains(body, "<b>服务") {
+		t.Error("descriptions must be escaped")
+	}
+}

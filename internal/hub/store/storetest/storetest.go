@@ -107,6 +107,10 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 			status            domain.Status
 		}{{"m1", "a", domain.StatusSucceeded}, {"m1", "a", domain.StatusFailed}, {"m2", "b", domain.StatusSucceeded}, {"m2", "a", domain.StatusWaiting}, {"m1", "b", domain.StatusFailed}} {
 			run := NewRun(item.machine, "r"+string(rune('0'+index)), item.workflow, item.status, base.Add(time.Duration(index)*time.Hour), 1)
+			run.Tags = []string{"y"}
+			if item.workflow == "a" {
+				run.Title, run.Description, run.Tags, run.Group = "Workflow A", "does a", []string{"x", "y"}, "g1"
+			}
 			if _, err := store.Save(ctx, run); err != nil {
 				t.Fatal(err)
 			}
@@ -147,6 +151,17 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		check("workflow", app.RunFilter{Workflow: "a"}, "r3", "r1", "r0")
 		check("machine", app.RunFilter{Machine: "m2"}, "r3", "r2")
 		check("run id", app.RunFilter{RunID: "r2"}, "r2")
+		check("tag", app.RunFilter{Tags: []string{"x"}}, "r3", "r1", "r0")
+		check("every tag", app.RunFilter{Tags: []string{"x", "y"}}, "r3", "r1", "r0")
+		check("shared tag", app.RunFilter{Tags: []string{"y"}}, "r4", "r3", "r2", "r1", "r0")
+		check("unknown tag", app.RunFilter{Tags: []string{"z"}})
+		check("group", app.RunFilter{Group: "g1"}, "r3", "r1", "r0")
+		if run, err := store.Get(ctx, domain.RunKey{Machine: "m1", RunID: "r0"}); err != nil || run.Title != "Workflow A" || run.Description != "does a" || run.Group != "g1" || len(run.Tags) != 2 || run.Tags[0] != "x" {
+			t.Fatalf("labels round trip: %+v %v", run, err)
+		}
+		if run, _ := store.Get(ctx, domain.RunKey{Machine: "m2", RunID: "r2"}); run.Title != "" || run.Group != "" || len(run.Tags) != 1 {
+			t.Fatalf("labels of another workflow: %+v", run)
+		}
 		check("statuses", app.RunFilter{Statuses: []domain.Status{domain.StatusFailed, domain.StatusWaiting}}, "r4", "r3", "r1")
 		check("since/until", app.RunFilter{Since: base.Add(time.Hour), Until: base.Add(3 * time.Hour)}, "r2", "r1")
 		check("page", app.RunFilter{Limit: 2, Offset: 1}, "r3", "r2")

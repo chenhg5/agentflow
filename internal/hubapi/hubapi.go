@@ -58,24 +58,30 @@ type Trigger struct {
 
 // RunReport is the latest known state of one run.
 type RunReport struct {
-	Protocol       int               `json:"protocol"`
-	Source         Source            `json:"source"`
-	Orchestration  string            `json:"orchestration"`
-	RunID          string            `json:"runId"`
-	Workflow       string            `json:"workflow"`
-	WorkflowDigest string            `json:"workflowDigest,omitempty"`
-	Status         string            `json:"status"`
-	Seq            int64             `json:"seq"`
-	CreatedAt      string            `json:"createdAt,omitempty"`
-	StartedAt      string            `json:"startedAt,omitempty"`
-	FinishedAt     string            `json:"finishedAt,omitempty"`
-	UpdatedAt      string            `json:"updatedAt,omitempty"`
-	DurationMs     int64             `json:"durationMs,omitempty"`
-	WaitingMs      int64             `json:"waitingMs,omitempty"`
-	Trigger        *Trigger          `json:"trigger,omitempty"`
-	Inputs         map[string]string `json:"inputs,omitempty"`
-	Error          string            `json:"error,omitempty"`
-	Steps          []StepReport      `json:"steps"`
+	Protocol       int    `json:"protocol"`
+	Source         Source `json:"source"`
+	Orchestration  string `json:"orchestration"`
+	RunID          string `json:"runId"`
+	Workflow       string `json:"workflow"`
+	WorkflowDigest string `json:"workflowDigest,omitempty"`
+	// WorkflowTitle, WorkflowDescription, Tags and Group are the workflow's
+	// labels for people (optional, see workflow.schema.json).
+	WorkflowTitle       string            `json:"workflowTitle,omitempty"`
+	WorkflowDescription string            `json:"workflowDescription,omitempty"`
+	Tags                []string          `json:"tags,omitempty"`
+	Group               string            `json:"group,omitempty"`
+	Status              string            `json:"status"`
+	Seq                 int64             `json:"seq"`
+	CreatedAt           string            `json:"createdAt,omitempty"`
+	StartedAt           string            `json:"startedAt,omitempty"`
+	FinishedAt          string            `json:"finishedAt,omitempty"`
+	UpdatedAt           string            `json:"updatedAt,omitempty"`
+	DurationMs          int64             `json:"durationMs,omitempty"`
+	WaitingMs           int64             `json:"waitingMs,omitempty"`
+	Trigger             *Trigger          `json:"trigger,omitempty"`
+	Inputs              map[string]string `json:"inputs,omitempty"`
+	Error               string            `json:"error,omitempty"`
+	Steps               []StepReport      `json:"steps"`
 	// Graph is the workflow's shape, for the Hub's canvas. It is the same for
 	// every run of one workflow version, so the Hub keeps one per digest.
 	Graph *Graph `json:"graph,omitempty"`

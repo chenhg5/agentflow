@@ -302,8 +302,11 @@ func workflowCommand(args []string) error {
 		printWorkflowHelp()
 		return nil
 	}
+	if args[0] == "list" {
+		return workflowList(parsed)
+	}
 	if args[0] != "validate" {
-		return usageError(fmt.Sprintf("unknown workflow action: %s", args[0]), "Use `agentflow workflow validate <workflow.json>`.", "workflow_action")
+		return usageError(fmt.Sprintf("unknown workflow action: %s", args[0]), "Use `agentflow workflow list` or `agentflow workflow validate <workflow.json>`.", "workflow_action")
 	}
 	if len(parsed.Positionals) != 1 {
 		return usageError("workflow file is required", "Run `agentflow workflow validate <workflow.json>`.", "workflow_file")
@@ -332,13 +335,17 @@ func workflowCommand(args []string) error {
 			}
 		}
 	}
-	return writeData(map[string]any{
+	payload := map[string]any{
 		"ok":       true,
 		"valid":    true,
 		"workflow": workflow.Name,
 		"version":  workflow.Version,
 		"graph":    graph.Describe(workflow),
-	}, parsed.Output())
+	}
+	for key, value := range workflowLabels(workflow) {
+		payload[key] = value
+	}
+	return writeData(payload, parsed.Output())
 }
 
 func runCommand(args []string, root, cwd string) error {
@@ -498,7 +505,13 @@ func runList(parsed parsedArgs, root string) error {
 		if !matches {
 			continue
 		}
+		if !labelsMatch(run.Workflow, parsed.Tags, parsed.Group) {
+			continue
+		}
 		summary := map[string]any{"run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+		for key, value := range workflowLabels(run.Workflow) {
+			summary[key] = value
+		}
 		if run.State.FinishedAt != "" {
 			summary["finished_at"] = run.State.FinishedAt
 		}
@@ -1178,6 +1191,16 @@ func parseArgs(args []string) (parsedArgs, error) {
 			parsed.RunID = value
 		case "--hub":
 			parsed.Hub = value
+		case "--title":
+			parsed.Title = value
+		case "--description":
+			parsed.Description = value
+		case "--tag":
+			if value = strings.TrimSpace(value); value != "" {
+				parsed.Tags = append(parsed.Tags, value)
+			}
+		case "--group":
+			parsed.Group = value
 		case "--machine":
 			parsed.Machine = value
 		case "--project":
@@ -1268,6 +1291,10 @@ type parsedArgs struct {
 	IdempotencyKey    string
 	RunID             string
 	Summary           string
+	Title             string
+	Description       string
+	Tags              []string
+	Group             string
 	Hub               string
 	Machine           string
 	Project           string
@@ -1398,7 +1425,8 @@ func runPayload(run *model.Run) map[string]any {
 	if activeNodes == nil {
 		activeNodes = []string{}
 	}
-	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "outcome": run.State.Outcome, "active_node": run.State.ActiveNode, "active_nodes": activeNodes, "visits": run.State.Visits, "history": history, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
+	payload := map[string]any{"ok": run.State.Status != "failed", "run_id": run.RunID, "workflow": run.State.WorkflowName, "workflow_title": run.Workflow.Title,
+		"workflow_description": run.Workflow.Description, "tags": nonNilTags(run.Workflow.Tags), "group": run.Workflow.Group, "workflow_digest": run.WorkflowDigest(), "status": run.State.Status, "outcome": run.State.Outcome, "active_node": run.State.ActiveNode, "active_nodes": activeNodes, "visits": run.State.Visits, "history": history, "inputs": run.State.Inputs, "nodes": run.State.Nodes, "created_at": run.State.CreatedAt, "updated_at": run.State.UpdatedAt}
 	if job, err := store.LoadDispatch(filepath.Dir(filepath.Dir(run.RunDir)), run.RunID); err == nil {
 		payload["dispatch"] = job
 		payload["queued"] = job.Generation > job.Completed
@@ -1442,9 +1470,10 @@ func commandSchema() map[string]any {
 		{"name": "workspace validate", "description": "Check graph, trigger targets and executor paths; discover workspace-local agent instructions, skills and tool configuration without executing them.", "flags": []map[string]any{flag("--workflow", "path", "Graph path; default workflow.json", false), flag("--input", "key=value", "Representative run input for resolving candidate paths; repeatable", false), formatFlag}},
 		{"name": "executor init", "description": "Create and register an owned Codex or Claude agent or a program in the layout-v1 directories.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|claude-code|command", "Scaffold kind", true), flag("--model", "string", "Optional agent model", false), flag("--dry-run", "boolean", "Preview creation", false), formatFlag}},
 		{"name": "executor add", "description": "Register an existing directory or symlink without creating or modifying agent files.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--kind", "codex|claude-code|command|external", "Executor kind", true), flag("--workspace", "path", "Existing working directory", false), flag("--command", "JSON-array", "Command executor argument array", false), flag("--model", "string", "Optional model", false), flag("--dry-run", "boolean", "Preview registration", false), formatFlag}},
+		{"name": "workflow list", "description": "List the workspace's workflows (workflow.json and workflows/*.json) with title, description, tags and group; invalid files are listed with their problems.", "flags": []map[string]any{flag("--tag", "string", "Only workflows with this tag; repeat to require several", false), flag("--group", "string", "Only workflows in this group", false), formatFlag}, "examples": []string{"agentflow workflow list --tag github --format json"}},
 		{"name": "workflow validate", "description": "Validate a workflow JSON definition.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--check-executors", "boolean", "Check named executor registrations in this working directory", false), formatFlag}, "examples": []string{"agentflow workflow validate workflow.json --check-executors --format json"}},
 		{"name": "run start", "description": "Create and execute a workflow run.", "arguments": []map[string]any{{"name": "workflow.json", "required": true, "type": "path"}}, "flags": []map[string]any{flag("--input", "key=value", "Workflow input; repeat for multiple inputs", false), flag("--idempotency-key", "string", "Stable request token used to safely retry a start", false), flag("--dry-run", "boolean", "Preview without creating or executing a run", false), formatFlag}, "examples": []string{"agentflow run start workflow.json --input issue=ABC-123 --idempotency-key 7f9c2b1e-4d9c-4f4e-8bb2-8b3d7d6d0a11"}},
-		{"name": "run list", "description": "List workflow runs, newest first.", "flags": []map[string]any{flag("--workflow", "string", "Only runs of this workflow name", false), flag("--status", "comma-separated", "Only runs with these statuses", false), flag("--page-size", "integer", "Maximum number of runs to return", false), flag("--page-all", "boolean", "Return every run", false), formatFlag}},
+		{"name": "run list", "description": "List workflow runs, newest first.", "flags": []map[string]any{flag("--workflow", "string", "Only runs of this workflow name", false), flag("--status", "comma-separated", "Only runs with these statuses", false), flag("--tag", "string", "Only runs of workflows with this tag; repeat to require several", false), flag("--group", "string", "Only runs of workflows in this group", false), flag("--page-size", "integer", "Maximum number of runs to return", false), flag("--page-all", "boolean", "Return every run", false), formatFlag}},
 		{"name": "run latest", "description": "Get the newest run of a workflow; exits 3 when there is none.", "arguments": []map[string]any{{"name": "workflow-name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--status", "comma-separated", "Only consider runs with these statuses", false), formatFlag}, "examples": []string{"agentflow run latest release-window --status succeeded,failed --format json"}},
 		{"name": "run get", "description": "Get one run and its node states.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
 		{"name": "run logs", "description": "Read the append-only event log.", "arguments": []map[string]any{{"name": "run-id", "required": true, "type": "string"}}, "flags": []map[string]any{formatFlag}},
@@ -1462,10 +1491,10 @@ func commandSchema() map[string]any {
 		{"name": "trigger status", "description": "Inspect durable schedule baselines, missed ranges, pending plans and delivery decisions.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger list", "description": "List configured cron and webhook triggers.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger validate", "description": "Validate triggers.json.", "flags": []map[string]any{formatFlag}},
-		{"name": "code run", "description": "Run a script as a code-orchestrated run: it records its own steps with `code step`; the run ends by the script's exit code.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}, {"name": "-- command...", "required": true, "type": "argv"}}, "flags": []map[string]any{flag("--input", "key=value", "Run input; repeat for multiple inputs", false)}, "examples": []string{"agentflow code run nightly -- python3 nightly.py"}},
+		{"name": "code run", "description": "Run a script as a code-orchestrated run: it records its own steps with `code step`; the run ends by the script's exit code.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}, {"name": "-- command...", "required": true, "type": "argv"}}, "flags": []map[string]any{flag("--input", "key=value", "Run input; repeat for multiple inputs", false), flag("--title", "string", "Readable name shown on the Hub and in run lists", false), flag("--description", "string", "What the script does", false), flag("--tag", "string", "Label; repeat for several", false), flag("--group", "string", "Section to list it under", false)}, "examples": []string{"agentflow code run nightly --title \"夜间巡检\" --tag ops -- python3 nightly.py"}},
 		{"name": "code step", "description": "Record one step of the current code run: run a command after `--`, or record work the script did with --output/--summary. Prints the step's result JSON.", "arguments": []map[string]any{{"name": "step-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--run", "string", "Code run id (default $AGENTFLOW_RUN_ID)", false), flag("--output", "JSON object", "Result of a step without a command", false), flag("--summary", "string", "One line on what the step did (shown on the Hub)", false), flag("--status", "enum", "succeeded, failed or skipped", false), flag("--reason", "string", "Why it failed or was skipped", false)}, "examples": []string{"agentflow code step fetch -- ./fetch.sh", "agentflow code step decide --output '{\"go\":true}' --summary \"will ship\""}},
 		{"name": "code end", "description": "End the current code run; by default failed if a step failed, else succeeded.", "flags": []map[string]any{flag("--run", "string", "Code run id (default $AGENTFLOW_RUN_ID)", false), flag("--status", "enum", "succeeded, failed or cancelled", false), flag("--reason", "string", "Why", false)}},
-		{"name": "code start", "description": "Start a code run without wrapping a script; prints its id.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--input", "key=value", "Run input", false), formatFlag}},
+		{"name": "code start", "description": "Start a code run without wrapping a script; prints its id.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--input", "key=value", "Run input", false), flag("--title", "string", "Readable name shown on the Hub and in run lists", false), flag("--description", "string", "What the script does", false), flag("--tag", "string", "Label; repeat for several", false), flag("--group", "string", "Section to list it under", false), formatFlag}},
 		{"name": "trigger fire", "description": "Emit one trigger event through the durable dispatcher.", "arguments": []map[string]any{{"name": "trigger-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--scheduled-at", "RFC3339", "Scheduled occurrence time", false), flag("--delivery-id", "string", "Stable event id used for idempotency", false), formatFlag}},
 		{"name": "trigger serve", "description": "Run the persistent cron scheduler, webhook server, and run worker.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
@@ -1473,9 +1502,9 @@ func commandSchema() map[string]any {
 		{"name": "hub push", "description": "Deliver pending run reports to the Hub; --all first records every run under runs/ in the workspace.", "flags": []map[string]any{flag("--all", "boolean", "Backfill every local run, not only pending reports", false), formatFlag}, "examples": []string{"agentflow hub push --all --format json"}},
 		{"name": "hub status", "description": "Show the Hub URL, machine name, outbox size, and the last delivery result.", "flags": []map[string]any{formatFlag}},
 		{"name": "hub overview", "description": "What the Hub's home page shows, as JSON: run counts, success rate, daily runs, runs waiting for people, recent failures, running runs and per-workflow stats.", "flags": []map[string]any{flag("--days", "integer", "Window in days (default 14, at most 90)", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}},
-		{"name": "hub runs", "description": "List runs from every machine, newest first, with the run page's filters.", "flags": []map[string]any{flag("--workflow", "string", "Workflow name", false), flag("--machine", "string", "Machine id", false), flag("--project", "string", "Project", false), flag("--status", "csv", "Statuses, e.g. failed,waiting_input", false), flag("--since", "RFC3339|YYYY-MM-DD", "Placed at or after", false), flag("--until", "RFC3339|YYYY-MM-DD", "Placed before", false), flag("--run", "string", "Run id", false), flag("--limit", "integer", "Page size (default 50, at most 200)", false), flag("--offset", "integer", "Skip this many", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub runs --status failed --since 2026-11-01 --format ndjson"}},
+		{"name": "hub runs", "description": "List runs from every machine, newest first, with the run page's filters.", "flags": []map[string]any{flag("--workflow", "string", "Workflow name", false), flag("--machine", "string", "Machine id", false), flag("--project", "string", "Project", false), flag("--status", "csv", "Statuses, e.g. failed,waiting_input", false), flag("--tag", "string", "Only workflows with this tag; repeat to require several", false), flag("--group", "string", "Only workflows in this group", false), flag("--since", "RFC3339|YYYY-MM-DD", "Placed at or after", false), flag("--until", "RFC3339|YYYY-MM-DD", "Placed before", false), flag("--run", "string", "Run id", false), flag("--limit", "integer", "Page size (default 50, at most 200)", false), flag("--offset", "integer", "Skip this many", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub runs --status failed --since 2026-11-01 --format ndjson"}},
 		{"name": "hub run", "description": "One run as its page shows it: steps with timings, errors, summaries, log tails, results and artifacts; the workflow graph; its machine; steps waiting for input with their output_schema; and the commands sent to it.", "arguments": []map[string]any{{"name": "machine/run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--machine", "string", "Machine, when the argument is a bare run id on several machines", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub run wsl/run_20261106_ab12"}},
-		{"name": "hub workflows", "description": "Per-workflow runs, success rate, p50/p95 duration, last status and machines.", "flags": []map[string]any{flag("--days", "integer", "Window in days (default 30, at most 90)", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}},
+		{"name": "hub workflows", "description": "Per-workflow title, description, tags, group, runs, success rate, p50/p95 duration, last status and machines; also every tag (with counts) and group in the window.", "flags": []map[string]any{flag("--days", "integer", "Window in days (default 30, at most 90)", false), flag("--tag", "string", "Only workflows with this tag; repeat to require several", false), flag("--group", "string", "Only workflows in this group", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}},
 		{"name": "hub machines", "description": "Machines reporting to the Hub: hostname, agentflow version, first/last seen, and capabilities (submit = takes input from the Hub).", "flags": []map[string]any{flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}},
 		{"name": "hub steps", "description": "Per-step analysis across runs: how often each step fails, retries and waits, p50/p95 duration, and its most common errors with the latest run that hit each. Failing steps first.", "flags": []map[string]any{flag("--workflow", "string", "Only this workflow", false), flag("--days", "integer", "Window in days (default 30, at most 90)", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub steps --workflow pr-pipeline --days 7"}},
 		{"name": "hub submit", "description": "Answer a step waiting for input through the Hub; its machine applies it like `run submit`. The output is checked against the step's output_schema first. Needs the machine to accept commands.", "arguments": []map[string]any{{"name": "machine/run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--output", "JSON object", "The step's output", true), flag("--wait", "boolean", "Wait (up to 90s) until the machine applies or refuses it", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub submit wsl/run_20261106_ab12 approve --output '{\"decision\":\"approve\"}' --wait"}},
@@ -1589,11 +1618,20 @@ Exit codes: 0 success, 1 execution error, 2 usage error, 3 not found,
 func printWorkflowHelp() {
 	fmt.Println(`Usage:
   agentflow workflow validate <workflow.json> [--check-executors] [--format json|table]
+  agentflow workflow list [--tag T]... [--group G] [--format json|table]
 
-Validates version, executor references, edges, required fields, and bounded cycles.
+validate checks version, executor references, edges, required fields, and bounded cycles.
+list shows the workflows of this workspace (workflow.json and workflows/*.json)
+with their title, description, tags and group, so people and agents can tell
+them apart. Set those fields at the top of each workflow:
+
+  {"version": "3", "name": "pr-daily", "title": "每日 PR 汇总",
+   "description": "每天 9 点把合进 main 的 PR 整理成一段话发到群里",
+   "tags": ["github", "daily"], "group": "cc-connect", ...}
 
 Examples:
-  agentflow workflow validate workflow.json --format json`)
+  agentflow workflow validate workflow.json --format json
+  agentflow workflow list --tag github --format json`)
 }
 
 func printRunHelp() {

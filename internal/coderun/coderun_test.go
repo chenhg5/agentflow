@@ -31,7 +31,7 @@ func step(t *testing.T, root, runID, id string, status string, result map[string
 
 func TestStepsBuildTheRunAndItsGraph(t *testing.T) {
 	root := t.TempDir()
-	run, err := Start(root, "nightly", map[string]string{"repo": "x"})
+	run, err := Start(root, model.Workflow{Name: "nightly"}, map[string]string{"repo": "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -76,7 +76,7 @@ func TestStepsBuildTheRunAndItsGraph(t *testing.T) {
 
 func TestEndDefaultsAndRunningSteps(t *testing.T) {
 	root := t.TempDir()
-	run, _ := Start(root, "wf", nil)
+	run, _ := Start(root, model.Workflow{Name: "wf"}, nil)
 	step(t, root, run.RunID, "a", "failed", nil)
 	if _, err := Update(root, run.RunID, func(r *model.Run) error { return Begin(r, "b", Executor) }); err != nil {
 		t.Fatal(err)
@@ -86,12 +86,12 @@ func TestEndDefaultsAndRunningSteps(t *testing.T) {
 		t.Fatalf("a failed step fails the run and a running one is closed: %s %v", ended.State.Status, err)
 	}
 	for _, bad := range []string{"", "$end"} {
-		other, _ := Start(root, "wf", nil)
+		other, _ := Start(root, model.Workflow{Name: "wf"}, nil)
 		if _, err := Update(root, other.RunID, func(r *model.Run) error { return Begin(r, bad, Executor) }); err == nil {
 			t.Errorf("step id %q accepted", bad)
 		}
 	}
-	other, _ := Start(root, "wf", nil)
+	other, _ := Start(root, model.Workflow{Name: "wf"}, nil)
 	if _, err := Update(root, other.RunID, func(r *model.Run) error { return Finish(r, "never", "succeeded", nil, "", nil) }); err == nil {
 		t.Error("finishing a step that never began")
 	}
@@ -102,7 +102,7 @@ func TestEndDefaultsAndRunningSteps(t *testing.T) {
 
 func TestParallelStepsDoNotLoseUpdates(t *testing.T) {
 	root := t.TempDir()
-	run, _ := Start(root, "wf", nil)
+	run, _ := Start(root, model.Workflow{Name: "wf"}, nil)
 	var wg sync.WaitGroup
 	for index := 0; index < 12; index++ {
 		wg.Add(1)

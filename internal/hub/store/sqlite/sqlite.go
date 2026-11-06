@@ -84,6 +84,11 @@ var migrations = []string{
 	);
 	CREATE INDEX commands_pending ON commands (machine, status, created_at);
 	CREATE INDEX commands_run ON commands (machine, run_id, created_at DESC);`,
+	`ALTER TABLE runs ADD COLUMN title TEXT NOT NULL DEFAULT '';
+	ALTER TABLE runs ADD COLUMN description TEXT NOT NULL DEFAULT '';
+	ALTER TABLE runs ADD COLUMN tags TEXT NOT NULL DEFAULT '[]';
+	ALTER TABLE runs ADD COLUMN grp TEXT NOT NULL DEFAULT '';
+	CREATE INDEX runs_group_at ON runs (grp, at DESC);`,
 }
 
 // Open opens or creates the database at path.
@@ -135,7 +140,8 @@ func (s *Store) migrate(ctx context.Context) error {
 func (s *Store) Close() error { return s.db.Close() }
 
 const runColumns = `machine, run_id, hostname, project, path, version, orchestration, workflow, digest, status, seq,
-	created_at, started_at, finished_at, updated_at, received_at, at, duration_ms, waiting_ms, trigger_kind, trigger_id, inputs, error`
+	created_at, started_at, finished_at, updated_at, received_at, at, duration_ms, waiting_ms, trigger_kind, trigger_id, inputs, error,
+	title, description, tags, grp`
 
 // Save upserts run when its seq is higher than the stored one.
 func (s *Store) Save(ctx context.Context, run domain.Run) (bool, error) {
@@ -147,8 +153,12 @@ func (s *Store) Save(ctx context.Context, run domain.Run) (bool, error) {
 	if err != nil {
 		return false, err
 	}
+	tags, err := json.Marshal(nonNilTags(run.Tags))
+	if err != nil {
+		return false, err
+	}
 	result, err := s.db.ExecContext(ctx, `INSERT INTO runs (`+runColumns+`, steps)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT (machine, run_id) DO UPDATE SET
 			hostname = excluded.hostname, project = excluded.project, path = excluded.path, version = excluded.version,
 			orchestration = excluded.orchestration, workflow = excluded.workflow, digest = excluded.digest,
@@ -156,12 +166,13 @@ func (s *Store) Save(ctx context.Context, run domain.Run) (bool, error) {
 			finished_at = excluded.finished_at, updated_at = excluded.updated_at, received_at = excluded.received_at,
 			at = excluded.at, duration_ms = excluded.duration_ms, waiting_ms = excluded.waiting_ms,
 			trigger_kind = excluded.trigger_kind, trigger_id = excluded.trigger_id, inputs = excluded.inputs,
-			error = excluded.error, steps = excluded.steps
+			error = excluded.error, title = excluded.title, description = excluded.description, tags = excluded.tags,
+			grp = excluded.grp, steps = excluded.steps
 		WHERE excluded.seq > runs.seq`,
 		run.Key.Machine, run.Key.RunID, run.Hostname, run.Project, run.Path, run.Version, run.Orchestration, run.Workflow,
 		run.Digest, string(run.Status), run.Seq, ms(run.CreatedAt), ms(run.StartedAt), ms(run.FinishedAt), ms(run.UpdatedAt),
 		ms(run.ReceivedAt), ms(run.When()), run.DurationMs, run.WaitingMs, run.TriggerKind, run.TriggerID, string(inputs),
-		run.Error, string(steps))
+		run.Error, run.Title, run.Description, string(tags), run.Group, string(steps))
 	if err != nil {
 		return false, err
 	}
@@ -231,6 +242,12 @@ func whereClause(filter app.RunFilter) (string, []any) {
 	if filter.RunID != "" {
 		add("run_id = ?", filter.RunID)
 	}
+	if filter.Group != "" {
+		add("grp = ?", filter.Group)
+	}
+	for _, tag := range filter.Tags {
+		add("EXISTS (SELECT 1 FROM json_each(runs.tags) WHERE json_each.value = ?)", tag)
+	}
 	if len(filter.Statuses) > 0 {
 		marks := make([]string, len(filter.Statuses))
 		for index, status := range filter.Statuses {
@@ -255,11 +272,12 @@ type scanner interface{ Scan(dest ...any) error }
 
 func scanRun(row scanner, withSteps bool) (domain.Run, error) {
 	var run domain.Run
-	var status, inputs, steps string
+	var status, inputs, steps, tags string
 	var created, started, finished, updated, received, at int64
 	dest := []any{&run.Key.Machine, &run.Key.RunID, &run.Hostname, &run.Project, &run.Path, &run.Version, &run.Orchestration,
 		&run.Workflow, &run.Digest, &status, &run.Seq, &created, &started, &finished, &updated, &received, &at,
-		&run.DurationMs, &run.WaitingMs, &run.TriggerKind, &run.TriggerID, &inputs, &run.Error}
+		&run.DurationMs, &run.WaitingMs, &run.TriggerKind, &run.TriggerID, &inputs, &run.Error,
+		&run.Title, &run.Description, &tags, &run.Group}
 	if withSteps {
 		dest = append(dest, &steps)
 	}
@@ -271,6 +289,12 @@ func scanRun(row scanner, withSteps bool) (domain.Run, error) {
 	run.UpdatedAt, run.ReceivedAt = fromMs(updated), fromMs(received)
 	if err := json.Unmarshal([]byte(inputs), &run.Inputs); err != nil {
 		return domain.Run{}, fmt.Errorf("run %s inputs: %w", run.Key, err)
+	}
+	if err := json.Unmarshal([]byte(tags), &run.Tags); err != nil {
+		return domain.Run{}, fmt.Errorf("run %s tags: %w", run.Key, err)
+	}
+	if len(run.Tags) == 0 {
+		run.Tags = nil
 	}
 	if withSteps {
 		var rows []stepRow
@@ -566,4 +590,11 @@ func (s *Store) DeleteFinishedBefore(ctx context.Context, cutoff time.Time) (int
 		return 0, err
 	}
 	return int(removed), tx.Commit()
+}
+
+func nonNilTags(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }

@@ -15,6 +15,7 @@ import (
 
 	"github.com/chenhg5/agentflow/internal/coderun"
 	"github.com/chenhg5/agentflow/internal/model"
+	"github.com/chenhg5/agentflow/internal/schema"
 )
 
 // runIDEnv carries the code run id from `code run` / `code start` to the
@@ -47,11 +48,11 @@ func codeCommand(args []string, root string) error {
 		return codeRun(parsed, command, root)
 	case "start":
 		if len(parsed.Positionals) != 1 || len(command) > 0 {
-			return usageError("usage: agentflow code start <name> [--input k=v]", "Use `agentflow code run <name> -- <command>` to wrap a whole script.", "code_arguments")
+			return usageError("usage: agentflow code start <name> [--input k=v] [--title T] [--description D] [--tag T]... [--group G]", "Use `agentflow code run <name> -- <command>` to wrap a whole script.", "code_arguments")
 		}
-		run, err := coderun.Start(root, parsed.Positionals[0], parsed.Inputs)
+		run, err := startCodeRun(parsed, root)
 		if err != nil {
-			return internalError(err)
+			return err
 		}
 		return writeData(map[string]any{"ok": true, "run_id": run.RunID, "env": runIDEnv + "=" + run.RunID}, parsed.Output())
 	case "step":
@@ -78,11 +79,11 @@ func codeCommand(args []string, root string) error {
 // the run ends unless the script ended it itself.
 func codeRun(parsed parsedArgs, command []string, root string) error {
 	if len(parsed.Positionals) != 1 || len(command) == 0 {
-		return usageError("usage: agentflow code run <name> [--input k=v] -- <command...>", "Example: agentflow code run nightly -- python3 nightly.py", "code_arguments")
+		return usageError("usage: agentflow code run <name> [--input k=v] [--title T] [--description D] [--tag T]... [--group G] -- <command...>", "Example: agentflow code run nightly -- python3 nightly.py", "code_arguments")
 	}
-	run, err := coderun.Start(root, parsed.Positionals[0], parsed.Inputs)
+	run, err := startCodeRun(parsed, root)
 	if err != nil {
-		return internalError(err)
+		return err
 	}
 	ctx, cancel := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer cancel()
@@ -306,13 +307,14 @@ func firstNonEmpty(values ...string) string {
 
 func printCodeHelp() {
 	fmt.Println(`Usage:
-  agentflow code run <name> [--input k=v] -- <command...>
+  agentflow code run <name> [--input k=v] [--title T] [--description D] [--tag T]... [--group G] -- <command...>
   agentflow code step <step-id> [--summary S] [--output JSON] [--status S] [--reason R] [-- <command...>]
   agentflow code end [--status succeeded|failed|cancelled] [--reason R]
-  agentflow code start <name> [--input k=v]
+  agentflow code start <name> [--input k=v] [--title T] [--description D] [--tag T]... [--group G]
 
 Code orchestration: a script decides the steps, agentflow records them as a run
 (workflow version "code") that run list/get, metrics and the Hub all understand.
+--title, --description, --tag and --group label it like a workflow file's fields.
 
 "code run" wraps a whole script: it starts the run, gives the script
 AGENTFLOW_RUN_ID, and ends the run by the script's exit code (unless the script
@@ -333,4 +335,18 @@ Example (bash):
   agentflow code run nightly -- bash -c '
     count=$(agentflow code step fetch -- ./fetch.sh | jq .count)
     agentflow code step report --summary "fetched $count items" -- ./report.sh'`)
+}
+
+// startCodeRun starts a code run named by the first argument, with the title,
+// description, tags and group given as flags.
+func startCodeRun(parsed parsedArgs, root string) (*model.Run, error) {
+	labels := model.Workflow{Name: parsed.Positionals[0], Title: parsed.Title, Description: parsed.Description, Tags: parsed.Tags, Group: parsed.Group}
+	if problems := schema.ValidateLabels(labels); len(problems) > 0 {
+		return nil, usageError(strings.Join(problems, "; "), "Shorten or trim the --title, --description, --tag and --group values.", "invalid_labels")
+	}
+	run, err := coderun.Start(root, labels, parsed.Inputs)
+	if err != nil {
+		return nil, internalError(err)
+	}
+	return run, nil
 }

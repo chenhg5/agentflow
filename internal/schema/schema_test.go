@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/chenhg5/agentflow/internal/model"
@@ -176,5 +177,43 @@ func TestValidateWorkflowJSONRequiresOneDocument(t *testing.T) {
 	}
 	if problems := ValidateWorkflowJSON([]byte(base + "\n  \t\n")); len(problems) != 0 {
 		t.Fatalf("trailing whitespace rejected: %v", problems)
+	}
+}
+
+func TestWorkflowLabels(t *testing.T) {
+	labelled := model.Workflow{Name: "pr-daily", Title: "每日 PR 汇总", Description: "每天把合进 main 的 PR 整理成一段话", Tags: []string{"github", "daily"}, Group: "cc-connect"}
+	if problems := ValidateLabels(labelled); len(problems) != 0 {
+		t.Fatalf("labels: %v", problems)
+	}
+	for name, mutate := range map[string]func(*model.Workflow){
+		"padded title":  func(w *model.Workflow) { w.Title = " PR " },
+		"long title":    func(w *model.Workflow) { w.Title = strings.Repeat("长", 121) },
+		"empty tag":     func(w *model.Workflow) { w.Tags = []string{""} },
+		"repeated tag":  func(w *model.Workflow) { w.Tags = []string{"a", "a"} },
+		"too many tags": func(w *model.Workflow) { w.Tags = strings.Split("a b c d e f g h i j k l m n o p q r s t u", " ") },
+		"padded group":  func(w *model.Workflow) { w.Group = "ops " },
+	} {
+		workflow := labelled
+		mutate(&workflow)
+		if len(ValidateLabels(workflow)) == 0 {
+			t.Errorf("%s was accepted", name)
+		}
+	}
+	document := `{"version":"3","name":"x","title":"X","description":"does x","tags":["a","b"],"group":"g","entry":"a",
+		"nodes":[{"id":"a","execution":{"candidates":[{"executor":"external"}]}}],"edges":[{"from":"a","to":"$end"}]}`
+	if problems := ValidateWorkflowJSON([]byte(document)); len(problems) != 0 {
+		t.Fatalf("published schema refuses labels: %v", problems)
+	}
+	for _, bad := range []string{`"tags":["a","a"]`, `"tags":[""]`, `"title":""`, `"group":" g"`} {
+		broken := strings.Replace(document, `"tags":["a","b"]`, bad, 1)
+		if bad[:7] != `"tags":` {
+			broken = strings.Replace(document, `"group":"g"`, bad, 1)
+			if bad[:8] == `"title":` {
+				broken = strings.Replace(document, `"title":"X"`, bad, 1)
+			}
+		}
+		if len(ValidateWorkflowJSON([]byte(broken))) == 0 {
+			t.Errorf("published schema accepted %s", bad)
+		}
 	}
 }

@@ -360,3 +360,20 @@ a.pill:hover { background: var(--accent); }
 @media (prefers-reduced-motion: reduce) {
   .spin, .live-dot, .dot.tone-human { animation: none; }
 }
+
+/* workflow labels: title, description, tags and groups */
+.pill.wf { font-family: inherit; font-size: 12.5px; font-weight: 500; }
+.pill-lg.wf { font-size: 17px; }
+.small { font-size: 11.5px; }
+.wf-description { margin: 6px 0 0; max-width: 72ch; color: var(--muted-foreground); font-size: 13px; line-height: 1.55; text-wrap: pretty; }
+.tags-sm { margin-top: 6px; gap: 4px; }
+.tags-sm .tag { height: 19px; padding: 0 6px; font-size: 11px; }
+.tag-link { text-decoration: none; transition: color .15s, border-color .15s; }
+.tag-link:hover { color: var(--foreground); border-color: color-mix(in srgb, var(--agent) 45%, transparent); }
+.tag-filter { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 16px; }
+.tag-filter a { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border: 1px solid var(--border); border-radius: 8px; font-size: 12.5px; color: var(--muted-foreground); text-decoration: none; }
+.tag-filter a:hover { color: var(--foreground); background: var(--accent); }
+.tag-filter a[aria-current] { color: var(--foreground); background: var(--accent); border-color: color-mix(in srgb, var(--agent) 45%, transparent); }
+.wf-group + .wf-group { margin-top: 16px; }
+.group-head { padding: 14px 16px 10px; }
+.group-head h2 { margin: 0; font-size: 14px; font-weight: 600; letter-spacing: 0.02em; }
