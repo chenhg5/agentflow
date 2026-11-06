@@ -91,7 +91,8 @@ func hubJSON(t *testing.T, args ...string) (map[string]any, error) {
 
 func TestHubCLIReadsWhatThePagesShow(t *testing.T) {
 	hubFixture(t)
-	t.Chdir(t.TempDir())
+	_, restore := chdirForTest(t, t.TempDir())
+	defer restore()
 
 	overview, err := hubJSON(t, "hub", "overview")
 	if err != nil || overview["counts"].(map[string]any)["total"] != 2.0 || len(overview["waiting_human"].([]any)) != 1 || len(overview["recent_failures"].([]any)) != 1 {
@@ -144,7 +145,8 @@ func TestHubCLIReadsWhatThePagesShow(t *testing.T) {
 
 func TestHubCLISubmit(t *testing.T) {
 	hubFixture(t)
-	t.Chdir(t.TempDir())
+	_, restore := chdirForTest(t, t.TempDir())
+	defer restore()
 	var commandErr *CommandError
 
 	_, err := hubJSON(t, "hub", "submit", "wsl/run_wait", "decide", "--output", `{"decision":"ship it"}`)
