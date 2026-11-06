@@ -55,7 +55,13 @@ pending. A run with both executing and waiting nodes still occupies a slot.
 
 - `queue.json`: durable managed mode and configured concurrency.
 - `dispatch/<run>.json`: generation, acknowledged generation, claim, owner,
-  status, reason, timestamps and last error.
+  status, reason, timestamps and last error, for jobs that may still run.
+- `dispatch/settled/<run>.json`: jobs whose run finished (`succeeded`, `failed`
+  or `cancelled`) with no outstanding generation. Polls read only live jobs, so
+  their cost follows the active work, not the workspace's history; `run get`,
+  wakes and creation recovery read both places, and a wake (`run retry`,
+  `run resume`) moves a settled job back. Jobs older versions left in
+  `dispatch/` settle on the first poll.
 - `worker.lock`: a persistent inode with an OS lock, held for the owner's whole
   lifetime, including graceful draining. A process crash releases the lock.
 - `worker.json`: owner ID, concurrency and most recent heartbeat. Use the live
@@ -67,7 +73,8 @@ pending. A run with both executing and waiting nodes still occupies a slot.
 The worker recovers queued jobs and claims belonging to a dead owner. Completion
 acknowledges only the claimed generation; a concurrent wake remains outstanding.
 A control published before a producer dies, before the wake is written, is also
-recovered by scanning the durable inbox. Requests are never acknowledged solely
+recovered by scanning the durable inbox: on every poll for live jobs, and for
+settled and unqueued runs at a worker's first poll and every 30 seconds after. Requests are never acknowledged solely
 because they were read. Queue errors are returned or retained in the job;
 resuming explicitly can request another attempt after configuration is fixed.
 

@@ -31,15 +31,52 @@ func FindRunByIdempotency(root, workflowName, idempotencyKey string) (*model.Run
 		return nil, err
 	}
 	for _, id := range ids {
+		// A run's workflow name and key are fixed when it is created, so a
+		// long-running service reads each run's state once, not on every
+		// creation. An unreadable state still fails the check (it could be the
+		// match) and is read again next time.
+		identity, err := runIdentity(root, id)
+		if err != nil {
+			return nil, fmt.Errorf("cannot inspect run %s while checking idempotency: %w", id, err)
+		}
+		if identity.workflow != workflowName || identity.key != idempotencyKey {
+			continue
+		}
 		run, err := LoadRun(root, id)
 		if err != nil {
 			return nil, fmt.Errorf("cannot inspect run %s while checking idempotency: %w", id, err)
 		}
-		if run.State.WorkflowName == workflowName && run.State.IdempotencyKey == idempotencyKey {
-			return run, nil
-		}
+		return run, nil
 	}
 	return nil, nil
+}
+
+type identity struct{ workflow, key string }
+
+var (
+	identityMu    sync.Mutex
+	identityCache = map[string]identity{} // keyed by root + run ID
+)
+
+func runIdentity(root, id string) (identity, error) {
+	cacheKey := filepath.Join(root, "runs", id)
+	identityMu.Lock()
+	cached, ok := identityCache[cacheKey]
+	identityMu.Unlock()
+	if ok {
+		return cached, nil
+	}
+	summary, err := LoadRunSummary(root, id)
+	if err != nil {
+		return identity{}, err
+	}
+	found := identity{workflow: summary.WorkflowName, key: summary.IdempotencyKey}
+	if found.workflow != "" {
+		identityMu.Lock()
+		identityCache[cacheKey] = found
+		identityMu.Unlock()
+	}
+	return found, nil
 }
 
 // RunIDs enumerates run containers, ignoring unrelated directories. Either
@@ -247,4 +284,23 @@ func ReloadState(run *model.Run) error {
 	}
 	run.State = state
 	return nil
+}
+
+// RunSummary is the part of a run's state that schedulers check often.
+type RunSummary struct {
+	WorkflowName   string             `json:"workflowName"`
+	IdempotencyKey string             `json:"idempotency_key,omitempty"`
+	Status         string             `json:"status"`
+	Trigger        *model.TriggerInfo `json:"trigger,omitempty"`
+}
+
+// LoadRunSummary reads a run's workflow name, key, status and trigger from its
+// state without loading the workflow snapshot or evaluation.
+func LoadRunSummary(root, runID string) (RunSummary, error) {
+	var summary RunSummary
+	if !validRunID(runID) {
+		return summary, fmt.Errorf("invalid run ID")
+	}
+	err := readJSON(filepath.Join(root, "runs", runID, "state.json"), &summary)
+	return summary, err
 }

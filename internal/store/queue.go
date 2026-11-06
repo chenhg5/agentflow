@@ -106,8 +106,7 @@ func wakeRun(root, runID, reason string) (DispatchJob, error) {
 	if err != nil {
 		return DispatchJob{}, err
 	}
-	var job DispatchJob
-	err = readJSON(filepath.Join(root, "dispatch", runID+".json"), &job)
+	job, settled, err := readDispatch(root, runID)
 	if os.IsNotExist(err) {
 		job = DispatchJob{RunID: runID, CreatedAt: run.State.CreatedAt}
 	} else if err != nil {
@@ -120,7 +119,16 @@ func wakeRun(root, runID, reason string) (DispatchJob, error) {
 	if job.Owner == "" {
 		job.Status = "queued"
 	}
-	return job, SaveDispatchJob(root, job)
+	if err := SaveDispatchJob(root, job); err != nil {
+		return job, err
+	}
+	if settled {
+		// The live copy is authoritative from here on.
+		if err := os.Remove(settledDispatchPath(root, runID)); err != nil && !os.IsNotExist(err) {
+			return job, err
+		}
+	}
+	return job, nil
 }
 
 func ClaimDispatch(ctx context.Context, root, owner string, active map[string]bool, target string) (*DispatchJob, error) {
@@ -133,22 +141,12 @@ func ClaimDispatch(ctx context.Context, root, owner string, active map[string]bo
 	if err != nil {
 		return nil, err
 	}
-	indexed := map[string]bool{}
-	for _, job := range jobs {
-		indexed[job.RunID] = true
-	}
-	ids, err := RunIDs(root)
-	if err != nil {
-		return nil, err
-	}
-	for _, id := range ids {
-		if !indexed[id] && HasControls(filepath.Join(root, "runs", id)) {
-			job, err := wakeRun(root, id, "recovered_control")
-			if err != nil {
-				return nil, err
-			}
-			jobs = append(jobs, job)
+	if recoveryDue(root) {
+		recovered, err := recoverPublishedControls(root, jobs)
+		if err != nil {
+			return nil, err
 		}
+		jobs = append(jobs, recovered...)
 	}
 	for _, job := range jobs {
 		if active[job.RunID] || (target != "" && target != job.RunID) {
@@ -171,6 +169,11 @@ func ClaimDispatch(ctx context.Context, root, owner string, active map[string]bo
 			}
 		}
 		if job.Generation <= job.Completed {
+			if settledStatus(job) {
+				if err := settleDispatch(root, job); err != nil {
+					return nil, err
+				}
+			}
 			continue
 		}
 		if job.Owner != "" && job.Owner != owner {
@@ -211,15 +214,18 @@ func FinishDispatch(ctx context.Context, root string, claim DispatchJob, status,
 		job.Status = "queued"
 	}
 	job.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
+	if settledStatus(job) {
+		return settleDispatch(root, job)
+	}
 	return SaveDispatchJob(root, job)
 }
 
+// LoadDispatch reads a run's queue job, live or settled.
 func LoadDispatch(root, runID string) (DispatchJob, error) {
 	if !validRunID(runID) {
 		return DispatchJob{}, fmt.Errorf("invalid run ID")
 	}
-	var job DispatchJob
-	err := readJSON(filepath.Join(root, "dispatch", runID+".json"), &job)
+	job, _, err := readDispatch(root, runID)
 	return job, err
 }
 
@@ -262,7 +268,12 @@ func QueueSnapshot(root string) (map[string]any, error) {
 			counts["terminal"]++
 		}
 	}
-	result := map[string]any{"worker": info, "managed": managed, "worker_online": online, "counts": counts, "jobs": jobs}
+	settled, err := settledDispatchCount(root)
+	if err != nil {
+		return nil, err
+	}
+	counts["terminal"] += settled
+	result := map[string]any{"worker": info, "managed": managed, "worker_online": online, "counts": counts, "jobs": jobs, "settled": settled}
 	if managed {
 		var cfg QueueConfig
 		if err := readJSON(filepath.Join(root, "queue.json"), &cfg); err != nil {

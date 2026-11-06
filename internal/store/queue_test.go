@@ -185,3 +185,101 @@ func TestNewOwnerDoesNotCountOldClaimsAsActive(t *testing.T) {
 		t.Fatalf("orphan counted as new owner capacity: %+v", counts)
 	}
 }
+
+func forceRecovery(root string) {
+	recoveryMu.Lock()
+	delete(lastRecovery, root)
+	recoveryMu.Unlock()
+}
+
+func TestFinishedJobsSettleAndPollsSkipThem(t *testing.T) {
+	root := t.TempDir()
+	run := queued(t, root)
+	ctx := context.Background()
+	claim, _ := ClaimDispatch(ctx, root, "owner", nil, "")
+	if err := FinishDispatch(ctx, root, *claim, "succeeded", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dispatch", run.RunID+".json")); !os.IsNotExist(err) {
+		t.Fatal("a finished job must leave the live queue")
+	}
+	if job, err := LoadDispatch(root, run.RunID); err != nil || job.Status != "succeeded" || job.Completed != 1 {
+		t.Fatalf("settled job is still readable: %+v %v", job, err)
+	}
+	if jobs, _ := DispatchJobs(root); len(jobs) != 0 {
+		t.Fatalf("polls read only live jobs: %+v", jobs)
+	}
+	snapshot, err := QueueSnapshot(root)
+	if err != nil || snapshot["counts"].(map[string]int)["terminal"] != 1 || snapshot["settled"] != 1 {
+		t.Fatalf("snapshot counts settled jobs: %v %v", snapshot["counts"], err)
+	}
+	if next, err := ClaimDispatch(ctx, root, "owner", nil, ""); err != nil || next != nil {
+		t.Fatalf("settled job replayed: %+v %v", next, err)
+	}
+	// a settled run is not queued again by creation recovery
+	if err := recoverCreationDispatch(root, run.RunDir, run.RunID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(root, "dispatch", run.RunID+".json")); !os.IsNotExist(err) {
+		t.Fatal("creation recovery queued a finished run again")
+	}
+}
+
+func TestWakingASettledJobMovesItBack(t *testing.T) {
+	root := t.TempDir()
+	run := queued(t, root)
+	ctx := context.Background()
+	claim, _ := ClaimDispatch(ctx, root, "owner", nil, "")
+	if err := FinishDispatch(ctx, root, *claim, "failed", "boom"); err != nil {
+		t.Fatal(err)
+	}
+	job, err := WakeRun(ctx, root, run.RunID, "retry")
+	if err != nil || job.Generation != 2 || job.Completed != 1 || job.Status != "queued" {
+		t.Fatalf("wake keeps the settled counters: %+v %v", job, err)
+	}
+	if _, err := os.Stat(settledDispatchPath(root, run.RunID)); !os.IsNotExist(err) {
+		t.Fatal("the settled copy must go once the job is live again")
+	}
+	next, err := ClaimDispatch(ctx, root, "owner", nil, "")
+	if err != nil || next == nil || next.Claimed != 2 || next.Reason != "retry" {
+		t.Fatalf("retry claim: %+v %v", next, err)
+	}
+}
+
+func TestControlOnASettledRunIsRecovered(t *testing.T) {
+	root := t.TempDir()
+	run := queued(t, root)
+	ctx := context.Background()
+	claim, _ := ClaimDispatch(ctx, root, "owner", nil, "")
+	if err := FinishDispatch(ctx, root, *claim, "failed", ""); err != nil {
+		t.Fatal(err)
+	}
+	// a retry published its control, then its producer died before the wake
+	if err := EnqueueControl(run.RunDir, model.Control{Kind: "retry"}); err != nil {
+		t.Fatal(err)
+	}
+	forceRecovery(root) // the periodic scan is due
+	next, err := ClaimDispatch(ctx, root, "owner", nil, "")
+	if err != nil || next == nil || next.RunID != run.RunID || next.Reason != "recovered_control" {
+		t.Fatalf("orphaned control on a settled run: %+v %v", next, err)
+	}
+}
+
+func TestLiveFinishedJobsFromOlderVersionsSettleOnPoll(t *testing.T) {
+	root := t.TempDir()
+	run := queued(t, root)
+	job, _ := LoadDispatch(root, run.RunID)
+	job.Completed, job.Status = job.Generation, "succeeded" // as older versions left it
+	if err := SaveDispatchJob(root, job); err != nil {
+		t.Fatal(err)
+	}
+	if next, err := ClaimDispatch(context.Background(), root, "owner", nil, ""); err != nil || next != nil {
+		t.Fatalf("claim: %+v %v", next, err)
+	}
+	if jobs, _ := DispatchJobs(root); len(jobs) != 0 {
+		t.Fatal("the first poll settles finished jobs left in the live queue")
+	}
+	if settled, _ := settledDispatchCount(root); settled != 1 {
+		t.Fatal("moved to settled")
+	}
+}
