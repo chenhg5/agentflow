@@ -35,6 +35,10 @@ type RunRepository interface {
 	Get(ctx context.Context, key domain.RunKey) (domain.Run, error)
 	// List returns matching runs, newest first, and the total number of matches.
 	List(ctx context.Context, filter RunFilter) ([]domain.Run, int, error)
+	// DeleteFinishedBefore removes finished runs placed before cutoff, with
+	// everything only they used (graphs no run refers to any more), and
+	// reports how many runs it removed. Unfinished runs are never removed.
+	DeleteFinishedBefore(ctx context.Context, cutoff time.Time) (int, error)
 }
 
 // MachineRepository stores machines.

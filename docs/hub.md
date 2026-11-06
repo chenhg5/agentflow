@@ -111,6 +111,8 @@ agentflow hub status --format json                      # 看配置、待发数�
 
 SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo，所有发布平台照常交叉编译。
 
+**数据保留：** `hub serve --retain 90d`（默认 90 天，也可以用 `AGENTFLOW_HUB_RETAIN`；`720h` 这类写法也行，`0` 表示永远保留）。启动时和之后每小时清理一次：删掉**已结束**且早于保留期的运行，以及不再有运行用到的流程图。还在跑、在等输入的运行不管多老都保留。
+
 ## 6. 访问控制
 
 | Hub 监听 | 上报 | 看页面 / 读接口 |

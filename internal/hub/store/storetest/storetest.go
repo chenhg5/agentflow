@@ -212,6 +212,38 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		}
 	})
 
+	t.Run("retention", func(t *testing.T) {
+		store := open(t)
+		old := NewRun("m1", "old", "wf", domain.StatusSucceeded, base.Add(-48*time.Hour), 1)
+		old.Digest = "v1"
+		oldFailed := NewRun("m1", "old-failed", "wf", domain.StatusFailed, base.Add(-47*time.Hour), 1)
+		oldFailed.Digest = "v1"
+		oldWaiting := NewRun("m1", "old-waiting", "wf", domain.StatusWaitingInput, base.Add(-48*time.Hour), 1)
+		oldWaiting.Digest = "v2"
+		recent := NewRun("m1", "recent", "wf", domain.StatusSucceeded, base, 1)
+		recent.Digest = "v3"
+		for _, run := range []domain.Run{old, oldFailed, oldWaiting, recent} {
+			store.Save(ctx, run)
+			store.SaveGraph(ctx, domain.GraphKey(run), domain.Graph{Entry: "a"})
+		}
+		removed, err := store.DeleteFinishedBefore(ctx, base.Add(-time.Hour))
+		if err != nil || removed != 2 {
+			t.Fatalf("removed %d, %v", removed, err)
+		}
+		_, total, _ := store.List(ctx, app.RunFilter{})
+		if total != 2 {
+			t.Fatalf("left %d runs", total)
+		}
+		if _, err := store.Get(ctx, oldWaiting.Key); err != nil {
+			t.Fatal("an unfinished run is never removed, however old")
+		}
+		for key, want := range map[string]bool{"wf@v1": false, "wf@v2": true, "wf@v3": true} {
+			if _, found, _ := store.Graph(ctx, key); found != want {
+				t.Errorf("graph %s kept = %v, want %v", key, found, want)
+			}
+		}
+	})
+
 	t.Run("machines", func(t *testing.T) {
 		store := open(t)
 		if _, found, err := store.GetMachine(ctx, "m1"); err != nil || found {

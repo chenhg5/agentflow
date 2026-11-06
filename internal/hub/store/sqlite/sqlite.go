@@ -539,3 +539,28 @@ func (s *Store) queryCommands(ctx context.Context, where string, args ...any) ([
 	}
 	return commands, rows.Err()
 }
+
+// DeleteFinishedBefore removes finished runs placed before cutoff and the
+// graphs no remaining run refers to, in one transaction.
+func (s *Store) DeleteFinishedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `DELETE FROM runs WHERE status IN (?, ?, ?) AND at < ?`,
+		string(domain.StatusSucceeded), string(domain.StatusFailed), string(domain.StatusCancelled), ms(cutoff))
+	if err != nil {
+		return 0, err
+	}
+	removed, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	// graphs are keyed workflow@digest (or run:<machine>/<id> without a digest)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM graphs WHERE key NOT IN (
+		SELECT CASE WHEN digest != '' THEN workflow || '@' || digest ELSE 'run:' || machine || '/' || run_id END FROM runs)`); err != nil {
+		return 0, err
+	}
+	return int(removed), tx.Commit()
+}

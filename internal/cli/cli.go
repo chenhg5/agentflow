@@ -1167,6 +1167,8 @@ func parseArgs(args []string) (parsedArgs, error) {
 			parsed.RunID = value
 		case "--db":
 			parsed.DB = value
+		case "--retain":
+			parsed.Retain = value
 		case "--host":
 			parsed.Host = value
 		case "--port":
@@ -1240,6 +1242,7 @@ type parsedArgs struct {
 	RunID             string
 	Host              string
 	DB                string
+	Retain            string
 	Port              int
 	PortSet           bool
 	ScheduledAt       string
@@ -1425,7 +1428,7 @@ func commandSchema() map[string]any {
 		{"name": "trigger fire", "description": "Emit one trigger event through the durable dispatcher.", "arguments": []map[string]any{{"name": "trigger-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--scheduled-at", "RFC3339", "Scheduled occurrence time", false), flag("--delivery-id", "string", "Stable event id used for idempotency", false), formatFlag}},
 		{"name": "trigger serve", "description": "Run the persistent cron scheduler, webhook server, and run worker.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
-		{"name": "hub serve", "description": "Run the Hub: receive run reports from runners and serve the web console and read API.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host; beyond loopback AGENTFLOW_HUB_TOKEN is required", false), flag("--port", "integer", "HTTP port (default 7075); 0 chooses an available port", false), flag("--db", "string", "Store DSN: sqlite:<path> (default ~/.agentflow/hub/hub.db) or memory:", false)}, "examples": []string{"AGENTFLOW_HUB_TOKEN=... agentflow hub serve --host 0.0.0.0 --port 7075"}},
+		{"name": "hub serve", "description": "Run the Hub: receive run reports from runners and serve the web console and read API.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host; beyond loopback AGENTFLOW_HUB_TOKEN is required", false), flag("--port", "integer", "HTTP port (default 7075); 0 chooses an available port", false), flag("--db", "string", "Store DSN: sqlite:<path> (default ~/.agentflow/hub/hub.db) or memory:", false), flag("--retain", "duration", "Keep finished runs this long, e.g. 90d or 720h (default 90d; 0 keeps them forever)", false)}, "examples": []string{"AGENTFLOW_HUB_TOKEN=... agentflow hub serve --host 0.0.0.0 --port 7075"}},
 		{"name": "hub push", "description": "Deliver pending run reports to the Hub; --all first records every run under runs/ in the workspace.", "flags": []map[string]any{flag("--all", "boolean", "Backfill every local run, not only pending reports", false), formatFlag}, "examples": []string{"agentflow hub push --all --format json"}},
 		{"name": "hub status", "description": "Show the Hub URL, machine name, outbox size, and the last delivery result.", "flags": []map[string]any{formatFlag}},
 		{"name": "version", "description": "Print version, commit, build time, Go version, and platform.", "flags": []map[string]any{formatFlag}},
