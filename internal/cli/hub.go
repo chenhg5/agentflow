@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
@@ -9,7 +10,12 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/chenhg5/agentflow/internal/engine"
 	"github.com/chenhg5/agentflow/internal/hub"
+	"github.com/chenhg5/agentflow/internal/hubapi"
+	"github.com/chenhg5/agentflow/internal/model"
+	"github.com/chenhg5/agentflow/internal/schema"
+	"github.com/chenhg5/agentflow/internal/store"
 	"github.com/chenhg5/agentflow/internal/telemetry"
 	"github.com/chenhg5/agentflow/internal/version"
 )
@@ -183,4 +189,57 @@ AGENTFLOW_HUB_VIEW_TOKEN when that is set.
 Examples:
   AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0
   AGENTFLOW_HUB_URL=http://hub.local:7075 AGENTFLOW_HUB_TOKEN=... agentflow hub push --all`)
+}
+
+// hubApplier carries out commands from the Hub against the runs in root. Only
+// "submit" exists: the same checks as `run submit`, bound to the wait the
+// person saw on the Hub, then handed to the run's executor as a control.
+func hubApplier(root string) telemetry.Applier {
+	return func(ctx context.Context, command hubapi.Command) error {
+		if command.Kind != hubapi.CommandKindSubmit {
+			return fmt.Errorf("unsupported command %q", command.Kind)
+		}
+		run, err := store.LoadRun(root, command.RunID)
+		if err != nil {
+			return fmt.Errorf("run %s is not in this workspace", command.RunID)
+		}
+		switch run.State.Status {
+		case "cancelled", "succeeded", "failed":
+			return fmt.Errorf("run %s already %s", command.RunID, run.State.Status)
+		}
+		node, ok := run.State.Nodes[command.NodeID]
+		if !ok {
+			return fmt.Errorf("node %s not found", command.NodeID)
+		}
+		if node.Status != "waiting_input" {
+			return fmt.Errorf("node %s is %s, not waiting for input", command.NodeID, node.Status)
+		}
+		if command.StepStartedAt != "" && !sameInstant(command.StepStartedAt, node.StartedAt) {
+			return fmt.Errorf("node %s was entered again since this input was submitted", command.NodeID)
+		}
+		for _, definition := range run.Workflow.Nodes {
+			if definition.ID == command.NodeID {
+				if problems := schema.ValidateValue("output", command.Output, definition.OutputSchema); len(problems) > 0 {
+					return errors.New(schema.FormatContractErrors("output does not satisfy outputSchema", problems))
+				}
+			}
+		}
+		control := model.Control{Kind: engine.ControlSubmit, NodeID: command.NodeID, Token: node.LeaseToken, Output: command.Output}
+		if err := store.EnqueueControl(run.RunDir, control); err != nil {
+			return err
+		}
+		_, err = store.WakeRun(ctx, root, run.RunID, control.Kind)
+		return err
+	}
+}
+
+// sameInstant compares two timestamps to the millisecond: the Hub stores
+// times in milliseconds, the run state in nanoseconds.
+func sameInstant(a, b string) bool {
+	first, errA := time.Parse(time.RFC3339Nano, a)
+	second, errB := time.Parse(time.RFC3339Nano, b)
+	if errA != nil || errB != nil {
+		return a == b
+	}
+	return first.UnixMilli() == second.UnixMilli()
 }

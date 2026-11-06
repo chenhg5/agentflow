@@ -18,6 +18,9 @@ type Config struct {
 	URL     string `json:"url"`
 	Token   string `json:"token,omitempty"`
 	Machine string `json:"machine,omitempty"`
+	// AcceptCommands lets the Hub's pages submit input to this runner's waiting
+	// nodes. Off unless the user's own config (or env) turns it on.
+	AcceptCommands bool `json:"accept_commands,omitempty"`
 }
 
 // Enabled reports whether a Hub URL is configured.
@@ -29,6 +32,8 @@ const ConfigFile = "hub.json"
 // LoadConfig resolves the Hub configuration. Later sources override earlier
 // ones field by field: ~/.agentflow/hub.json, <root>/hub.json, then the
 // AGENTFLOW_HUB_URL, AGENTFLOW_HUB_TOKEN and AGENTFLOW_MACHINE variables.
+// AGENTFLOW_HUB_ACCEPT_COMMANDS (or "accept_commands" in ~/.agentflow/hub.json)
+// lets the Hub submit input to this machine's waiting nodes.
 //
 // The project file comes with the repository, so it is not trusted with your
 // token: when it is the one that sets the URL, only a token from the same file
@@ -49,8 +54,20 @@ func LoadConfig(root string) (Config, error) {
 	env := Config{URL: os.Getenv("AGENTFLOW_HUB_URL"), Token: os.Getenv("AGENTFLOW_HUB_TOKEN"), Machine: os.Getenv("AGENTFLOW_MACHINE")}
 
 	config := merge(merge(user, project), env)
+	// Accepting commands lets the Hub drive this machine's runs, so only the
+	// user's own config or environment can turn it on, never a repository's
+	// hub.json, and never towards a Hub address that repository chose.
+	switch strings.ToLower(os.Getenv("AGENTFLOW_HUB_ACCEPT_COMMANDS")) {
+	case "1", "true", "yes":
+		config.AcceptCommands = true
+	case "0", "false", "no":
+		config.AcceptCommands = false
+	default:
+		config.AcceptCommands = user.AcceptCommands
+	}
 	if env.URL == "" && project.URL != "" {
 		config.Token = project.Token
+		config.AcceptCommands = false
 	}
 	config.URL = strings.TrimRight(strings.TrimSpace(config.URL), "/")
 	return config, nil

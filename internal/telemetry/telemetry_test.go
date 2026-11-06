@@ -290,3 +290,65 @@ func candidates(executors ...string) model.Execution {
 	}
 	return execution
 }
+
+type fakeCommands struct {
+	queue   []hubapi.Command
+	answers map[string]hubapi.CommandResult
+	machine string
+}
+
+func (f *fakeCommands) Commands(_ context.Context, machine string) ([]hubapi.Command, error) {
+	f.machine = machine
+	return f.queue, nil
+}
+
+func (f *fakeCommands) Answer(_ context.Context, machine, id string, result hubapi.CommandResult) error {
+	f.answers[id] = result
+	return nil
+}
+
+func TestPollAppliesAndAnswers(t *testing.T) {
+	source := &fakeCommands{queue: []hubapi.Command{{ID: "ok", Kind: "submit"}, {ID: "bad", Kind: "submit"}}, answers: map[string]hubapi.CommandResult{}}
+	reporter := NewReporter(NewOutbox(t.TempDir()), &fakeSender{}, hubapi.Source{Machine: "m1"})
+	reporter.Poll(context.Background()) // nothing configured: a no-op
+	reporter.commands = source
+	reporter.apply = func(_ context.Context, command hubapi.Command) error {
+		if command.ID == "bad" {
+			return errors.New("node was entered again; token=abcdefghijkl")
+		}
+		return nil
+	}
+	reporter.Poll(context.Background())
+	if source.machine != "m1" || source.answers["ok"].Status != "applied" || source.answers["bad"].Status != "rejected" || strings.Contains(source.answers["bad"].Error, "abcdefghijkl") {
+		t.Fatalf("answers = %+v machine %q", source.answers, source.machine)
+	}
+}
+
+func TestAcceptCommandsOnlyFromTheUser(t *testing.T) {
+	home, root := t.TempDir(), t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	t.Setenv("AGENTFLOW_HUB_URL", "")
+	t.Setenv("AGENTFLOW_HUB_TOKEN", "")
+	t.Setenv("AGENTFLOW_HUB_ACCEPT_COMMANDS", "")
+	os.MkdirAll(filepath.Join(home, ".agentflow"), 0o755)
+	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"accept_commands":true}`), 0o600)
+	os.WriteFile(filepath.Join(home, ".agentflow", ConfigFile), []byte(`{"url":"http://hub"}`), 0o600)
+	if config, _ := LoadConfig(root); config.AcceptCommands {
+		t.Fatal("a repository's hub.json must not turn commands on")
+	}
+	os.WriteFile(filepath.Join(home, ".agentflow", ConfigFile), []byte(`{"url":"http://hub","accept_commands":true}`), 0o600)
+	config, _ := LoadConfig(root)
+	if !config.AcceptCommands || len(SourceFor(config, root).Capabilities) != 1 {
+		t.Fatalf("the user's own config turns them on: %+v", config)
+	}
+	t.Setenv("AGENTFLOW_HUB_ACCEPT_COMMANDS", "0")
+	if config, _ := LoadConfig(root); config.AcceptCommands {
+		t.Fatal("the environment can turn them off")
+	}
+	t.Setenv("AGENTFLOW_HUB_ACCEPT_COMMANDS", "1")
+	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"url":"http://repo-chosen"}`), 0o600)
+	if config, _ := LoadConfig(root); config.AcceptCommands {
+		t.Fatal("never towards a Hub address a repository chose")
+	}
+}

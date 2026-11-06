@@ -27,6 +27,66 @@
 <section class="callout bad"><pre class="code">{{.}}</pre></section>
 {{end}}{{end}}
 
+{{range .Inputs}}
+<section class="card input-card" id="input">
+  <div class="card-head">
+    <h2>{{icon "person"}} 提交 <span class="mono">{{.NodeID}}</span> 的输入</h2>
+    <span class="muted">{{with .Executor}}{{.}} · {{end}}{{with .Waiting}}已经等了 {{.}}{{end}}</span>
+  </div>
+  {{with $.Notice}}<p class="flash good">{{.}}</p>{{end}}
+  {{with $.Problem}}<p class="flash bad">{{.}}</p>{{end}}
+  {{if .Accepts}}
+  <form class="input-form" method="post" action="{{runURL $run}}/submit">
+    <input type="hidden" name="csrf" value="{{.CSRF}}">
+    <input type="hidden" name="node" value="{{.NodeID}}">
+    {{range .Fields}}
+    <div class="field">
+      <label class="field-label" for="f-{{.Name}}">{{.Label}}{{if .Required}} <span class="human">*</span>{{end}}</label>
+      {{if eq .Kind "choice"}}
+        <div class="choices">{{$f := .}}{{range $i, $o := .Options}}<label class="choice"><input type="radio" name="f.{{$f.Name}}" value="{{$o}}" {{if or (eq $o $f.Default) (and (eq $i 0) (not $f.Default) $f.Required)}}checked{{end}}><span>{{$o}}</span></label>{{end}}</div>
+      {{else if eq .Kind "bool"}}
+        <label class="choice"><input type="checkbox" id="f-{{.Name}}" name="f.{{.Name}}" value="true" {{if eq .Default "true"}}checked{{end}}><span>是</span></label>
+      {{else if eq .Kind "textarea"}}
+        <textarea id="f-{{.Name}}" name="f.{{.Name}}" rows="3" {{if .Required}}required{{end}}>{{.Default}}</textarea>
+      {{else}}
+        <input id="f-{{.Name}}" name="f.{{.Name}}" value="{{.Default}}" {{if or (eq .Kind "number") (eq .Kind "integer")}}type="number" step="{{if eq .Kind "integer"}}1{{else}}any{{end}}"{{else}}type="text"{{end}} {{if .Required}}required{{end}}>
+      {{end}}
+      {{with .Description}}<p class="field-hint muted">{{.}}</p>{{end}}
+    </div>
+    {{else}}
+    <div class="field">
+      <label class="field-label" for="json-{{.NodeID}}">输出 JSON</label>
+      <textarea id="json-{{.NodeID}}" class="mono" name="json" rows="6" required>{{.RawJSON}}</textarea>
+      <p class="field-hint muted">按这个节点的 outputSchema 填一个 JSON 对象。</p>
+    </div>
+    {{end}}
+    <div class="form-actions"><button class="button primary" type="submit">提交</button><span class="muted">提交后由 <span class="mono">{{$run.Key.Machine}}</span> 取走执行，和在那台机器上跑 <code>agentflow run submit</code> 一样。</span></div>
+  </form>
+  {{else}}
+  <p class="muted">这台机器没有开启从 Hub 接收输入。要在这里提交，在 <span class="mono">{{$run.Key.Machine}}</span> 的 <code>~/.agentflow/hub.json</code> 里加上 <code>"accept_commands": true</code>（或设 <code>AGENTFLOW_HUB_ACCEPT_COMMANDS=1</code>），再重启它的 <code>trigger serve</code> / <code>run worker</code>。也可以直接在那台机器上：</p>
+  <pre class="code">agentflow run submit {{$run.Key.RunID}} {{.NodeID}} --output '{...}'</pre>
+  {{end}}
+</section>
+{{end}}
+
+{{with .Commands}}
+<section class="card">
+  <div class="card-head"><h2>从 Hub 提交的输入</h2><span class="muted">由运行所在的机器取走、校验后执行</span></div>
+  <div class="table-wrap"><table class="table">
+    <thead><tr><th>状态</th><th>节点</th><th class="grow">输出</th><th>谁</th><th>时间</th></tr></thead>
+    <tbody>{{range .}}
+      <tr>
+        <td>{{if eq .Status "pending"}}<span class="badge tone-agent">{{icon "spin"}}等机器取走</span>{{else if eq .Status "applied"}}<span class="badge tone-good">{{icon "check"}}已执行</span>{{else}}<span class="badge tone-bad">{{icon "x"}}被拒绝</span>{{end}}</td>
+        <td class="mono">{{.NodeID}}</td>
+        <td class="grow"><span class="mono clip">{{json .Output}}</span>{{with .Error}}<div class="cell-sub bad">{{.}}</div>{{end}}</td>
+        <td>{{.By}}</td>
+        <td>{{ago .CreatedAt}}</td>
+      </tr>{{end}}
+    </tbody>
+  </table></div>
+</section>
+{{end}}
+
 {{with .Flow}}
 <section class="card">
   <div class="card-head"><h2>流程图</h2>

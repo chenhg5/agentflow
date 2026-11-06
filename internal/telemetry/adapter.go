@@ -33,7 +33,11 @@ func SourceFor(config Config, root string) hubapi.Source {
 	if err != nil {
 		project = root
 	}
-	return hubapi.Source{Machine: machine, Hostname: hostname, Project: filepath.Base(project), Path: project, Version: version.Version}
+	source := hubapi.Source{Machine: machine, Hostname: hostname, Project: filepath.Base(project), Path: project, Version: version.Version}
+	if config.AcceptCommands {
+		source.Capabilities = []string{hubapi.CapabilitySubmit}
+	}
+	return source
 }
 
 // FromRun adapts a run of the JSON engine to the reporting contract.
@@ -156,7 +160,7 @@ func graphOf(workflow model.Workflow) *hubapi.Graph {
 	out := &hubapi.Graph{Entry: workflow.Entry, Nodes: make([]hubapi.GraphNode, 0, len(workflow.Nodes)), Edges: make([]hubapi.GraphEdge, 0, len(workflow.Edges))}
 	parallel := map[string]bool{}
 	for _, node := range workflow.Nodes {
-		item := hubapi.GraphNode{ID: node.ID, Parallel: node.Dispatch == "all"}
+		item := hubapi.GraphNode{ID: node.ID, Parallel: node.Dispatch == "all", OutputSchema: node.OutputSchema}
 		for _, candidate := range node.Execution.Candidates {
 			item.Executors = append(item.Executors, candidate.Executor)
 		}

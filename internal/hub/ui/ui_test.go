@@ -121,3 +121,50 @@ func TestFlowLayout(t *testing.T) {
 		t.Fatal("no graph, no canvas")
 	}
 }
+
+func TestInputForm(t *testing.T) {
+	schema := map[string]any{"type": "object", "required": []any{"decision"}, "properties": map[string]any{
+		"decision": map[string]any{"type": "string", "enum": []any{"approve", "hold"}, "title": "决定"},
+		"note":     map[string]any{"type": "string"},
+		"retries":  map[string]any{"type": "integer"},
+		"urgent":   map[string]any{"type": "boolean", "default": true},
+	}}
+	fields, raw := formFor(schema)
+	if raw != "" || len(fields) != 4 || fields[0].Name != "decision" || fields[0].Kind != "choice" || fields[0].Label != "决定" || !fields[0].Required {
+		t.Fatalf("fields = %+v raw %q", fields, raw)
+	}
+	kinds := map[string]string{}
+	for _, field := range fields {
+		kinds[field.Name] = field.Kind
+	}
+	if kinds["note"] != "textarea" || kinds["retries"] != "integer" || kinds["urgent"] != "bool" {
+		t.Fatalf("kinds = %v", kinds)
+	}
+	output, err := outputFromForm(url.Values{"f.decision": {"hold"}, "f.retries": {"2"}, "f.urgent": {"true"}}, schema)
+	if err != nil || output["decision"] != "hold" || output["retries"] != 2.0 || output["urgent"] != true || output["note"] != nil {
+		t.Fatalf("output = %v, %v", output, err)
+	}
+	if out, _ := outputFromForm(url.Values{"f.decision": {"approve"}}, schema); out["urgent"] != false {
+		t.Fatal("an unticked box is false")
+	}
+	for name, values := range map[string]url.Values{
+		"missing required": {},
+		"not an option":    {"f.decision": {"delete everything"}},
+		"not an integer":   {"f.decision": {"hold"}, "f.retries": {"1.5"}},
+		"bad json":         {"json": {"[1,2]"}},
+	} {
+		if _, err := outputFromForm(values, schema); err == nil {
+			t.Errorf("%s: accepted", name)
+		}
+	}
+	nested := map[string]any{"type": "object", "properties": map[string]any{"items": map[string]any{"type": "array"}}}
+	if fields, raw := formFor(nested); fields != nil || !strings.Contains(raw, `"items"`) {
+		t.Fatalf("nested schema should be a JSON box: %v %q", fields, raw)
+	}
+	if _, raw := formFor(nil); raw != "{}" {
+		t.Fatal("no schema: an empty JSON object to fill")
+	}
+	if out, err := outputFromForm(url.Values{"json": {`{"a":1}`}}, nil); err != nil || out["a"] != 1.0 {
+		t.Fatalf("json box: %v %v", out, err)
+	}
+}

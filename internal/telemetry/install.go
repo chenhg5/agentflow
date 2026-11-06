@@ -15,7 +15,11 @@ func Install(root string) (*Reporter, func(), error) {
 	if err != nil || !config.Enabled() {
 		return nil, func() {}, err
 	}
-	reporter := NewReporter(NewOutbox(root), NewHTTPSender(config), SourceFor(config, root))
+	sender := NewHTTPSender(config)
+	reporter := NewReporter(NewOutbox(root), sender, SourceFor(config, root))
+	if config.AcceptCommands {
+		reporter.commands = sender
+	}
 	remove := store.OnSave(func(run *model.Run) {
 		_ = reporter.Record(run) // the run must not fail because a report could not be written
 	})
@@ -48,6 +52,7 @@ func (r *Reporter) Every(ctx context.Context, interval time.Duration) {
 		case <-ticker.C:
 			flush, cancel := context.WithTimeout(ctx, interval)
 			_, _ = r.Flush(flush)
+			r.Poll(flush)
 			cancel()
 		}
 	}
@@ -56,11 +61,12 @@ func (r *Reporter) Every(ctx context.Context, interval time.Duration) {
 // Start installs reporting for a command: it records every saved run and
 // flushes in the background. stop flushes once more, briefly, and uninstalls.
 // When no Hub is configured both are no-ops.
-func Start(root string, interval, finalFlush time.Duration) (stop func()) {
+func Start(root string, interval, finalFlush time.Duration, apply Applier) (stop func()) {
 	reporter, remove, err := Install(root)
 	if err != nil || reporter == nil {
 		return func() {}
 	}
+	reporter.apply = apply
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
 	go func() {

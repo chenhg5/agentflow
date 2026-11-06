@@ -62,7 +62,7 @@ func (s Ingest) seeMachine(ctx context.Context, run domain.Run, at time.Time) er
 		return err
 	}
 	machine.ID = run.Key.Machine
-	return s.Store.SaveMachine(ctx, machine.Seen(run.Hostname, run.Version, at))
+	return s.Store.SaveMachine(ctx, machine.Seen(run.Hostname, run.Version, run.Capabilities, at))
 }
 
 func (s Ingest) now() time.Time {

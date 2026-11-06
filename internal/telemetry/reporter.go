@@ -19,6 +19,40 @@ type Reporter struct {
 	source hubapi.Source
 	now    func() time.Time
 	mu     sync.Mutex // one flush at a time
+
+	// commands and apply are set when this runner accepts commands from the
+	// Hub (see Config.AcceptCommands) and the command can act on them.
+	commands CommandSource
+	apply    Applier
+}
+
+// CommandSource is where a runner pulls the Hub's commands from.
+type CommandSource interface {
+	Commands(ctx context.Context, machine string) ([]hubapi.Command, error)
+	Answer(ctx context.Context, machine, id string, result hubapi.CommandResult) error
+}
+
+// Applier carries out one command against the local runs. The CLI provides
+// it, so this package never depends on the engine's control flow.
+type Applier func(ctx context.Context, command hubapi.Command) error
+
+// Poll fetches pending commands and applies each one, answering the Hub with
+// the outcome. Errors reaching the Hub are ignored: the next poll retries.
+func (r *Reporter) Poll(ctx context.Context) {
+	if r == nil || r.commands == nil || r.apply == nil {
+		return
+	}
+	commands, err := r.commands.Commands(ctx, r.source.Machine)
+	if err != nil {
+		return
+	}
+	for _, command := range commands {
+		result := hubapi.CommandResult{Status: "applied"}
+		if err := r.apply(ctx, command); err != nil {
+			result = hubapi.CommandResult{Status: "rejected", Error: clip(Redact(err.Error()), maxErrorRunes)}
+		}
+		_ = r.commands.Answer(ctx, r.source.Machine, command.ID, result)
+	}
 }
 
 // NewReporter wires the reporting pieces together.

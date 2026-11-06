@@ -168,6 +168,12 @@ func (q Query) Run(ctx context.Context, key domain.RunKey) (domain.Run, error) {
 	return run, nil
 }
 
+// Machine returns one machine; an unknown id gives an empty machine.
+func (q Query) Machine(ctx context.Context, id string) (domain.Machine, error) {
+	machine, _, err := q.Store.GetMachine(ctx, id)
+	return machine, err
+}
+
 // Machines lists machines, most recently seen first.
 func (q Query) Machines(ctx context.Context) ([]domain.Machine, error) {
 	machines, err := q.Store.Machines(ctx)

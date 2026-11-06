@@ -71,7 +71,7 @@ func Run(args []string) error {
 	}
 	root := cwd
 	if reportsRuns(args) {
-		stop := telemetry.Start(root, 10*time.Second, 2*time.Second)
+		stop := telemetry.Start(root, 10*time.Second, 2*time.Second, hubApplier(root))
 		defer stop()
 	}
 	switch args[0] {
