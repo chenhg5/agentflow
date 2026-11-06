@@ -186,6 +186,14 @@ func Matches(run domain.Run, filter app.RunFilter) bool {
 	if filter.RunID != "" && run.Key.RunID != filter.RunID {
 		return false
 	}
+	if filter.Group != "" && run.Group != filter.Group {
+		return false
+	}
+	for _, tag := range filter.Tags {
+		if !run.HasTag(tag) {
+			return false
+		}
+	}
 	if len(filter.Statuses) > 0 {
 		found := false
 		for _, status := range filter.Statuses {
@@ -233,6 +241,9 @@ func clone(run domain.Run) domain.Run {
 		run.Inputs = inputs
 	}
 	run.Steps = append([]domain.Step(nil), run.Steps...)
+	if run.Tags != nil {
+		run.Tags = append([]string(nil), run.Tags...)
+	}
 	run.Graph = nil // graphs live in their own map
 	return run
 }

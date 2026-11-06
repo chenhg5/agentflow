@@ -427,3 +427,16 @@ func TestTailQuotaFavoursFailures(t *testing.T) {
 		t.Fatalf("quota %d, failed step tail %d bytes, oldest step tail %d bytes", total, len(report.Steps[29].StderrTail), len(report.Steps[0].StderrTail))
 	}
 }
+
+func TestFromRunCarriesWorkflowLabels(t *testing.T) {
+	run := sampleRun()
+	run.Workflow.Title, run.Workflow.Description = "夜间巡检", "每晚检查 token=abcdefghijkl 能不能用"
+	run.Workflow.Tags, run.Workflow.Group = []string{"ops", "nightly"}, "infra"
+	report := FromRun(run, hubapi.Source{Machine: "m1"}, time.Now())
+	if report.WorkflowTitle != "夜间巡检" || report.Group != "infra" || len(report.Tags) != 2 || report.Tags[1] != "nightly" {
+		t.Fatalf("labels = %q %q %v", report.WorkflowTitle, report.Group, report.Tags)
+	}
+	if strings.Contains(report.WorkflowDescription, "abcdefghijkl") || !strings.Contains(report.WorkflowDescription, "每晚检查") {
+		t.Fatalf("description must be masked like other text: %q", report.WorkflowDescription)
+	}
+}

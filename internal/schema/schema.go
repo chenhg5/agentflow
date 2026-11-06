@@ -18,6 +18,7 @@ func Validate(workflow model.Workflow) []string {
 	if workflow.Name == "" {
 		errors = append(errors, "name is required")
 	}
+	errors = append(errors, ValidateLabels(workflow)...)
 	if len(workflow.Nodes) == 0 {
 		return append(errors, "nodes must be a non-empty array")
 	}
@@ -146,4 +147,39 @@ func validateSession(nodeID string, candidateIndex int, spec model.SessionSpec) 
 		return []string{fmt.Sprintf("node %s candidate %d session mode %s cannot define id", nodeID, candidateIndex, mode)}
 	}
 	return nil
+}
+
+// ValidateLabels checks the fields people read: title, description, tags and
+// group. They have no effect on execution, so the rules only keep them tidy.
+func ValidateLabels(workflow model.Workflow) []string {
+	var problems []string
+	trimmed := func(field, value string, limit int) {
+		switch {
+		case value != strings.TrimSpace(value):
+			problems = append(problems, field+" must not start or end with whitespace")
+		case len([]rune(value)) > limit:
+			problems = append(problems, fmt.Sprintf("%s must be at most %d characters", field, limit))
+		}
+	}
+	trimmed("title", workflow.Title, 120)
+	trimmed("group", workflow.Group, 80)
+	if len([]rune(workflow.Description)) > 2000 {
+		problems = append(problems, "description must be at most 2000 characters")
+	}
+	if len(workflow.Tags) > 20 {
+		problems = append(problems, "tags must have at most 20 entries")
+	}
+	seen := map[string]bool{}
+	for _, tag := range workflow.Tags {
+		if tag == "" {
+			problems = append(problems, "tags must not be empty")
+			continue
+		}
+		trimmed(fmt.Sprintf("tag %q", tag), tag, 40)
+		if seen[tag] {
+			problems = append(problems, fmt.Sprintf("tag %q appears twice", tag))
+		}
+		seen[tag] = true
+	}
+	return problems
 }

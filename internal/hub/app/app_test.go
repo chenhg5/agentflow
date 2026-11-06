@@ -172,3 +172,34 @@ func TestCommandsLifecycle(t *testing.T) {
 		t.Fatalf("history = %+v", history)
 	}
 }
+
+func TestWorkflowLabelsComeFromTheNewestLabelledRun(t *testing.T) {
+	ctx := context.Background()
+	store := memory.New()
+	old := report("m1", "r1", "nightly", "succeeded", now.Add(-2*time.Hour), 1)
+	old.Title, old.Tags, old.Group = "旧标题", []string{"old"}, "g0"
+	labelled := report("m1", "r2", "nightly", "succeeded", now.Add(-time.Hour), 1)
+	labelled.Title, labelled.Description, labelled.Tags, labelled.Group = "夜间巡检", "每晚检查", []string{"ops"}, "infra"
+	bare := report("m2", "r3", "nightly", "succeeded", now, 1) // a machine on an older agentflow
+	for _, run := range []domain.Run{old, labelled, bare} {
+		if _, err := store.Save(ctx, run); err != nil {
+			t.Fatal(err)
+		}
+	}
+	query := app.Query{Store: store, Now: func() time.Time { return now }}
+	stats, err := query.Workflows(ctx, 7, nil, "")
+	if err != nil || len(stats) != 1 {
+		t.Fatalf("stats = %+v, %v", stats, err)
+	}
+	if stat := stats[0]; stat.Title != "夜间巡检" || stat.Description != "每晚检查" || stat.Group != "infra" || len(stat.Tags) != 1 || stat.Tags[0] != "ops" || stat.Counts.Total != 3 {
+		t.Fatalf("stat = %+v", stat)
+	}
+	groups := app.GroupWorkflows([]app.WorkflowStat{{Name: "a"}, {Name: "b", Group: "zeta"}, {Name: "c", Group: "alpha"}, {Name: "d", Group: "zeta"}})
+	if len(groups) != 3 || groups[0].Name != "alpha" || groups[1].Name != "zeta" || len(groups[1].Workflows) != 2 || groups[2].Name != "" {
+		t.Fatalf("groups = %+v", groups)
+	}
+	tags := app.Tags([]app.WorkflowStat{{Tags: []string{"b", "a"}}, {Tags: []string{"b"}}})
+	if len(tags) != 2 || tags[0].Tag != "b" || tags[0].Count != 2 || tags[1].Tag != "a" {
+		t.Fatalf("tags = %+v", tags)
+	}
+}

@@ -19,6 +19,10 @@ type runJSON struct {
 	Version       string            `json:"version,omitempty"`
 	Orchestration string            `json:"orchestration"`
 	Workflow      string            `json:"workflow"`
+	Title         string            `json:"title"`
+	Description   string            `json:"description,omitempty"`
+	Tags          []string          `json:"tags"`
+	Group         string            `json:"group,omitempty"`
 	Digest        string            `json:"workflow_digest,omitempty"`
 	Status        domain.Status     `json:"status"`
 	Seq           int64             `json:"seq"`
@@ -74,6 +78,10 @@ type machineJSON struct {
 
 type workflowJSON struct {
 	Name        string          `json:"name"`
+	Title       string          `json:"title"`
+	Description string          `json:"description,omitempty"`
+	Tags        []string        `json:"tags"`
+	Group       string          `json:"group,omitempty"`
 	Counts      app.Counts      `json:"counts"`
 	SuccessRate *float64        `json:"success_rate"`
 	P50Ms       int64           `json:"p50_ms"`
@@ -119,7 +127,8 @@ func rate(counts app.Counts) *float64 {
 
 func toRunJSON(run domain.Run) runJSON {
 	out := runJSON{Machine: run.Key.Machine, RunID: run.Key.RunID, Hostname: run.Hostname, Project: run.Project, Path: run.Path,
-		Version: run.Version, Orchestration: run.Orchestration, Workflow: run.Workflow, Digest: run.Digest, Status: run.Status,
+		Version: run.Version, Orchestration: run.Orchestration, Workflow: run.Workflow, Title: run.Label(), Description: run.Description,
+		Tags: tagList(run.Tags), Group: run.Group, Digest: run.Digest, Status: run.Status,
 		Seq: run.Seq, CreatedAt: timePtr(run.CreatedAt), StartedAt: timePtr(run.StartedAt), FinishedAt: timePtr(run.FinishedAt),
 		UpdatedAt: timePtr(run.UpdatedAt), ReceivedAt: timePtr(run.ReceivedAt), DurationMs: run.DurationMs, WaitingMs: run.WaitingMs,
 		TriggerKind: run.TriggerKind, TriggerID: run.TriggerID, Inputs: run.Inputs, Error: run.Error}
@@ -142,7 +151,7 @@ func toRunsJSON(runs []domain.Run) []runJSON {
 }
 
 func toWorkflowJSON(stat app.WorkflowStat) workflowJSON {
-	return workflowJSON{Name: stat.Name, Counts: stat.Counts, SuccessRate: rate(stat.Counts), P50Ms: stat.P50Ms, P95Ms: stat.P95Ms,
+	return workflowJSON{Name: stat.Name, Title: stat.Label(), Description: stat.Description, Tags: tagList(stat.Tags), Group: stat.Group, Counts: stat.Counts, SuccessRate: rate(stat.Counts), P50Ms: stat.P50Ms, P95Ms: stat.P95Ms,
 		LastStatus: stat.LastStatus, LastAt: timePtr(stat.LastAt), Machines: stat.Machines, Recent: stat.Recent}
 }
 
@@ -310,4 +319,11 @@ func toStepStatsJSON(stats []app.StepStat) []stepStatJSON {
 		out[index] = row
 	}
 	return out
+}
+
+func tagList(tags []string) []string {
+	if tags == nil {
+		return []string{}
+	}
+	return tags
 }

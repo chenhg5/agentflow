@@ -1,9 +1,31 @@
 {{define "content"}}
+{{$days := .Days}}{{$tag := .Tag}}{{$group := .Group}}
 <div class="page-head">
-  <div><h1>Workflow</h1><p class="muted">最近 {{.Days}} 天有运行的 workflow</p></div>
+  <div>
+    <h1>Workflow</h1>
+    <p class="muted">最近 {{.Days}} 天有运行的 workflow{{with .Group}} · 分组 {{.}}{{end}}{{with .Tag}} · 标签 #{{.}}{{end}}</p>
+  </div>
   <div class="segmented" role="group" aria-label="时间范围">
-    {{$days := .Days}}{{range .Choices}}<a href="?days={{.}}" {{if eq . $days}}aria-current="page"{{end}}>{{.}} 天</a>{{end}}
+    {{range .Choices}}<a href="?days={{.}}&tag={{$tag}}&group={{$group}}" {{if eq . $days}}aria-current="page"{{end}}>{{.}} 天</a>{{end}}
   </div>
 </div>
-<section class="card flush">{{template "workflowTable" .Workflows}}</section>
+
+{{if or .Tags .Tag .Group}}
+<nav class="tag-filter" aria-label="按标签筛选">
+  <a href="?days={{$days}}" {{if and (not $tag) (not $group)}}aria-current="page"{{end}}>全部</a>
+  {{range .Tags}}<a href="?days={{$days}}&tag={{.Tag}}&group={{$group}}" {{if eq .Tag $tag}}aria-current="page"{{end}}>#{{.Tag}} <span class="num muted">{{.Count}}</span></a>{{end}}
+</nav>
+{{end}}
+
+{{range .Groups}}
+<section class="card flush wf-group">
+  <div class="card-head group-head">
+    <h2>{{if .Name}}<a class="link-quiet" href="?days={{$days}}&group={{.Name}}">{{.Name}}</a>{{else}}未分组{{end}}</h2>
+    <span class="muted">{{len .Workflows}} 个{{if .Name}} · <a class="link-quiet" href="/runs?group={{.Name}}">看运行 ›</a>{{end}}</span>
+  </div>
+  {{template "workflowTable" .Workflows}}
+</section>
+{{else}}
+<section class="card flush">{{template "workflowTable" .Groups}}</section>
+{{end}}
 {{end}}

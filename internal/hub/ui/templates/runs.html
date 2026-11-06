@@ -1,8 +1,9 @@
 {{define "content"}}
 <div class="page-head">
   <div>
-    <h1>{{if .Filter.Workflow}}<span class="pill pill-lg">{{.Filter.Workflow}}</span>{{else}}运行{{end}}</h1>
-    <p class="muted">{{.Total}} 次运行{{if .Filter.Machine}} · 机器 <span class="mono">{{.Filter.Machine}}</span>{{end}}</p>
+    <h1>{{if .Stat}}<span class="pill pill-lg{{if ne .Stat.Label .Stat.Name}} wf{{end}}">{{.Stat.Label}}</span>{{else if .Filter.Workflow}}<span class="pill pill-lg">{{.Filter.Workflow}}</span>{{else}}运行{{end}}</h1>
+    <p class="muted">{{.Total}} 次运行{{with .Stat}}{{if ne .Label .Name}} · <span class="mono">{{.Name}}</span>{{end}}{{end}}{{with .Filter.Group}} · 分组 {{.}}{{end}}{{range .Filter.Tags}} · #{{.}}{{end}}{{if .Filter.Machine}} · 机器 <span class="mono">{{.Filter.Machine}}</span>{{end}}</p>
+    {{with .Stat}}{{with .Description}}<p class="wf-description">{{.}}</p>{{end}}{{with .Tags}}<div class="tags tags-sm">{{template "tagChips" .}}</div>{{end}}{{end}}
   </div>
 </div>
 
@@ -19,7 +20,7 @@
 
 <form class="filters" method="get" action="/runs" data-autosubmit>
   <div class="tabs" role="group" aria-label="状态">
-    {{$status := .Status}}{{$wf := .Filter.Workflow}}{{$machine := .Filter.Machine}}
+    {{$status := .Status}}{{$wf := .Filter.Workflow}}{{$machine := .Filter.Machine}}{{$group := .Filter.Group}}{{$tag := firstTag .Filter.Tags}}
     {{range .Tabs}}<a href="{{.Href}}" {{if eq .Status $status}}aria-current="page"{{end}}>{{.Label}}</a>{{end}}
   </div>
   <input type="hidden" name="status" value="{{.Status}}">
@@ -27,8 +28,14 @@
   {{if not .Filter.Since.IsZero}}<input type="hidden" name="since" value="{{.Filter.Since.Format "2006-01-02T15:04:05Z07:00"}}">{{end}}
   {{if not .Filter.Until.IsZero}}<input type="hidden" name="until" value="{{.Filter.Until.Format "2006-01-02T15:04:05Z07:00"}}">{{end}}
   <label class="select"><span class="sr-only">Workflow</span>
-    <select name="workflow"><option value="">全部 workflow</option>{{range .Workflows}}<option value="{{.}}" {{if eq . $wf}}selected{{end}}>{{.}}</option>{{end}}</select>
+    <select name="workflow"><option value="">全部 workflow</option>{{range .Workflows}}<option value="{{.Name}}" {{if eq .Name $wf}}selected{{end}}>{{.Label}}</option>{{end}}</select>
   </label>
+  {{if .Groups}}<label class="select"><span class="sr-only">分组</span>
+    <select name="group"><option value="">全部分组</option>{{range .Groups}}<option value="{{.}}" {{if eq . $group}}selected{{end}}>{{.}}</option>{{end}}</select>
+  </label>{{end}}
+  {{if .Tags}}<label class="select"><span class="sr-only">标签</span>
+    <select name="tag"><option value="">全部标签</option>{{range .Tags}}<option value="{{.Tag}}" {{if eq .Tag $tag}}selected{{end}}>#{{.Tag}}</option>{{end}}</select>
+  </label>{{end}}
   <label class="select"><span class="sr-only">机器</span>
     <select name="machine"><option value="">全部机器</option>{{range .Machines}}<option value="{{.}}" {{if eq . $machine}}selected{{end}}>{{.}}</option>{{end}}</select>
   </label>

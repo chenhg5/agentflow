@@ -122,12 +122,12 @@ func (a API) run(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a API) workflows(w http.ResponseWriter, r *http.Request) {
-	stats, err := a.Query.Workflows(r.Context(), Days(r, 30))
+	stats, err := a.Query.Workflows(r.Context(), Days(r, 30), Tags(r), strings.TrimSpace(r.URL.Query().Get("group")))
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, map[string]any{"workflows": toWorkflowsJSON(stats)})
+	writeJSON(w, http.StatusOK, map[string]any{"workflows": toWorkflowsJSON(stats), "tags": app.Tags(stats), "groups": groupNames(stats)})
 }
 
 func (a API) machines(w http.ResponseWriter, r *http.Request) {
@@ -149,6 +149,29 @@ func (a API) steps(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"days": days, "steps": toStepStatsJSON(stats)})
 }
 
+// Tags reads ?tag= (repeatable, or comma-separated): runs must carry every one.
+func Tags(r *http.Request) []string {
+	var tags []string
+	for _, value := range r.URL.Query()["tag"] {
+		for _, tag := range strings.Split(value, ",") {
+			if tag = strings.TrimSpace(tag); tag != "" {
+				tags = append(tags, tag)
+			}
+		}
+	}
+	return tags
+}
+
+func groupNames(stats []app.WorkflowStat) []string {
+	names := []string{}
+	for _, group := range app.GroupWorkflows(stats) {
+		if group.Name != "" {
+			names = append(names, group.Name)
+		}
+	}
+	return names
+}
+
 // Days reads ?days=, clamped to 1..90.
 func Days(r *http.Request, fallback int) int {
 	days, err := strconv.Atoi(r.URL.Query().Get("days"))
@@ -161,7 +184,8 @@ func Days(r *http.Request, fallback int) int {
 // Filter reads a run filter from the query string. The pages use it too.
 func Filter(r *http.Request) (app.RunFilter, error) {
 	query := r.URL.Query()
-	filter := app.RunFilter{Workflow: query.Get("workflow"), Machine: query.Get("machine"), Project: query.Get("project"), RunID: query.Get("run")}
+	filter := app.RunFilter{Workflow: query.Get("workflow"), Machine: query.Get("machine"), Project: query.Get("project"), RunID: query.Get("run"),
+		Tags: Tags(r), Group: strings.TrimSpace(query.Get("group"))}
 	for _, value := range strings.Split(query.Get("status"), ",") {
 		if value = strings.TrimSpace(value); value == "" {
 			continue

@@ -196,6 +196,13 @@ func funcs() template.FuncMap {
 		"firstLine": firstLine, "label": func(s domain.Status) string { return lookOf(s).Label },
 		"tone":       func(s domain.Status) string { return lookOf(s).Tone },
 		"pathEscape": url.PathEscape,
+		"wf":         func(name, title string) wfRef { return wfRef{Name: name, Title: title} },
+		"firstTag": func(tags []string) string {
+			if len(tags) == 0 {
+				return ""
+			}
+			return tags[0]
+		},
 		"json": func(value any) string {
 			data, _ := json.Marshal(value)
 			return string(data)
@@ -221,3 +228,6 @@ func funcs() template.FuncMap {
 		},
 	}
 }
+
+// wfRef names a workflow on a page: its title, linked by its name.
+type wfRef struct{ Name, Title string }

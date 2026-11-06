@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
+	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -142,10 +143,13 @@ func hubClientCommand(verb string, parsed parsedArgs, root string) error {
 			return err
 		}
 		query := hubQuery("workflow", parsed.Workflow, "machine", parsed.Machine, "project", parsed.Project, "status", strings.Join(parsed.Statuses, ","),
-			"since", parsed.Since, "until", parsed.Until, "limit", parsed.Limit, "offset", parsed.Offset, "run", parsed.RunID)
+			"since", parsed.Since, "until", parsed.Until, "limit", parsed.Limit, "offset", parsed.Offset, "run", parsed.RunID, "group", parsed.Group)
+		addTags(query, parsed.Tags)
 		return client.show(ctx, verb, "/api/v1/runs", query, parsed)
 	case "workflows":
-		return client.show(ctx, verb, "/api/v1/workflows", hubQuery("days", parsed.Days), parsed)
+		query := hubQuery("days", parsed.Days, "group", parsed.Group)
+		addTags(query, parsed.Tags)
+		return client.show(ctx, verb, "/api/v1/workflows", query, parsed)
 	case "machines":
 		return client.show(ctx, verb, "/api/v1/machines", nil, parsed)
 	case "steps":
@@ -185,6 +189,12 @@ func hubQuery(pairs ...string) url.Values {
 		}
 	}
 	return query
+}
+
+func addTags(query url.Values, tags []string) {
+	for _, tag := range tags {
+		query.Add("tag", tag)
+	}
 }
 
 func runPath(machine, runID string) string {
@@ -360,11 +370,14 @@ func writeHub(verb string, data map[string]any, options OutputOptions) error {
 	case "runs":
 		fmt.Fprintf(out, "RUN\tSTATUS\tWORKFLOW\tSTARTED\tDURATION\n")
 		for _, run := range hubItems(data["runs"]) {
-			fmt.Fprintf(out, "%v/%v\t%v\t%v\t%v\t%s\n", run["machine"], run["run_id"], run["status"], run["workflow"], hubText(run["created_at"]), hubDuration(run["duration_ms"]))
+			fmt.Fprintf(out, "%v/%v\t%v\t%s\t%v\t%s\n", run["machine"], run["run_id"], run["status"], hubTitle(run["title"], run["workflow"]), hubText(run["created_at"]), hubDuration(run["duration_ms"]))
 		}
 		fmt.Fprintf(out, "(%v total)\n", data["total"])
 	case "run":
-		fmt.Fprintf(out, "%v/%v\t%v\t%v\t%s\n", data["machine"], data["run_id"], data["workflow"], data["status"], hubText(data["error"]))
+		fmt.Fprintf(out, "%v/%v\t%s\t%v\t%s\n", data["machine"], data["run_id"], hubTitle(data["title"], data["workflow"]), data["status"], hubText(data["error"]))
+		if description, _ := data["description"].(string); description != "" {
+			fmt.Fprintf(out, "  %s\n", hubText(description))
+		}
 		for _, step := range hubItems(data["steps"]) {
 			fmt.Fprintf(out, "  %v\t%v\t%s\t%s\n", step["id"], step["status"], hubDuration(step["duration_ms"]), hubText(firstValue(step["error"], step["summary"])))
 		}
@@ -372,10 +385,18 @@ func writeHub(verb string, data map[string]any, options OutputOptions) error {
 			fmt.Fprintf(out, "waiting input\t%v\thub can submit: %v\n", input["node_id"], input["hub_can_submit"])
 		}
 	case "workflows":
-		fmt.Fprintf(out, "WORKFLOW\tRUNS\tSUCCESS\tP50\tP95\tLAST\n")
-		for _, workflow := range hubItems(data["workflows"]) {
-			fmt.Fprintf(out, "%v\t%v\t%s\t%s\t%s\t%v\n", workflow["name"], hubMap(workflow["counts"])["total"], hubPercent(workflow["success_rate"]),
-				hubDuration(workflow["p50_ms"]), hubDuration(workflow["p95_ms"]), workflow["last_status"])
+		fmt.Fprintf(out, "GROUP\tWORKFLOW\tTAGS\tRUNS\tSUCCESS\tP50\tP95\tLAST\n")
+		workflows := hubItems(data["workflows"])
+		sort.SliceStable(workflows, func(i, j int) bool {
+			a, b := hubText(workflows[i]["group"]), hubText(workflows[j]["group"])
+			if a != b {
+				return b == "" || (a != "" && a < b) // ungrouped last
+			}
+			return hubTitle(workflows[i]["title"], workflows[i]["name"]) < hubTitle(workflows[j]["title"], workflows[j]["name"])
+		})
+		for _, workflow := range workflows {
+			fmt.Fprintf(out, "%v\t%s\t%s\t%v\t%s\t%s\t%s\t%v\n", hubText(workflow["group"]), hubTitle(workflow["title"], workflow["name"]), hubTags(workflow["tags"]),
+				hubMap(workflow["counts"])["total"], hubPercent(workflow["success_rate"]), hubDuration(workflow["p50_ms"]), hubDuration(workflow["p95_ms"]), workflow["last_status"])
 		}
 	case "machines":
 		fmt.Fprintf(out, "MACHINE\tHOSTNAME\tVERSION\tLAST SEEN\tCAPABILITIES\n")
@@ -425,6 +446,23 @@ func hubText(value any) string {
 		text = string(runes[:80]) + "…"
 	}
 	return text
+}
+
+// hubTitle is "Title (name)", or the name when the workflow has no title.
+func hubTitle(title, name any) string {
+	if title == nil || title == "" || title == name {
+		return fmt.Sprint(name)
+	}
+	return fmt.Sprintf("%v (%v)", title, name)
+}
+
+func hubTags(value any) string {
+	list, _ := value.([]any)
+	tags := make([]string, 0, len(list))
+	for _, tag := range list {
+		tags = append(tags, "#"+fmt.Sprint(tag))
+	}
+	return strings.Join(tags, " ")
 }
 
 func hubPercent(value any) string {

@@ -62,6 +62,10 @@ Use root `workflow.json` for a single graph. For multiple graphs, group all defi
 {
   "version": "3",
   "name": "example",
+  "title": "Proposal with review",
+  "description": "Drafts a short proposal and sends it back until review scores it 5 or more.",
+  "tags": ["writing", "review"],
+  "group": "docs",
   "entry": "draft",
   "nodes": [
     {"id": "draft", "execution": {"candidates": [{"executor": "codex", "config": {"instruction": "Write a short proposal."}}]}},
@@ -78,6 +82,8 @@ Use root `workflow.json` for a single graph. For multiple graphs, group all defi
 A node has `id`, `execution.candidates`, optional `execution.fallback`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. Each ordered candidate owns its executor, opaque config, and session policy. The entry node receives the run input; each later node receives the previous node's JSON output by default. An edge may declare `map` to build the next input from source `input`, source `output`, run `inputs`, and prior `nodes`; for example, `"map":{"review":"{{ output.comments }}","original":"{{ input.summary }}"}`. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge by default; `allowUnboundedCycles: true` explicitly permits unlimited loops. See [graph semantics](docs/graph-and-visualization.md).
 
 Set `"dispatch":"all"` on a node to run every matching outgoing branch concurrently. A target with `"join":{"from":["left","right"]}` starts only after both predecessors have delivered input; it receives `{"left": <payload>, "right": <payload>}`. The default dispatch remains first matching edge. See [the runnable parallel example](examples/parallel.json) and [parallel execution semantics](docs/graph-and-visualization.md#parallel-nodes-and-joins).
+
+`name` identifies the workflow in commands, triggers and the Hub. `title`, `description`, `tags` and `group` are optional and only for people: the Hub, `agentflow web`, `workflow list` and `run list` show the title instead of the name, list workflows under their group, and filter by tag (`agentflow workflow list --tag review`, `agentflow run list --group docs`, `agentflow hub runs --tag review`). Code runs take the same labels as flags (`agentflow code run nightly --title "Nightly check" --tag ops -- ./nightly.sh`).
 
 `prompt`, `score`, `decision`, recipient IDs, and similar values are executor configuration or input/output data. The graph assigns no meaning to them.
 
