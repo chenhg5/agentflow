@@ -119,16 +119,13 @@ func wakeRun(root, runID, reason string) (DispatchJob, error) {
 	if job.Owner == "" {
 		job.Status = "queued"
 	}
-	if err := SaveDispatchJob(root, job); err != nil {
-		return job, err
-	}
 	if settled {
-		// The live copy is authoritative from here on.
-		if err := os.Remove(settledDispatchPath(root, runID)); err != nil && !os.IsNotExist(err) {
+		// Bring the file back to the live queue first, then update it.
+		if err := unsettleDispatch(root, runID); err != nil {
 			return job, err
 		}
 	}
-	return job, nil
+	return job, SaveDispatchJob(root, job)
 }
 
 func ClaimDispatch(ctx context.Context, root, owner string, active map[string]bool, target string) (*DispatchJob, error) {

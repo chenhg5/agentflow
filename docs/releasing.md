@@ -16,6 +16,8 @@ Versions follow semver with a `v` prefix. Before 1.0, minor and patch releases m
    git push origin HEAD v0.0.1
    ```
 
+   Instead of pushing the tag yourself, you can merge the release commit to `main` and run the Release workflow by hand (Actions → Release → Run workflow on `main`, or `POST /repos/chenhg5/agentflow/actions/workflows/release.yml/dispatches` with `{"ref":"main","inputs":{"version":"vX.Y.Z"}}`). It refuses any branch but `main`, a version that is not `vX.Y.Z`, one that differs from `VERSION`, one without `changelogs/<version>.md`, or one whose tag already exists. It builds first and only then tags the head of `main` and publishes, so a failed build leaves no tag. The tag it pushes uses the workflow token, which does not start the workflow a second time.
+
 5. Pushing the tag runs `.github/workflows/release.yml`: it checks that the tag matches `VERSION` and that `changelogs/<version>.md` exists, runs `make release-all` (which runs `make check` first), and publishes the archives and `checksums.txt` as a GitHub prerelease with the changelog as notes. To build locally instead, run `make release-all` and publish `dist/` with `gh release create <version> dist/*.tar.gz dist/*.zip dist/checksums.txt --title <version> --notes-file changelogs/<version>.md --prerelease`.
 
 6. Watch the Release workflow, then check the release page.

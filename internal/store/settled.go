@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -50,20 +51,30 @@ func settledStatus(job DispatchJob) bool {
 	return false
 }
 
-// settleDispatch writes job to dispatch/settled/ and removes the live copy.
-// A crash between the two leaves both; the live copy wins and the next poll
-// settles it again.
+// settleDispatch moves job to dispatch/settled/. It writes the job's final
+// state in place and then renames the file, never deletes it: on Windows a
+// file deleted while another process reads it stays "delete pending", and
+// every open of that name fails with access denied until the reader closes it
+// (concurrent `run start` and `run get` hit exactly that). A rename takes the
+// name away at once, and readers find the job under its settled name.
 func settleDispatch(root string, job DispatchJob) error {
 	if err := os.MkdirAll(filepath.Join(root, "dispatch", settledDir), 0o755); err != nil {
 		return err
 	}
-	if err := writeCreationJSON(settledDispatchPath(root, job.RunID), job); err != nil {
+	if err := SaveDispatchJob(root, job); err != nil {
 		return err
 	}
-	if err := os.Remove(filepath.Join(root, "dispatch", job.RunID+".json")); err != nil && !os.IsNotExist(err) {
-		return err
+	return replaceStoreFile(filepath.Join(root, "dispatch", job.RunID+".json"), settledDispatchPath(root, job.RunID))
+}
+
+// unsettleDispatch moves a settled job back to the live queue, by rename for
+// the same reason.
+func unsettleDispatch(root, runID string) error {
+	err := replaceStoreFile(settledDispatchPath(root, runID), filepath.Join(root, "dispatch", runID+".json"))
+	if os.IsNotExist(err) || errors.Is(err, os.ErrNotExist) {
+		return nil
 	}
-	return nil
+	return err
 }
 
 // readDispatch reads a run's job, live first; settled reports which copy.
