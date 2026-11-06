@@ -60,6 +60,17 @@
       {{else if and $s.Error (eq $s.Status "failed")}}
       <div class="step-note"><p class="bad clip" title="{{$s.Error}}">{{firstLine $s.Error}}</p></div>
       {{end}}
+      {{if or $s.StdoutTail $s.StderrTail $s.Result $s.Artifacts}}
+      <details class="step-more" data-keep="step-{{$s.ID}}" {{if eq $s.Status "failed"}}open{{end}}>
+        <summary>结果和日志{{with $s.Artifacts}} · {{len .}} 个文件{{end}}</summary>
+        <div class="more-body">
+          {{with $s.Result}}<div class="more-block"><div class="more-head">结果</div><pre class="code">{{prettyJSON .}}</pre></div>{{end}}
+          {{with $s.StderrTail}}<div class="more-block"><div class="more-head">stderr <span class="muted">· 最后一段</span></div><pre class="code tail">{{.}}</pre></div>{{end}}
+          {{with $s.StdoutTail}}<div class="more-block"><div class="more-head">stdout <span class="muted">· 最后一段</span></div><pre class="code tail">{{.}}</pre></div>{{end}}
+          {{with $s.Artifacts}}<div class="more-block"><div class="more-head">文件 <span class="muted">· 内容留在运行所在的机器上</span></div><div class="tags">{{range .}}<span class="tag mono">{{.Name}} · {{bytes .Bytes}}</span>{{end}}</div></div>{{end}}
+        </div>
+      </details>
+      {{end}}
     </li>
   {{else}}
     <li class="empty">这次运行没有报上步骤。</li>

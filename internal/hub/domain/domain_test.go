@@ -44,3 +44,16 @@ func TestMachineSeenKeepsLatest(t *testing.T) {
 		t.Fatalf("machine = %+v", machine)
 	}
 }
+
+func TestKeepTails(t *testing.T) {
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	old := Run{Steps: []Step{{ID: "a", StartedAt: at, Attempts: 1, StderrTail: "boom", Result: "{}"}, {ID: "b", StartedAt: at, Attempts: 1, StdoutTail: "old visit"}}}
+	newer := Run{Steps: []Step{{ID: "a", StartedAt: at, Attempts: 1}, {ID: "b", StartedAt: at.Add(time.Minute), Attempts: 1}}}
+	newer.KeepTails(old)
+	if newer.Steps[0].StderrTail != "boom" || newer.Steps[0].Result != "{}" {
+		t.Fatal("same visit keeps its tail")
+	}
+	if newer.Steps[1].StdoutTail != "" {
+		t.Fatal("a new visit of a step must not show the previous visit's logs")
+	}
+}

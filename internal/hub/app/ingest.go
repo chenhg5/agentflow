@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -32,6 +33,11 @@ func (s Ingest) Accept(ctx context.Context, runs []domain.Run) (IngestResult, er
 		if err := run.Validate(); err != nil {
 			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: %v", run.Key.RunID, err))
 			continue
+		}
+		if old, err := s.Store.Get(ctx, run.Key); err == nil {
+			run.KeepTails(old)
+		} else if !errors.Is(err, ErrNotFound) {
+			return result, err
 		}
 		saved, err := s.Store.Save(ctx, run)
 		if err != nil {

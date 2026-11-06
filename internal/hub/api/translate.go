@@ -60,6 +60,7 @@ func runFromReport(report hubapi.RunReport) (domain.Run, error) {
 			Attempts: step.Attempts, StartedAt: parseTime(step.StartedAt), FinishedAt: parseTime(step.FinishedAt),
 			DurationMs: step.DurationMs, WaitingMs: step.WaitingMs, Error: step.Error, Summary: step.Summary, Reason: step.Reason,
 			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes,
+			StdoutTail: step.StdoutTail, StderrTail: step.StderrTail, Result: step.Result, Artifacts: artifacts(step.Artifacts),
 		})
 	}
 	return run, nil
@@ -74,4 +75,12 @@ func parseTime(value string) time.Time {
 		return time.Time{}
 	}
 	return parsed.UTC()
+}
+
+func artifacts(in []hubapi.Artifact) []domain.Artifact {
+	var out []domain.Artifact
+	for _, item := range in {
+		out = append(out, domain.Artifact{Name: item.Name, Bytes: item.Bytes})
+	}
+	return out
 }

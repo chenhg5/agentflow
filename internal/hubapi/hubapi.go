@@ -98,6 +98,20 @@ type StepReport struct {
 	Reason      string `json:"reason,omitempty"`
 	OutputBytes int64  `json:"outputBytes,omitempty"`
 	LogBytes    int64  `json:"logBytes,omitempty"`
+	// The ends of the step's latest attempt, masked and clipped: the last
+	// bytes of its logs and a preview of its result JSON. A report carries
+	// them within a budget, failed and running steps first; the Hub keeps a
+	// tail it already has when a later report of the same visit leaves it out.
+	StdoutTail string     `json:"stdoutTail,omitempty"`
+	StderrTail string     `json:"stderrTail,omitempty"`
+	Result     string     `json:"result,omitempty"`
+	Artifacts  []Artifact `json:"artifacts,omitempty"`
+}
+
+// Artifact names one file a step produced; only its size leaves the machine.
+type Artifact struct {
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
 }
 
 // Graph describes a workflow as nodes and edges. A code-orchestrated runner

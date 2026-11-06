@@ -103,6 +103,37 @@ type Step struct {
 	Reason      string
 	OutputBytes int64
 	LogBytes    int64
+	StdoutTail  string
+	StderrTail  string
+	Result      string
+	Artifacts   []Artifact
+}
+
+// Artifact is a file a step produced, by name and size.
+type Artifact struct {
+	Name  string
+	Bytes int64
+}
+
+// KeepTails carries log tails and result previews over from the stored copy
+// of a run into a newer report of it that left them out, for the same visit
+// of each step: a report sends tails within a budget, so a step that is no
+// longer among the most interesting may arrive without them.
+func (r *Run) KeepTails(old Run) {
+	previous := map[string]Step{}
+	for _, step := range old.Steps {
+		previous[step.ID] = step
+	}
+	for index := range r.Steps {
+		step := &r.Steps[index]
+		before, ok := previous[step.ID]
+		if !ok || !before.StartedAt.Equal(step.StartedAt) || before.Attempts != step.Attempts {
+			continue
+		}
+		if step.StdoutTail == "" && step.StderrTail == "" && step.Result == "" {
+			step.StdoutTail, step.StderrTail, step.Result = before.StdoutTail, before.StderrTail, before.Result
+		}
+	}
 }
 
 // ErrInvalid marks a report the Hub refuses to store.
