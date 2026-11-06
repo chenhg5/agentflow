@@ -1,0 +1,47 @@
+{{define "content"}}
+<div class="page-head">
+  <div>
+    <h1>总览</h1>
+    <p class="muted">最近 {{.Days}} 天 · {{.Machines}} 台机器上报</p>
+  </div>
+  <div class="segmented" role="group" aria-label="时间范围">
+    {{$days := .Days}}{{range .Choices}}<a href="?days={{.}}" {{if eq . $days}}aria-current="page"{{end}}>{{.}} 天</a>{{end}}
+  </div>
+</div>
+
+{{if eq .Counts.Total 0}}{{template "emptyHub"}}{{else}}
+<section class="kpis">
+  <div class="card kpi"><div class="kpi-label">运行</div><div class="kpi-value num">{{.Counts.Total}}</div><div class="kpi-hint">成功 {{.Counts.Succeeded}} · 失败 {{.Counts.Failed}}{{if .Counts.Cancelled}} · 取消 {{.Counts.Cancelled}}{{end}}</div></div>
+  <div class="card kpi"><div class="kpi-label">成功率</div><div class="kpi-value num {{if and (ge .Rate 0.0) (lt .Rate 0.8)}}bad{{end}}">{{percent .Rate}}</div><div class="kpi-hint">只算跑完的：成功 ÷（成功 + 失败）</div></div>
+  <div class="card kpi {{if .Counts.Waiting}}kpi-human{{end}}"><div class="kpi-label">等人处理</div><div class="kpi-value num">{{.Counts.Waiting}}</div><div class="kpi-hint">卡在 human 节点，等批准或驳回</div></div>
+  <div class="card kpi"><div class="kpi-label">平均耗时</div><div class="kpi-value num">{{duration .AvgMs}}</div><div class="kpi-hint">跑完的运行，不算等人的时间</div></div>
+  <div class="card kpi"><div class="kpi-label">正在跑</div><div class="kpi-value num">{{.Counts.Active}}</div><div class="kpi-hint">待开始、排队和运行中</div></div>
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>每天的运行</h2>
+    <div class="legend"><span><i class="sw good"></i>成功</span><span><i class="sw bad"></i>失败</span><span><i class="sw other"></i>其他（在跑 / 取消）</span></div>
+  </div>
+  <div class="chart-wrap">{{.Chart}}</div>
+</section>
+
+{{if or .Waiting .Running}}
+<section class="card">
+  <div class="card-head"><h2>{{if .Waiting}}等人处理{{else}}正在跑{{end}}</h2><a class="more" href="/runs?status={{if .Waiting}}waiting_human{{else}}running{{end}}">全部 ›</a></div>
+  {{if .Waiting}}{{template "runTable" .Waiting}}{{else}}{{template "runTable" .Running}}{{end}}
+</section>
+{{end}}
+
+{{if .Failures}}
+<section class="card">
+  <div class="card-head"><h2>最近失败</h2><a class="more" href="/runs?status=failed">全部 ›</a></div>
+  {{template "runTable" .Failures}}
+</section>
+{{end}}
+
+<section class="card">
+  <div class="card-head"><h2>Workflow</h2><a class="more" href="/workflows">全部 ›</a></div>
+  {{template "workflowTable" .Workflows}}
+</section>
+{{end}}
+{{end}}

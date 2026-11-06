@@ -1,0 +1,7 @@
+{{define "content"}}
+<div class="card empty-hub">
+  <h2>找不到这次运行</h2>
+  <p class="muted">机器 <span class="mono">{{.Machine}}</span> 上没有报过 <span class="mono">{{.RunID}}</span>。可能还没上报，或者在那台机器上跑一次 <code>agentflow hub push --all</code>。</p>
+  <p><a class="button" href="/runs">回到运行列表</a></p>
+</div>
+{{end}}

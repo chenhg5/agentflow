@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/model"
@@ -85,7 +86,48 @@ func LoadRun(root, runID string) (*model.Run, error) {
 
 func SaveState(run *model.Run) error {
 	run.State.UpdatedAt = time.Now().UTC().Format(time.RFC3339Nano)
-	return writeJSON(filepath.Join(run.RunDir, "state.json"), run.State)
+	if err := writeJSON(filepath.Join(run.RunDir, "state.json"), run.State); err != nil {
+		return err
+	}
+	notifySaved(run)
+	return nil
+}
+
+// SaveHook observes every persisted run state. Hooks run synchronously after
+// the state is on disk; they must be fast and must not fail the run, so they
+// return nothing. Reporting to the Hub is wired in through a hook, which keeps
+// the engine unaware of who is watching.
+type SaveHook func(run *model.Run)
+
+var (
+	hooksMu sync.RWMutex
+	hooks   []SaveHook
+)
+
+// OnSave registers a hook and returns a function that removes it.
+func OnSave(hook SaveHook) (remove func()) {
+	hooksMu.Lock()
+	defer hooksMu.Unlock()
+	hooks = append(hooks, hook)
+	index := len(hooks) - 1
+	return func() {
+		hooksMu.Lock()
+		defer hooksMu.Unlock()
+		if index < len(hooks) {
+			hooks[index] = nil
+		}
+	}
+}
+
+func notifySaved(run *model.Run) {
+	hooksMu.RLock()
+	current := append([]SaveHook(nil), hooks...)
+	hooksMu.RUnlock()
+	for _, hook := range current {
+		if hook != nil {
+			hook(run)
+		}
+	}
 }
 
 func AppendEvent(runDir string, event map[string]any) error {
