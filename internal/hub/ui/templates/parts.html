@@ -1,0 +1,61 @@
+{{define "workflowName"}}<a class="pill" href="/runs?workflow={{.}}">{{.}}</a>{{end}}
+
+{{define "runRows"}}
+{{range .}}
+<tr>
+  <td>{{badge .Status}}</td>
+  <td class="grow">
+    <div class="cell-main">{{template "workflowName" .Workflow}} <a class="mono muted link-quiet" href="{{runURL .}}">{{short .Key.RunID}}</a></div>
+    {{with .Error}}<div class="cell-sub bad clip" title="{{.}}">{{firstLine .}}</div>{{end}}
+  </td>
+  <td class="hide-sm">{{trigger .TriggerKind}}</td>
+  <td class="hide-sm mono muted">{{.Key.Machine}}</td>
+  <td>{{ago .When}}</td>
+  <td class="num right">{{duration .DurationMs}}{{if gt .WaitingMs 0}}<div class="cell-sub human">等人 {{duration .WaitingMs}}</div>{{end}}</td>
+  <td class="right"><a class="open" href="{{runURL .}}" aria-label="打开">›</a></td>
+</tr>
+{{end}}
+{{end}}
+
+{{define "runTable"}}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>状态</th><th>Workflow / 运行</th><th class="hide-sm">触发</th><th class="hide-sm">机器</th><th>开始</th><th class="right">耗时</th><th></th></tr></thead>
+  <tbody>{{template "runRows" .}}</tbody>
+</table>
+</div>
+{{end}}
+
+{{define "workflowTable"}}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>Workflow</th><th>最近结果</th><th class="right">运行</th><th class="right">成功率</th><th class="right hide-sm">P50</th><th class="right hide-sm">P95</th><th>最近一次</th><th class="hide-sm">机器</th></tr></thead>
+  <tbody>
+  {{range .}}
+  <tr>
+    <td>{{template "workflowName" .Name}}</td>
+    <td><span class="spark">{{range .Recent}}{{dot .}}{{end}}</span></td>
+    <td class="num right">{{.Counts.Total}}</td>
+    <td class="num right {{if and (ge .Counts.SuccessRate 0.0) (lt .Counts.SuccessRate 0.8)}}bad{{end}}">{{percent .Counts.SuccessRate}}</td>
+    <td class="num right hide-sm">{{duration .P50Ms}}</td>
+    <td class="num right hide-sm">{{duration .P95Ms}}</td>
+    <td><span class="nowrap">{{dot .LastStatus}} {{ago .LastAt}}</span></td>
+    <td class="hide-sm mono muted">{{range $i, $m := .Machines}}{{if $i}}, {{end}}{{$m}}{{end}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="8" class="empty">还没有运行上报上来。</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+{{end}}
+
+{{define "emptyHub"}}
+<div class="card empty-hub">
+  <h2>还没有运行上报上来</h2>
+  <p class="muted">在跑 workflow 的机器上配好 Hub 地址和令牌，之后每次运行都会自动上报；已有的运行用 <code>agentflow hub push --all</code> 补报。</p>
+<pre class="code">export AGENTFLOW_HUB_URL=http://这台机器:8787
+export AGENTFLOW_HUB_TOKEN=…
+agentflow hub push --all</pre>
+</div>
+{{end}}

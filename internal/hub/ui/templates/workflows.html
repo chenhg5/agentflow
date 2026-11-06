@@ -1,0 +1,9 @@
+{{define "content"}}
+<div class="page-head">
+  <div><h1>Workflow</h1><p class="muted">最近 {{.Days}} 天有运行的 workflow</p></div>
+  <div class="segmented" role="group" aria-label="时间范围">
+    {{$days := .Days}}{{range .Choices}}<a href="?days={{.}}" {{if eq . $days}}aria-current="page"{{end}}>{{.}} 天</a>{{end}}
+  </div>
+</div>
+<section class="card flush">{{template "workflowTable" .Workflows}}</section>
+{{end}}

@@ -1,0 +1,267 @@
+// Package ui renders the Hub's pages: server-side HTML with an embedded
+// stylesheet taken from the Loops console's look, and no build step.
+package ui
+
+import (
+	"bytes"
+	"context"
+	"embed"
+	"errors"
+	"html/template"
+	"io/fs"
+	"log"
+	"net/http"
+	"net/url"
+	"sort"
+	"time"
+
+	"github.com/chenhg5/agentflow/internal/hub/api"
+	"github.com/chenhg5/agentflow/internal/hub/app"
+	"github.com/chenhg5/agentflow/internal/hub/domain"
+)
+
+//go:embed templates/*.html
+var templateFS embed.FS
+
+//go:embed static
+var staticFS embed.FS
+
+// Pages serves the HTML pages.
+type Pages struct {
+	Query   app.Query
+	Version string
+	pages   map[string]*template.Template
+}
+
+// New parses the templates once.
+func New(query app.Query, version string) (*Pages, error) {
+	base, err := template.New("").Funcs(funcs()).ParseFS(templateFS, "templates/layout.html", "templates/parts.html")
+	if err != nil {
+		return nil, err
+	}
+	pages := map[string]*template.Template{}
+	for _, name := range []string{"overview", "runs", "run", "workflows", "machines", "missing"} {
+		page, err := template.Must(base.Clone()).ParseFS(templateFS, "templates/"+name+".html")
+		if err != nil {
+			return nil, err
+		}
+		pages[name] = page
+	}
+	return &Pages{Query: query, Version: version, pages: pages}, nil
+}
+
+// Register mounts the pages and static files behind view.
+func (p *Pages) Register(mux *http.ServeMux, view api.Guard) {
+	static, _ := fs.Sub(staticFS, "static")
+	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(time.Hour, http.FileServer(http.FS(static)))))
+	mux.Handle("GET /{$}", view(http.HandlerFunc(p.overview)))
+	mux.Handle("GET /runs", view(http.HandlerFunc(p.runs)))
+	mux.Handle("GET /runs/{machine}/{run}", view(http.HandlerFunc(p.run)))
+	mux.Handle("GET /workflows", view(http.HandlerFunc(p.workflows)))
+	mux.Handle("GET /machines", view(http.HandlerFunc(p.machines)))
+}
+
+// Crumb is one step of the breadcrumb.
+type Crumb struct {
+	Label string
+	Href  string
+}
+
+// page is what the layout needs around every page's own data.
+type page struct {
+	Title   string
+	Tab     string
+	Crumbs  []Crumb
+	Live    bool
+	Version string
+	Data    any
+}
+
+var dayChoices = []int{7, 14, 30}
+
+type overviewData struct {
+	app.Overview
+	Chart   template.HTML
+	Choices []int
+	Rate    float64
+}
+
+func (p *Pages) overview(w http.ResponseWriter, r *http.Request) {
+	days := api.Days(r, 14)
+	overview, err := p.Query.Overview(r.Context(), days)
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	p.render(w, http.StatusOK, "overview", page{Title: "总览", Tab: "overview", Live: true, Crumbs: []Crumb{{Label: "总览"}},
+		Data: overviewData{Overview: overview, Chart: runsChart(overview.Daily), Choices: dayChoices, Rate: overview.Counts.SuccessRate()}})
+}
+
+type statusTab struct {
+	Label  string
+	Status string
+}
+
+var statusTabs = []statusTab{{"全部", ""}, {"运行中", "running"}, {"等人处理", "waiting_human"}, {"失败", "failed"}, {"成功", "succeeded"}, {"已取消", "cancelled"}}
+
+type runsData struct {
+	Runs      []domain.Run
+	Total     int
+	Filter    app.RunFilter
+	Status    string
+	Tabs      []statusTab
+	Workflows []string
+	Machines  []string
+	Stat      *app.WorkflowStat
+	Prev      int
+	Next      int
+	From      int
+	To        int
+}
+
+const pageSize = 50
+
+func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
+	filter, err := api.Filter(r)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	filter.Limit = pageSize
+	runs, total, err := p.Query.Runs(r.Context(), filter)
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	stats, err := p.Query.Workflows(r.Context(), 30)
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	machines, err := p.Query.Machines(r.Context())
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	data := runsData{Runs: runs, Total: total, Filter: filter, Status: r.URL.Query().Get("status"), Tabs: statusTabs,
+		Prev: -1, Next: -1, From: filter.Offset + 1, To: filter.Offset + len(runs)}
+	for index := range stats {
+		data.Workflows = append(data.Workflows, stats[index].Name)
+		if stats[index].Name == filter.Workflow {
+			data.Stat = &stats[index]
+		}
+	}
+	sort.Strings(data.Workflows)
+	for _, machine := range machines {
+		data.Machines = append(data.Machines, machine.ID)
+	}
+	sort.Strings(data.Machines)
+	if filter.Offset > 0 {
+		data.Prev = max(filter.Offset-pageSize, 0)
+	}
+	if filter.Offset+len(runs) < total {
+		data.Next = filter.Offset + pageSize
+	}
+	crumbs := []Crumb{{Label: "运行", Href: "/runs"}}
+	if filter.Workflow != "" {
+		crumbs = append(crumbs, Crumb{Label: filter.Workflow})
+	}
+	p.render(w, http.StatusOK, "runs", page{Title: "运行", Tab: "runs", Live: filter.Offset == 0, Crumbs: crumbs, Data: data})
+}
+
+type runData struct {
+	Run      domain.Run
+	Timeline []timelineRow
+	Done     int
+	Failed   *domain.Step
+}
+
+func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
+	key := domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")}
+	run, err := p.Query.Run(r.Context(), key)
+	if errors.Is(err, app.ErrNotFound) {
+		p.render(w, http.StatusNotFound, "missing", page{Title: "找不到这次运行", Tab: "runs",
+			Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: key.RunID}}, Data: key})
+		return
+	}
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	data := runData{Run: run, Timeline: timeline(run, clock())}
+	for index, step := range run.Steps {
+		if step.Status == domain.StatusSucceeded || step.Status == domain.StatusSkipped {
+			data.Done++
+		}
+		if step.Status == domain.StatusFailed && data.Failed == nil {
+			data.Failed = &run.Steps[index]
+		}
+	}
+	p.render(w, http.StatusOK, "run", page{Title: run.Workflow + " · " + run.Key.RunID, Tab: "runs", Live: !run.Status.Finished(),
+		Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: run.Workflow, Href: "/runs?workflow=" + url.QueryEscape(run.Workflow)}, {Label: shortID(run.Key.RunID)}},
+		Data:   data})
+}
+
+type workflowsData struct {
+	Workflows []app.WorkflowStat
+	Days      int
+	Choices   []int
+}
+
+func (p *Pages) workflows(w http.ResponseWriter, r *http.Request) {
+	days := api.Days(r, 30)
+	stats, err := p.Query.Workflows(r.Context(), days)
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	sort.SliceStable(stats, func(i, j int) bool { return stats[i].Name < stats[j].Name })
+	p.render(w, http.StatusOK, "workflows", page{Title: "Workflow", Tab: "workflows", Crumbs: []Crumb{{Label: "Workflow"}},
+		Data: workflowsData{Workflows: stats, Days: days, Choices: []int{7, 30, 90}}})
+}
+
+type machineRow struct {
+	domain.Machine
+	Online bool
+}
+
+func (p *Pages) machines(w http.ResponseWriter, r *http.Request) {
+	machines, err := p.Query.Machines(r.Context())
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	rows := make([]machineRow, len(machines))
+	for index, machine := range machines {
+		rows[index] = machineRow{Machine: machine, Online: clock().Sub(machine.LastSeen) < 15*time.Minute}
+	}
+	p.render(w, http.StatusOK, "machines", page{Title: "机器", Tab: "machines", Crumbs: []Crumb{{Label: "机器"}}, Data: rows})
+}
+
+func (p *Pages) render(w http.ResponseWriter, status int, name string, data page) {
+	data.Version = p.Version
+	var body bytes.Buffer
+	if err := p.pages[name].ExecuteTemplate(&body, "layout", data); err != nil {
+		p.fail(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	w.Write(body.Bytes())
+}
+
+func (p *Pages) fail(w http.ResponseWriter, err error) {
+	if errors.Is(err, context.Canceled) {
+		return
+	}
+	log.Printf("hub page: %v", err)
+	http.Error(w, "hub error: "+err.Error(), http.StatusInternalServerError)
+}
+
+func cacheFor(age time.Duration, next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Cache-Control", "public, max-age="+itoa(int(age.Seconds())))
+		next.ServeHTTP(w, r)
+	})
+}

@@ -7,7 +7,7 @@ It uses a small JSON workflow definition, persists every run under `.agentflow/`
 The current release is `v0.0.3` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
 
 For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
-The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md).
+The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md); the multi-machine Hub in [`docs/hub.md`](docs/hub.md).
 
 ## Install
 
@@ -140,6 +140,21 @@ agentflow run list --workflow release-review --status waiting_human --format jso
 ```
 
 The aggregate includes run counts, average/P50/P95/max durations, human waiting time, retry totals, and input/output/log byte totals. Run data is persisted under `.agentflow/runs/<run-id>/` so it can be inspected or exported by another tool.
+
+## Hub: runs from every machine in one place
+
+Runs stay local, but a Hub collects them into one web console (overview, runs, run detail, workflows, machines) and a read API:
+
+```bash
+# on the Hub machine
+AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0 --port 8787
+
+# on every machine that runs workflows
+export AGENTFLOW_HUB_URL=http://hub.example:8787 AGENTFLOW_HUB_TOKEN=...
+agentflow hub push --all     # backfill existing runs once
+```
+
+From then on, commands that change run state report each state change. Reports go to `.agentflow/outbox/` first and are delivered in the background, so a Hub that is slow or down never slows or fails a run. Secrets in errors, inputs, and the reserved `summary`/`reason` result fields are masked before they leave the machine. The protocol carries an `orchestration` field (`json` today), so code-orchestrated runners can report to the same Hub. See [`docs/hub.md`](docs/hub.md).
 
 ## Workflow visualization
 

@@ -1,0 +1,80 @@
+{{define "content"}}
+{{$run := .Run}}
+<div class="page-head">
+  <div>
+    <h1 class="run-title">{{template "workflowName" $run.Workflow}} {{badge $run.Status}}</h1>
+    <p class="muted mono">{{$run.Key.RunID}}</p>
+  </div>
+  <div class="tags"><span class="tag">{{orchestration $run.Orchestration}}</span>{{with $run.Version}}<span class="tag mono">agentflow {{.}}</span>{{end}}</div>
+</div>
+
+<div class="stats">
+  <div><b>{{ago $run.When}}</b><span>开始</span></div>
+  <div><b class="num">{{duration $run.DurationMs}}</b><span>耗时</span></div>
+  <div><b class="num {{if gt $run.WaitingMs 0}}human{{end}}">{{duration $run.WaitingMs}}</b><span>等人</span></div>
+  <div><b class="num">{{.Done}} / {{len $run.Steps}}</b><span>步骤完成</span></div>
+  <div><b>{{trigger $run.TriggerKind}}</b><span>触发{{with $run.TriggerID}} · <span class="mono">{{.}}</span>{{end}}</span></div>
+  <div><b class="mono">{{$run.Key.Machine}}</b><span>机器</span></div>
+</div>
+
+{{with .Failed}}
+<section class="callout bad">
+  <div class="callout-head">{{icon "x"}} <b>失败在 <span class="mono">{{.ID}}</span></b>{{if gt .Attempts 1}}<span class="muted">（试了 {{.Attempts}} 次）</span>{{end}}</div>
+  {{with .Reason}}<p>{{.}}</p>{{end}}
+  {{with .Error}}<pre class="code">{{.}}</pre>{{end}}
+</section>
+{{else}}{{with $run.Error}}
+<section class="callout bad"><pre class="code">{{.}}</pre></section>
+{{end}}{{end}}
+
+<section class="card">
+  <div class="card-head"><h2>步骤</h2><span class="muted">按 workflow 里的顺序；条是在这次运行时间轴上的位置</span></div>
+  <ol class="steps">
+  {{range .Timeline}}{{$s := .Step}}
+    <li class="step tone-{{tone $s.Status}}">
+      <div class="step-line">
+        <span class="step-status" title="{{label $s.Status}}">{{badge $s.Status}}</span>
+        <span class="step-id mono">{{$s.ID}}</span>
+        <span class="step-kind">{{$s.Type}}{{with $s.Provider}} · {{.}}{{end}}</span>
+        {{if gt $s.Attempts 1}}<span class="tag warn" title="重试过">×{{$s.Attempts}}</span>{{end}}
+        <span class="step-bar" aria-hidden="true">{{if .Shown}}<i style="left:{{printf "%.2f" .Left}}%;width:{{printf "%.2f" .Width}}%"></i>{{end}}</span>
+        <span class="step-time num">{{duration $s.DurationMs}}</span>
+      </div>
+      {{if or $s.Summary $s.Reason $s.SkipReason (and $s.Error (ne $s.Status "failed"))}}
+      <div class="step-note">
+        {{with $s.Summary}}<p>{{.}}</p>{{end}}
+        {{with $s.Reason}}<p class="muted">{{.}}</p>{{end}}
+        {{with $s.SkipReason}}<p class="muted">跳过：{{.}}</p>{{end}}
+        {{if and $s.Error (ne $s.Status "failed")}}<p class="muted">{{firstLine $s.Error}}</p>{{end}}
+      </div>
+      {{else if and $s.Error (eq $s.Status "failed")}}
+      <div class="step-note"><p class="bad clip" title="{{$s.Error}}">{{firstLine $s.Error}}</p></div>
+      {{end}}
+    </li>
+  {{else}}
+    <li class="empty">这次运行没有报上步骤。</li>
+  {{end}}
+  </ol>
+</section>
+
+<div class="grid-2">
+  <section class="card">
+    <div class="card-head"><h2>输入</h2></div>
+    {{if $run.Inputs}}
+    <dl class="kv">{{range $k, $v := $run.Inputs}}<dt class="mono">{{$k}}</dt><dd class="mono">{{$v}}</dd>{{end}}</dl>
+    {{else}}<p class="empty">没有输入。</p>{{end}}
+  </section>
+  <section class="card">
+    <div class="card-head"><h2>来源</h2></div>
+    <dl class="kv">
+      <dt>项目</dt><dd>{{with $run.Project}}{{.}}{{else}}—{{end}}</dd>
+      <dt>目录</dt><dd class="mono">{{with $run.Path}}{{.}}{{else}}—{{end}}</dd>
+      <dt>主机名</dt><dd class="mono">{{with $run.Hostname}}{{.}}{{else}}—{{end}}</dd>
+      <dt>Workflow 摘要</dt><dd class="mono">{{with $run.Digest}}{{.}}{{else}}—{{end}}</dd>
+      <dt>创建</dt><dd class="num">{{clock $run.CreatedAt}}</dd>
+      <dt>结束</dt><dd class="num">{{clock $run.FinishedAt}}</dd>
+      <dt>最近上报</dt><dd class="num">{{clock $run.ReceivedAt}}</dd>
+    </dl>
+  </section>
+</div>
+{{end}}

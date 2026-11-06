@@ -290,6 +290,17 @@ agentflow web --run <run-id>
 
 Web 页面会显示节点依赖、节点类型、状态、耗时、attempts 和输出大小；run 页面会每两秒刷新一次状态。CLI 会打印本地 URL。可以用 `--port 0` 选择可用端口，用 `--host 0.0.0.0` 暴露到局域网时必须确认网络访问范围。
 
+### 多台机器的运行：Hub
+
+用户想在一个地方看所有机器上的运行时，用 Hub（详见 `docs/hub.md`）：
+
+```bash
+agentflow hub status --format json      # enabled=false 说明还没配
+agentflow hub push --all --format json  # 配好后补报已有运行
+```
+
+配置靠 `AGENTFLOW_HUB_URL`、`AGENTFLOW_HUB_TOKEN`（或 `.agentflow/hub.json`），token 向用户要，不要写进仓库。配好后状态变化会自动上报，Hub 挂了不影响运行。想让 Hub 上看得懂每一步，就在节点结果里写 `summary` 和 `reason`。
+
 ## 9. 谁来启动 workflow
 
 workflow 本身是完整的，谁启动它只是入口。以下方式等价，按用户已有的东西选：

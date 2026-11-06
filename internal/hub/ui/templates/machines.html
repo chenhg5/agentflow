@@ -1,0 +1,24 @@
+{{define "content"}}
+<div class="page-head"><div><h1>机器</h1><p class="muted">往这个 Hub 上报过运行的机器</p></div></div>
+<section class="card flush">
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>机器</th><th class="hide-sm">主机名</th><th>agentflow</th><th>最近上报</th><th class="hide-sm">第一次上报</th><th></th></tr></thead>
+  <tbody>
+  {{range .}}
+  <tr>
+    <td><span class="nowrap"><span class="dot {{if .Online}}tone-good{{else}}tone-neutral{{end}}" title="{{if .Online}}15 分钟内上报过{{else}}超过 15 分钟没上报{{end}}"></span> <span class="mono">{{.ID}}</span></span></td>
+    <td class="hide-sm mono muted">{{.Hostname}}</td>
+    <td class="mono">{{.Version}}</td>
+    <td>{{ago .LastSeen}}</td>
+    <td class="hide-sm">{{ago .FirstSeen}}</td>
+    <td class="right"><a class="more" href="/runs?machine={{.ID}}">运行 ›</a></td>
+  </tr>
+  {{else}}
+  <tr><td colspan="6" class="empty">还没有机器上报。</td></tr>
+  {{end}}
+  </tbody>
+</table>
+</div>
+</section>
+{{end}}
