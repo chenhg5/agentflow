@@ -290,6 +290,29 @@ a.pill:hover { background: var(--accent); }
 .empty-hub { align-items: flex-start; gap: 10px; padding: 24px; }
 .empty-hub .code { width: 100%; }
 
+
+/* canvas */
+.flow { height: 520px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); margin: 0 -4px; display: grid; place-items: center; overflow: hidden; }
+.flow > .react-flow { width: 100%; height: 100%; }
+.flow-offline { padding: 24px; text-align: center; color: var(--muted-foreground); font-size: 12.5px; }
+.flow .react-flow__node.flow-node { background: var(--card); color: var(--foreground); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; width: 200px; text-align: left; font-family: var(--font-sans); box-shadow: none; }
+.flow .react-flow__node.flow-node.selected { box-shadow: 0 0 0 2px var(--ring, var(--agent)); }
+.flow-card { display: flex; flex-direction: column; gap: 3px; }
+.flow-head { display: flex; align-items: center; gap: 6px; }
+.flow-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.flow-name { font-family: var(--font-mono); font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-meta { font-size: 11px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-stats { display: flex; gap: 8px; font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.flow .react-flow__controls { box-shadow: none; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.flow .react-flow__controls-button { background: var(--card); border-bottom: 1px solid var(--border); fill: var(--foreground); }
+.flow .react-flow__controls-button:hover { background: var(--accent); }
+.sw.agent { background: var(--agent); }
+.sw.human { background: var(--human); }
+.ln { display: inline-block; width: 14px; height: 0; border-top: 2px dashed; }
+.ln.cond { border-color: var(--warn); }
+.ln.loop { border-color: var(--human); border-top-style: dotted; }
+@media (max-width: 860px) { .flow { height: 360px; } }
+
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

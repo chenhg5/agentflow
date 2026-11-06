@@ -63,6 +63,10 @@ var migrations = []string{
 	CREATE INDEX runs_at ON runs (at DESC);
 	CREATE INDEX runs_workflow_at ON runs (workflow, at DESC);
 	CREATE INDEX runs_status_at ON runs (status, at DESC);`,
+	`CREATE TABLE graphs (
+		key TEXT PRIMARY KEY,
+		graph TEXT NOT NULL
+	);`,
 }
 
 // Open opens or creates the database at path.
@@ -364,4 +368,67 @@ func fromMs(value int64) time.Time {
 		return time.Time{}
 	}
 	return time.UnixMilli(value).UTC()
+}
+
+// graphRow is the stored shape of a graph, apart from the domain type.
+type graphRow struct {
+	Entry string         `json:"entry,omitempty"`
+	Nodes []graphNodeRow `json:"nodes"`
+	Edges []graphEdgeRow `json:"edges"`
+}
+
+type graphNodeRow struct {
+	ID        string   `json:"id"`
+	Executors []string `json:"executors,omitempty"`
+	Parallel  bool     `json:"parallel,omitempty"`
+	Join      []string `json:"join,omitempty"`
+}
+
+type graphEdgeRow struct {
+	Source        string `json:"source"`
+	Target        string `json:"target"`
+	Condition     string `json:"condition,omitempty"`
+	MaxIterations int    `json:"max_iterations,omitempty"`
+	Parallel      bool   `json:"parallel,omitempty"`
+}
+
+// SaveGraph stores or replaces the graph under key.
+func (s *Store) SaveGraph(ctx context.Context, key string, graph domain.Graph) error {
+	row := graphRow{Entry: graph.Entry}
+	for _, node := range graph.Nodes {
+		row.Nodes = append(row.Nodes, graphNodeRow(node))
+	}
+	for _, edge := range graph.Edges {
+		row.Edges = append(row.Edges, graphEdgeRow(edge))
+	}
+	data, err := json.Marshal(row)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO graphs (key, graph) VALUES (?, ?) ON CONFLICT (key) DO UPDATE SET graph = excluded.graph`, key, string(data))
+	return err
+}
+
+// Graph returns the graph stored under key.
+func (s *Store) Graph(ctx context.Context, key string) (domain.Graph, bool, error) {
+	var data string
+	err := s.db.QueryRowContext(ctx, `SELECT graph FROM graphs WHERE key = ?`, key).Scan(&data)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.Graph{}, false, nil
+	}
+	if err != nil {
+		return domain.Graph{}, false, err
+	}
+	var row graphRow
+	if err := json.Unmarshal([]byte(data), &row); err != nil {
+		return domain.Graph{}, false, fmt.Errorf("graph %s: %w", key, err)
+	}
+	graph := domain.Graph{Entry: row.Entry}
+	for _, node := range row.Nodes {
+		graph.Nodes = append(graph.Nodes, domain.GraphNode(node))
+	}
+	for _, edge := range row.Edges {
+		graph.Edges = append(graph.Edges, domain.GraphEdge(edge))
+	}
+	return graph, true, nil
 }

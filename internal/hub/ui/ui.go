@@ -201,6 +201,7 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 
 type runData struct {
 	Run      domain.Run
+	Flow     string
 	Timeline []timelineRow
 	Done     int
 	Failed   *domain.Step
@@ -218,7 +219,7 @@ func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, err)
 		return
 	}
-	data := runData{Run: run, Timeline: timeline(run, clock())}
+	data := runData{Run: run, Flow: flowJSON(run), Timeline: timeline(run, clock())}
 	for index, step := range run.Steps {
 		if step.Status == domain.StatusSucceeded || step.Status == domain.StatusSkipped {
 			data.Done++

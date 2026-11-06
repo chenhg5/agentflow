@@ -44,9 +44,16 @@ type MachineRepository interface {
 	Machines(ctx context.Context) ([]domain.Machine, error)
 }
 
+// GraphRepository stores workflow graphs by GraphKey.
+type GraphRepository interface {
+	SaveGraph(ctx context.Context, key string, graph domain.Graph) error
+	Graph(ctx context.Context, key string) (domain.Graph, bool, error)
+}
+
 // Store is everything the Hub persists.
 type Store interface {
 	RunRepository
 	MachineRepository
+	GraphRepository
 	Close() error
 }

@@ -24,7 +24,15 @@
       .then(function (html) {
         if (!html) return;
         var next = new DOMParser().parseFromString(html, "text/html").getElementById("main");
-        if (next) { main.innerHTML = next.innerHTML; if (!next.hasAttribute("data-live")) main.removeAttribute("data-live"); }
+        if (!next) return;
+        var oldFlow = main.querySelector("[data-flow]");
+        var newFlow = next.querySelector("[data-flow]");
+        var keep = oldFlow && newFlow && oldFlow.dataset.flow === newFlow.dataset.flow;
+        if (keep) newFlow.replaceWith(oldFlow); // same graph and statuses: keep the canvas and its zoom
+        main.innerHTML = "";
+        while (next.firstChild) main.appendChild(next.firstChild);
+        if (!next.hasAttribute("data-live")) main.removeAttribute("data-live");
+        document.dispatchEvent(new Event("hub:refresh"));
       })
       .catch(function () {})
       .then(function () { busy = false; });

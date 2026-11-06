@@ -27,6 +27,16 @@
 <section class="callout bad"><pre class="code">{{.}}</pre></section>
 {{end}}{{end}}
 
+{{with .Flow}}
+<section class="card">
+  <div class="card-head"><h2>流程图</h2>
+    <div class="legend"><span><i class="sw good"></i>成功</span><span><i class="sw bad"></i>失败</span><span><i class="sw agent"></i>运行中</span><span><i class="sw human"></i>等人</span><span><i class="ln cond"></i>条件</span><span><i class="ln loop"></i>循环</span></div>
+  </div>
+  <div class="flow" data-flow="{{.}}"><span class="muted">正在加载画布…</span></div>
+</section>
+<script type="module" src="/static/flow.js"></script>
+{{end}}
+
 <section class="card">
   <div class="card-head"><h2>步骤</h2><span class="muted">按 workflow 里的顺序；条是在这次运行时间轴上的位置</span></div>
   <ol class="steps">

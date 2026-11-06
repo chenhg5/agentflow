@@ -76,3 +76,48 @@ func TestRunsHrefKeepsEveryFilter(t *testing.T) {
 		t.Error("runsHref must not change the current query")
 	}
 }
+
+func TestFlowLayout(t *testing.T) {
+	graph := domain.Graph{Entry: "a",
+		Nodes: []domain.GraphNode{{ID: "a", Executors: []string{"process"}}, {ID: "b", Executors: []string{"codex", "claude-code"}, Parallel: true}, {ID: "c"}, {ID: "d"}, {ID: "orphan"}},
+		Edges: []domain.GraphEdge{
+			{Source: "a", Target: "b", MaxIterations: 3}, {Source: "b", Target: "c", Condition: "output.ok"},
+			{Source: "b", Target: "d", Parallel: true}, {Source: "c", Target: "a", MaxIterations: 2}, {Source: "d", Target: domain.EndNode},
+		}}
+	run := domain.Run{Status: domain.StatusRunning, Graph: &graph, Steps: []domain.Step{
+		{ID: "a", Type: "process", Status: domain.StatusSucceeded, DurationMs: 1500, Attempts: 1},
+		{ID: "b", Type: "claude-code", Status: domain.StatusRunning, Attempts: 2},
+	}}
+	flow := layoutFlow(run)
+	column := map[string]int{}
+	byID := map[string]flowNode{}
+	for _, node := range flow.Nodes {
+		column[node.ID] = node.X
+		byID[node.ID] = node
+	}
+	if !(column["a"] < column["b"] && column["b"] < column["c"] && column["c"] == column["d"]) {
+		t.Fatalf("a chain whose edges all carry loops must still read left to right: %v", column)
+	}
+	if column[domain.EndNode] <= column["orphan"] || column["orphan"] <= column["d"] {
+		t.Fatalf("unreachable nodes go past the last column and the end goes last: %v", column)
+	}
+	if byID["a"].Tone != "good" || byID["a"].Duration != "1.5s" || byID["b"].Executor != "claude-code" || byID["b"].Attempts != 2 || byID["c"].Executor != "" || byID["c"].Label != "待开始" {
+		t.Fatalf("node states: %+v", byID)
+	}
+	if len(byID["b"].Badges) != 1 || !byID[domain.EndNode].End {
+		t.Fatalf("badges / end: %+v %+v", byID["b"], byID[domain.EndNode])
+	}
+	kinds := map[string]string{}
+	for _, edge := range flow.Edges {
+		kinds[edge.Source+">"+edge.Target] = edge.Kind + ":" + edge.Label
+		if edge.Target == "b" && !edge.Animated {
+			t.Error("edges into a running node are animated")
+		}
+	}
+	if kinds["a>b"] != "loop:循环 ≤ 3" || kinds["b>c"] != "condition:output.ok" || kinds["b>d"] != "parallel:⇉" {
+		t.Fatalf("edge kinds: %v", kinds)
+	}
+	if flowJSON(domain.Run{}) != "" {
+		t.Fatal("no graph, no canvas")
+	}
+}

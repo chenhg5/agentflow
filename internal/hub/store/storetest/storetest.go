@@ -153,6 +153,28 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		check("past the end", app.RunFilter{Offset: 10})
 	})
 
+	t.Run("graphs", func(t *testing.T) {
+		store := open(t)
+		if _, found, err := store.Graph(ctx, "wf@x"); err != nil || found {
+			t.Fatalf("empty store found a graph: %v %v", found, err)
+		}
+		graph := domain.Graph{Entry: "a", Nodes: []domain.GraphNode{{ID: "a", Executors: []string{"codex", "process"}, Parallel: true, Join: []string{"z"}}},
+			Edges: []domain.GraphEdge{{Source: "a", Target: "$end", Condition: "ok", MaxIterations: 2, Parallel: true}}}
+		if err := store.SaveGraph(ctx, "wf@x", graph); err != nil {
+			t.Fatal(err)
+		}
+		graph.Entry = "b"
+		store.SaveGraph(ctx, "wf@x", graph)
+		got, found, err := store.Graph(ctx, "wf@x")
+		if err != nil || !found || got.Entry != "b" || len(got.Nodes) != 1 || got.Nodes[0].Executors[1] != "process" || !got.Nodes[0].Parallel ||
+			got.Nodes[0].Join[0] != "z" || got.Edges[0].Condition != "ok" || got.Edges[0].MaxIterations != 2 || !got.Edges[0].Parallel {
+			t.Fatalf("graph = %+v %v %v", got, found, err)
+		}
+		if run, _ := store.Get(ctx, domain.RunKey{Machine: "m", RunID: "nope"}); run.Graph != nil {
+			t.Fatal("runs do not carry graphs")
+		}
+	})
+
 	t.Run("machines", func(t *testing.T) {
 		store := open(t)
 		if _, found, err := store.GetMachine(ctx, "m1"); err != nil || found {

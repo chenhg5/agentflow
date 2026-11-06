@@ -71,6 +71,8 @@ agentflow hub status --format json                      # 看配置、待发数�
 
 返回 `{"accepted": n, "stale": n, "rejected": ["run-id: 原因"]}`。`stale` 是比已存的旧的快照，`rejected` 是不合法的（缺 machine / runId / workflow、状态不认识、协议版本不对）；一份坏的不影响同批其它的。
 
+**流程图 `graph`（可选）：** `entry`、`nodes`（`id`、候选执行器 `executors`、`parallel`、`join`）、`edges`（`source`、`target`、`condition`、`maxIterations`、`parallel`；`target` 为 `$end` 表示结束）。Hub 按 `workflow@workflowDigest` 只存一份，运行详情页用它画 React Flow 画布（React Flow 从 esm.sh 加载，离线时画布提示加载不到，步骤列表照常）。补报已有的运行时，就算快照本身是旧的，图也会补上。
+
 **保留字段 `summary` / `reason`：** 节点结果 JSON 里的 `summary`（做了什么）和 `reason`（为什么这样判断）会原样（脱敏、截断后）显示在运行详情的步骤下面。想让 Hub 上一眼看懂一步做了什么，就在结果里写这两个字段。
 
 **状态：** `pending`、`queued`、`running`、`waiting_input`（等人提交表单或外部输入；旧版本的 `waiting_human` 同样处理）、`waiting_resource`（等共享资源）、`succeeded`、`failed`、`cancelled`、`skipped`（步骤）。
