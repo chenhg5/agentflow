@@ -50,10 +50,21 @@ type GraphRepository interface {
 	Graph(ctx context.Context, key string) (domain.Graph, bool, error)
 }
 
+// CommandRepository stores commands for runners.
+type CommandRepository interface {
+	SaveCommand(ctx context.Context, command domain.Command) error
+	Command(ctx context.Context, id string) (domain.Command, bool, error)
+	// PendingCommands lists a machine's pending commands, oldest first.
+	PendingCommands(ctx context.Context, machine string) ([]domain.Command, error)
+	// RunCommands lists a run's commands, newest first.
+	RunCommands(ctx context.Context, run domain.RunKey) ([]domain.Command, error)
+}
+
 // Store is everything the Hub persists.
 type Store interface {
 	RunRepository
 	MachineRepository
 	GraphRepository
+	CommandRepository
 	Close() error
 }

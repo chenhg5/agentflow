@@ -106,6 +106,7 @@ func New(ctx context.Context, options Options) (*Server, error) {
 func Handler(store app.Store, options Options, loopback bool) (http.Handler, error) {
 	ingest := app.Ingest{Store: store}
 	query := app.Query{Store: store}
+	commands := app.Commands{Store: store}
 	ingestGuard, viewGuard := api.Guard(api.Open), api.Guard(api.Open)
 	if options.IngestToken != "" {
 		ingestGuard = api.BearerToken(options.IngestToken)
@@ -116,12 +117,12 @@ func Handler(store app.Store, options Options, loopback bool) (http.Handler, err
 	case !loopback:
 		viewGuard = api.ViewerToken(options.IngestToken)
 	}
-	pages, err := ui.New(query, options.Version)
+	pages, err := ui.New(query, commands, options.Version)
 	if err != nil {
 		return nil, err
 	}
 	mux := http.NewServeMux()
-	api.API{Ingest: ingest, Query: query}.Register(mux, ingestGuard, viewGuard)
+	api.API{Ingest: ingest, Query: query, Commands: commands}.Register(mux, ingestGuard, viewGuard)
 	pages.Register(mux, viewGuard)
 	return securityHeaders(mux), nil
 }

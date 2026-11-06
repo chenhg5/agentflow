@@ -32,7 +32,7 @@ func TestRunsReachTheHub(t *testing.T) {
 	t.Setenv("AGENTFLOW_MACHINE", "ci")
 
 	root := t.TempDir()
-	stop := telemetry.Start(root, time.Hour, 5*time.Second)
+	stop := telemetry.Start(root, time.Hour, 5*time.Second, nil)
 	run, err := store.CreateRun(root, oneStep(`printf '{"summary":"said hello"}' > "$AGENTFLOW_RESULT_FILE"`), map[string]string{}, "")
 	if err != nil {
 		t.Fatal(err)
@@ -59,7 +59,7 @@ func TestStartIsANoOpWithoutAHub(t *testing.T) {
 	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("AGENTFLOW_HUB_URL", "")
 	root := t.TempDir()
-	stop := telemetry.Start(root, time.Hour, time.Second)
+	stop := telemetry.Start(root, time.Hour, time.Second, nil)
 	run, _ := store.CreateRun(root, oneStep(`printf '{}' > "$AGENTFLOW_RESULT_FILE"`), map[string]string{}, "")
 	engine.Execute(run, nil)
 	stop()

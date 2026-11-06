@@ -2,6 +2,7 @@ package app_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -129,5 +130,45 @@ func TestGraphsAreStoredPerWorkflowVersion(t *testing.T) {
 		if err != nil || (run.Graph != nil) != want {
 			t.Fatalf("%s: graph %v, want %v (%v)", id, run.Graph != nil, want, err)
 		}
+	}
+}
+
+func TestCommandsLifecycle(t *testing.T) {
+	ctx := context.Background()
+	store := memory.New()
+	waiting := report("m1", "r1", "wf", "waiting_input", now, 1)
+	waiting.Steps = []domain.Step{{ID: "approve", Status: domain.StatusWaitingInput, StartedAt: now}}
+	waiting.Capabilities = []string{domain.CapabilitySubmit}
+	app.Ingest{Store: store}.Accept(ctx, []domain.Run{waiting})
+	commands := app.Commands{Store: store, Now: func() time.Time { return now }}
+	command, err := commands.Submit(ctx, waiting.Key, "approve", map[string]any{"decision": "approve"}, "glenn")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := commands.Submit(ctx, domain.RunKey{Machine: "m1", RunID: "nope"}, "approve", nil, ""); !errors.Is(err, app.ErrNotFound) {
+		t.Fatalf("unknown run: %v", err)
+	}
+	pending, _ := commands.Pending(ctx, "m1")
+	if len(pending) != 1 || pending[0].ID != command.ID {
+		t.Fatalf("pending = %+v", pending)
+	}
+	if other, _ := commands.Pending(ctx, "m2"); len(other) != 0 {
+		t.Fatal("commands are per machine")
+	}
+	if err := commands.Answer(ctx, command.ID, "m2", domain.CommandApplied, ""); !errors.Is(err, app.ErrNotFound) {
+		t.Fatalf("another machine must not answer: %v", err)
+	}
+	if err := commands.Answer(ctx, command.ID, "m1", domain.CommandRejected, "node was entered again"); err != nil {
+		t.Fatal(err)
+	}
+	if err := commands.Answer(ctx, command.ID, "m1", domain.CommandApplied, ""); !errors.Is(err, app.ErrCommandDone) {
+		t.Fatalf("second answer: %v", err)
+	}
+	if pending, _ := commands.Pending(ctx, "m1"); len(pending) != 0 {
+		t.Fatal("answered commands are no longer pending")
+	}
+	history, _ := commands.ForRun(ctx, waiting.Key)
+	if len(history) != 1 || history[0].Status != domain.CommandRejected || history[0].Error == "" {
+		t.Fatalf("history = %+v", history)
 	}
 }

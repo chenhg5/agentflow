@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/url"
@@ -195,5 +196,9 @@ func funcs() template.FuncMap {
 		"firstLine": firstLine, "label": func(s domain.Status) string { return lookOf(s).Label },
 		"tone":       func(s domain.Status) string { return lookOf(s).Tone },
 		"pathEscape": url.PathEscape,
+		"json": func(value any) string {
+			data, _ := json.Marshal(value)
+			return string(data)
+		},
 	}
 }

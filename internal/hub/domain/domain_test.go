@@ -38,9 +38,32 @@ func TestWhenFallsBack(t *testing.T) {
 
 func TestMachineSeenKeepsLatest(t *testing.T) {
 	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
-	machine := Machine{ID: "m"}.Seen("h1", "v1", at.Add(time.Hour))
-	machine = machine.Seen("h0", "v0", at) // an older report arriving late
-	if machine.Version != "v1" || machine.Hostname != "h1" || !machine.FirstSeen.Equal(at) || !machine.LastSeen.Equal(at.Add(time.Hour)) {
+	machine := Machine{ID: "m"}.Seen("h1", "v1", []string{"submit"}, at.Add(time.Hour))
+	machine = machine.Seen("h0", "v0", nil, at) // an older report arriving late
+	if !machine.Accepts("submit") || machine.Version != "v1" || machine.Hostname != "h1" || !machine.FirstSeen.Equal(at) || !machine.LastSeen.Equal(at.Add(time.Hour)) {
 		t.Fatalf("machine = %+v", machine)
+	}
+}
+
+func TestNewSubmission(t *testing.T) {
+	at := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	run := Run{Key: RunKey{Machine: "m", RunID: "r"}, Status: StatusWaitingInput, Steps: []Step{
+		{ID: "build", Status: StatusSucceeded}, {ID: "approve", Status: StatusWaitingInput, StartedAt: at},
+	}}
+	accepting := Machine{ID: "m", Capabilities: []string{CapabilitySubmit}}
+	command, err := NewSubmission("c1", run, accepting, "approve", nil, "glenn", at)
+	if err != nil || command.Status != CommandPending || !command.StepStartedAt.Equal(at) || command.Output == nil || command.By != "glenn" {
+		t.Fatalf("command = %+v, %v", command, err)
+	}
+	if _, err := NewSubmission("c2", run, Machine{ID: "m"}, "approve", nil, "", at); !errors.Is(err, ErrNoCapability) {
+		t.Fatalf("a machine that did not opt in: %v", err)
+	}
+	if _, err := NewSubmission("c3", run, accepting, "build", nil, "", at); !errors.Is(err, ErrNotWaiting) {
+		t.Fatalf("a step that is not waiting: %v", err)
+	}
+	finished := run
+	finished.Status = StatusCancelled
+	if _, err := NewSubmission("c4", finished, accepting, "approve", nil, "", at); !errors.Is(err, ErrNotWaiting) {
+		t.Fatalf("a finished run: %v", err)
 	}
 }

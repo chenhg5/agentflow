@@ -130,8 +130,27 @@ SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo
 
 运行 id 只在一台机器上唯一，所以运行的主键是 `machine + runId`。
 
-## 8. 还没做
+## 8. 在 Hub 上提交等待输入的节点
+
+运行停在等待输入的节点上（`external` 执行器，比如审批、填表）时，运行详情页会出现「提交输入」卡片。表单从节点的 `outputSchema` 生成：枚举是单选，布尔是勾选，数字是数字框，字符串是输入框或多行文本；嵌套对象、数组这类复杂 schema 就给一个 JSON 输入框。
+
+Hub 不会去连 runner。流程是「拉取」：
+
+```text
+页面提交 → Hub 存一条待处理命令 → runner 上报时顺便 GET /api/v1/commands?machine=<自己>
+        → 本地校验（运行没结束、节点确实在等、还是同一次等待、输出符合 outputSchema）
+        → 交给执行器（和 agentflow run submit 一样）→ POST /api/v1/commands/<id> 回报 applied / rejected
+```
+
+- **要 runner 显式开启**：在那台机器的 `~/.agentflow/hub.json` 加 `"accept_commands": true`，或者设 `AGENTFLOW_HUB_ACCEPT_COMMANDS=1`，然后重启常驻进程（`trigger serve` / `run worker`）。工作区里的 `hub.json` 开不了这个开关；Hub 地址来自工作区文件时也一律不接受命令。没开启的机器，页面只显示怎么开启和等价的 `run submit` 命令。
+- **只认同一次等待**：命令带上提交时看到的这一步的开始时间；节点如果在这期间被重新进入，runner 会拒绝，不会把旧的决定用到新的一轮上。
+- **防跨站**：提交表单带 Hub 进程级密钥签的令牌，并检查 `Origin` / `Referer`，别的网站没法借你的浏览器提交。命令记下提交人（基本认证的用户名，否则是 `web`）。
+- **只有命令所属的机器能回报结果**，回报过的命令不会再被取走；页面上「从 Hub 提交的输入」列出每条命令的状态（等机器取走 / 已执行 / 被拒绝 + 原因）。
+- 只有常驻进程会定期取命令（每 10 秒，随上报一起）。只用 `run start` 跑、没有常驻进程的机器，提交会一直等到下一次有常驻进程运行。
+
+JSON 接口：`POST /api/v1/runs/{machine}/{runId}/submit`，`{"node_id": "...", "output": {...}}`，需要查看权限，同样只接受同源请求。
+
+## 9. 还没做
 
 - 日志、产物上传；跳回运行所在机器的 `agentflow web --run`。
-- 从 Hub 审批 human 节点（需要把决定送回 runner，留到有双向通道时）。
 - 数据保留策略和 Postgres 存储。

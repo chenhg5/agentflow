@@ -38,11 +38,14 @@ type IngestResult struct {
 
 // Source identifies where a run executed.
 type Source struct {
-	Machine  string `json:"machine"`
-	Hostname string `json:"hostname,omitempty"`
-	Project  string `json:"project,omitempty"`
-	Path     string `json:"path,omitempty"`
-	Version  string `json:"version,omitempty"`
+	// Capabilities lists what this runner lets the Hub ask of it. "submit"
+	// means it polls for and applies input submitted on the Hub's pages.
+	Capabilities []string `json:"capabilities,omitempty"`
+	Machine      string   `json:"machine"`
+	Hostname     string   `json:"hostname,omitempty"`
+	Project      string   `json:"project,omitempty"`
+	Path         string   `json:"path,omitempty"`
+	Version      string   `json:"version,omitempty"`
 }
 
 // Trigger describes what started a run.
@@ -114,6 +117,8 @@ type GraphNode struct {
 	Executors []string `json:"executors,omitempty"`
 	Parallel  bool     `json:"parallel,omitempty"` // dispatches to every matching edge
 	Join      []string `json:"join,omitempty"`     // waits for these predecessors
+	// OutputSchema is the node's JSON Schema; the Hub builds its input form from it.
+	OutputSchema map[string]any `json:"outputSchema,omitempty"`
 }
 
 // GraphEdge is one transition. Target "$end" ends the run.
@@ -123,4 +128,40 @@ type GraphEdge struct {
 	Condition     string `json:"condition,omitempty"`
 	MaxIterations int    `json:"maxIterations,omitempty"`
 	Parallel      bool   `json:"parallel,omitempty"`
+}
+
+// CapabilitySubmit marks a runner that applies input submitted on the Hub.
+const CapabilitySubmit = "submit"
+
+// CommandsPath is where a runner polls for commands (GET ?machine=) and
+// reports their outcome (POST /<id>).
+const CommandsPath = "/api/v1/commands"
+
+// Command is a request from the Hub to one runner. The runner pulls it, so
+// the Hub never needs to reach the runner's network.
+type Command struct {
+	ID     string         `json:"id"`
+	Kind   string         `json:"kind"` // "submit"
+	RunID  string         `json:"runId"`
+	NodeID string         `json:"nodeId"`
+	Output map[string]any `json:"output,omitempty"`
+	// StepStartedAt binds a submission to the wait the person saw: if the node
+	// was re-entered since, the runner refuses instead of answering a new visit.
+	StepStartedAt string `json:"stepStartedAt,omitempty"`
+	By            string `json:"by,omitempty"`
+	CreatedAt     string `json:"createdAt"`
+}
+
+// CommandKindSubmit submits output to a node waiting for input.
+const CommandKindSubmit = "submit"
+
+// CommandList is what a poll returns.
+type CommandList struct {
+	Commands []Command `json:"commands"`
+}
+
+// CommandResult is the runner's answer for one command.
+type CommandResult struct {
+	Status string `json:"status"` // "applied" or "rejected"
+	Error  string `json:"error,omitempty"`
 }

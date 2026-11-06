@@ -158,7 +158,8 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		if _, found, err := store.Graph(ctx, "wf@x"); err != nil || found {
 			t.Fatalf("empty store found a graph: %v %v", found, err)
 		}
-		graph := domain.Graph{Entry: "a", Nodes: []domain.GraphNode{{ID: "a", Executors: []string{"codex", "process"}, Parallel: true, Join: []string{"z"}}},
+		graph := domain.Graph{Entry: "a", Nodes: []domain.GraphNode{{ID: "a", Executors: []string{"codex", "process"}, Parallel: true, Join: []string{"z"},
+			OutputSchema: map[string]any{"type": "object"}}},
 			Edges: []domain.GraphEdge{{Source: "a", Target: "$end", Condition: "ok", MaxIterations: 2, Parallel: true}}}
 		if err := store.SaveGraph(ctx, "wf@x", graph); err != nil {
 			t.Fatal(err)
@@ -167,11 +168,44 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		store.SaveGraph(ctx, "wf@x", graph)
 		got, found, err := store.Graph(ctx, "wf@x")
 		if err != nil || !found || got.Entry != "b" || len(got.Nodes) != 1 || got.Nodes[0].Executors[1] != "process" || !got.Nodes[0].Parallel ||
-			got.Nodes[0].Join[0] != "z" || got.Edges[0].Condition != "ok" || got.Edges[0].MaxIterations != 2 || !got.Edges[0].Parallel {
+			got.Nodes[0].Join[0] != "z" || got.Nodes[0].OutputSchema["type"] != "object" || got.Edges[0].Condition != "ok" || got.Edges[0].MaxIterations != 2 || !got.Edges[0].Parallel {
 			t.Fatalf("graph = %+v %v %v", got, found, err)
 		}
 		if run, _ := store.Get(ctx, domain.RunKey{Machine: "m", RunID: "nope"}); run.Graph != nil {
 			t.Fatal("runs do not carry graphs")
+		}
+	})
+
+	t.Run("commands", func(t *testing.T) {
+		store := open(t)
+		run := domain.RunKey{Machine: "m1", RunID: "r1"}
+		older := domain.Command{ID: "c1", Kind: domain.CommandSubmit, Run: run, NodeID: "approve", Output: map[string]any{"decision": "approve", "n": 2.0},
+			StepStartedAt: base, By: "glenn", Status: domain.CommandPending, CreatedAt: base, UpdatedAt: base}
+		newer := older
+		newer.ID, newer.CreatedAt = "c2", base.Add(time.Minute)
+		elsewhere := older
+		elsewhere.ID, elsewhere.Run = "c3", domain.RunKey{Machine: "m2", RunID: "r9"}
+		for _, command := range []domain.Command{newer, older, elsewhere} {
+			if err := store.SaveCommand(ctx, command); err != nil {
+				t.Fatal(err)
+			}
+		}
+		pending, err := store.PendingCommands(ctx, "m1")
+		if err != nil || len(pending) != 2 || pending[0].ID != "c1" || pending[0].Output["decision"] != "approve" || !pending[0].StepStartedAt.Equal(base) {
+			t.Fatalf("pending = %+v %v", pending, err)
+		}
+		older.Status, older.Error, older.UpdatedAt = domain.CommandApplied, "", base.Add(time.Hour)
+		store.SaveCommand(ctx, older)
+		got, found, _ := store.Command(ctx, "c1")
+		if !found || got.Status != domain.CommandApplied || got.By != "glenn" {
+			t.Fatalf("command = %+v", got)
+		}
+		history, _ := store.RunCommands(ctx, run)
+		if len(history) != 2 || history[0].ID != "c2" {
+			t.Fatalf("history newest first = %+v", history)
+		}
+		if _, found, _ := store.Command(ctx, "nope"); found {
+			t.Fatal("unknown command found")
 		}
 	})
 
@@ -180,7 +214,7 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		if _, found, err := store.GetMachine(ctx, "m1"); err != nil || found {
 			t.Fatalf("empty store found machine: %v %v", found, err)
 		}
-		machine := domain.Machine{ID: "m1", Hostname: "h", Version: "v1", FirstSeen: base, LastSeen: base.Add(time.Hour)}
+		machine := domain.Machine{ID: "m1", Hostname: "h", Version: "v1", FirstSeen: base, LastSeen: base.Add(time.Hour), Capabilities: []string{"submit"}}
 		if err := store.SaveMachine(ctx, machine); err != nil {
 			t.Fatal(err)
 		}
@@ -188,7 +222,7 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		store.SaveMachine(ctx, machine)
 		store.SaveMachine(ctx, domain.Machine{ID: "m0", FirstSeen: base, LastSeen: base})
 		got, found, err := store.GetMachine(ctx, "m1")
-		if err != nil || !found || got.Version != "v2" || !got.LastSeen.Equal(base.Add(time.Hour)) {
+		if err != nil || !found || got.Version != "v2" || !got.Accepts("submit") || !got.LastSeen.Equal(base.Add(time.Hour)) {
 			t.Fatalf("got %+v %v %v", got, found, err)
 		}
 		all, err := store.Machines(ctx)

@@ -84,6 +84,8 @@ type Run struct {
 	Steps         []Step
 	// Graph is stored once per workflow version (see GraphKey), not per run.
 	Graph *Graph
+	// Capabilities come with the report and update the machine; not stored per run.
+	Capabilities []string
 }
 
 // Step is one node of a JSON workflow or one step of a code workflow.

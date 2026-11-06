@@ -16,13 +16,14 @@ type Store struct {
 	runs     map[domain.RunKey]domain.Run
 	machines map[string]domain.Machine
 	graphs   map[string]domain.Graph
+	commands map[string]domain.Command
 }
 
 var _ app.Store = (*Store)(nil)
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{runs: map[domain.RunKey]domain.Run{}, machines: map[string]domain.Machine{}, graphs: map[string]domain.Graph{}}
+	return &Store{runs: map[domain.RunKey]domain.Run{}, machines: map[string]domain.Machine{}, graphs: map[string]domain.Graph{}, commands: map[string]domain.Command{}}
 }
 
 func (s *Store) Save(_ context.Context, run domain.Run) (bool, error) {
@@ -104,6 +105,46 @@ func (s *Store) Graph(_ context.Context, key string) (domain.Graph, bool, error)
 	defer s.mu.RUnlock()
 	graph, ok := s.graphs[key]
 	return graph, ok, nil
+}
+
+func (s *Store) SaveCommand(_ context.Context, command domain.Command) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.commands[command.ID] = command
+	return nil
+}
+
+func (s *Store) Command(_ context.Context, id string) (domain.Command, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	command, ok := s.commands[id]
+	return command, ok, nil
+}
+
+func (s *Store) PendingCommands(_ context.Context, machine string) ([]domain.Command, error) {
+	return s.selectCommands(func(c domain.Command) bool { return c.Run.Machine == machine && c.Status == domain.CommandPending }, false), nil
+}
+
+func (s *Store) RunCommands(_ context.Context, run domain.RunKey) ([]domain.Command, error) {
+	return s.selectCommands(func(c domain.Command) bool { return c.Run == run }, true), nil
+}
+
+func (s *Store) selectCommands(keep func(domain.Command) bool, newestFirst bool) []domain.Command {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.Command, 0)
+	for _, command := range s.commands {
+		if keep(command) {
+			out = append(out, command)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if newestFirst {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
 }
 
 func (s *Store) Close() error { return nil }
