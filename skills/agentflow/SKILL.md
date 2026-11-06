@@ -179,3 +179,14 @@ workspace validate 的 analysis 按 node/candidate/source/reference 给出 guara
 同一来源路线内的多个 provider/no-session 候选是条件分支，逐一保留协议：有兼容也有不兼容时标 conditional；全部确定不兼容仍是 error，不统一降级成 warning。不同已知 activation route 仍分别检查。new 模式的程序成功也可能没有 session ID，保留没有 ID 的分支；fixed/fork 的成功完成由运行时强制检查 ID。external 等待不产出完成结果或 provider session，不能让 sibling 读到尚未完成的结果。要强保证先后，用显式边和 join.from；nodes 数组顺序不保证先后。缺少确定性 ordering 时按 conditional 处理，不假装已有结果。
 
 fixed 无 ID 首访从空白开始，后续只有历史中已记录的兼容 session 才复用。条件回访仍可能因 resumeCommand/协议失败选到 external，不能据首访成功推断后面一定完成。看到 fixed_revisit_launch_failure / source_protocol_conditional / completion_conditional 时，检查候选策略、补正确 resume/fork 入口或设计同步/缺失处理；用真实节点输出和 preserved lease/history 验证对应路径。任意程序的语义无法静态证明，未知保持 inconclusive；不能用全放宽或全拒绝掩盖问题。
+
+## Hub：多台机器的运行汇总
+
+用户想在一个地方看所有机器上的运行时，用 Hub（详见 `docs/hub.md`）：
+
+```bash
+agentflow hub status --format json      # enabled=false 说明还没配
+agentflow hub push --all --format json  # 配好后补报这个工作区已有的运行
+```
+
+配置靠 `AGENTFLOW_HUB_URL`、`AGENTFLOW_HUB_TOKEN`（或工作区的 `hub.json`、`~/.agentflow/hub.json`），token 向用户要，不要写进仓库。配好后状态变化会自动上报，Hub 挂了不影响运行。想让 Hub 上看得懂每一步，就在节点结果里写 `summary` 和 `reason`。

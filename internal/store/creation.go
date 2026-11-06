@@ -235,6 +235,7 @@ func finishCreation(root, path string, record creationRecord) (CreateResult, err
 			return CreateResult{}, err
 		}
 		creationBoundary("published")
+		notifySaved(initialCreationRun(runDir, record))
 	}
 	if !record.Published {
 		record.Published = true

@@ -1,0 +1,43 @@
+{{define "layout"}}<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{.Title}} · agentflow Hub</title>
+<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="/static/hub.css">
+<script src="/static/theme.js"></script>
+</head>
+<body>
+<div class="shell">
+  <aside class="sidebar">
+    <a class="brand" href="/">
+      <span class="brand-mark"><img src="/static/logo.svg" alt="" width="20" height="20"></span>
+      <span class="brand-text"><span class="brand-name">agentflow</span><span class="brand-sub">Hub</span></span>
+    </a>
+    <nav class="nav" aria-label="页面">
+      <a href="/" {{if eq .Tab "overview"}}aria-current="page"{{end}}>{{icon "home"}}<span>总览</span></a>
+      <a href="/runs" {{if eq .Tab "runs"}}aria-current="page"{{end}}>{{icon "activity"}}<span>运行</span></a>
+      <a href="/workflows" {{if eq .Tab "workflows"}}aria-current="page"{{end}}>{{icon "workflow"}}<span>Workflow</span></a>
+      <a href="/machines" {{if eq .Tab "machines"}}aria-current="page"{{end}}>{{icon "server"}}<span>机器</span></a>
+    </nav>
+    <div class="sidebar-foot">
+      <button class="theme" type="button" data-theme-toggle title="切换深色 / 浅色">{{icon "moon"}}{{icon "sun"}}</button>
+      <span class="muted mono">{{.Version}}</span>
+    </div>
+  </aside>
+  <div class="body">
+    <header class="topbar">
+      <ol class="crumbs">{{range $i, $c := .Crumbs}}<li>{{if $c.Href}}<a href="{{$c.Href}}">{{$c.Label}}</a>{{else}}<span>{{$c.Label}}</span>{{end}}</li>{{end}}</ol>
+      {{if .Live}}<span class="live" title="页面每 10 秒自动刷新"><span class="live-dot"></span>实时</span>{{end}}
+    </header>
+    <main id="main" {{if .Live}}data-live{{end}}>
+{{template "content" .Data}}
+    </main>
+  </div>
+</div>
+<script src="/static/hub.js" defer></script>
+</body>
+</html>{{end}}

@@ -149,6 +149,21 @@ Runtime metrics and user-defined evaluations can be compared across runs. See [o
 
 Run `make check` and `make test-e2e` for deterministic verification. Real model testing is opt-in: [testing](docs/testing.md). Release instructions: [releasing](docs/releasing.md).
 
+## Hub: runs from every machine in one place
+
+Runs stay local, but a Hub collects them into one web console (overview, runs, run detail with a step timeline, workflows, machines) and a read API:
+
+```bash
+# on the Hub machine
+AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0 --port 7075
+
+# on every machine that runs workflows, from the workflow workspace
+export AGENTFLOW_HUB_URL=http://hub.example:7075 AGENTFLOW_HUB_TOKEN=...
+agentflow hub push --all     # backfill existing runs once
+```
+
+From then on, commands that change runs report each state change. Reports go to `hub-outbox/` in the workspace first and are delivered in the background, so a Hub that is slow or down never slows or fails a run. Secrets in errors, inputs and the `summary`/`reason` result fields are masked before they leave the machine. See [`docs/hub.md`](docs/hub.md).
+
 ## Workflow authoring benchmark
 
 [Cold-context authoring benchmark](benchmarks/workflow-authoring/README.md) includes business tasks, private golden workflows, deterministic execution checks, arbitrary agent-command runners, and retained authoring artifacts. `make test-benchmark` verifies the goldens and detects deliberately broken routes, bindings, type handoffs, feedback and loop limits without calling a model. Live authoring runs are opt-in. The [initial report](benchmarks/workflow-authoring/reports/2026-10-23/REPORT.md) distinguishes final task success from errors repaired during authoring.

@@ -15,6 +15,11 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{ matrix.os }}
+    env:
+      # Test what ships: release binaries are built with CGO_ENABLED=0. With cgo,
+      # test binaries that import net are linked by the macOS system linker and
+      # abort at load time on current runners ("dyld: missing LC_UUID").
+      CGO_ENABLED: "0"
     defaults:
       run:
         shell: bash
