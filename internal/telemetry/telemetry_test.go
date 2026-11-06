@@ -205,14 +205,15 @@ func TestLoadConfigLayers(t *testing.T) {
 	t.Setenv("AGENTFLOW_HUB_URL", "")
 	t.Setenv("AGENTFLOW_HUB_TOKEN", "")
 	t.Setenv("AGENTFLOW_MACHINE", "")
+	t.Setenv("AGENTFLOW_HUB_VIEW_TOKEN", "")
 	if config, err := LoadConfig(root); err != nil || config.Enabled() {
 		t.Fatalf("no config: %+v %v", config, err)
 	}
 	os.MkdirAll(filepath.Join(home, ".agentflow"), 0o755)
-	os.WriteFile(filepath.Join(home, ".agentflow", ConfigFile), []byte(`{"url":"http://home/","token":"t1","machine":"laptop"}`), 0o600)
+	os.WriteFile(filepath.Join(home, ".agentflow", ConfigFile), []byte(`{"url":"http://home/","token":"t1","view_token":"v1","machine":"laptop"}`), 0o600)
 	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"url":"http://project"}`), 0o600)
 	config, err := LoadConfig(root)
-	if err != nil || config.URL != "http://project" || config.Token != "" || config.Machine != "laptop" {
+	if err != nil || config.URL != "http://project" || config.Token != "" || config.ViewToken != "" || config.Machine != "laptop" {
 		t.Fatalf("a project URL must not receive the user's token: %+v %v", config, err)
 	}
 	t.Setenv("AGENTFLOW_HUB_TOKEN", "t2")
@@ -224,7 +225,7 @@ func TestLoadConfigLayers(t *testing.T) {
 		t.Fatalf("a project token goes with the project URL: %+v", config)
 	}
 	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"machine":"build"}`), 0o600)
-	if config, _ := LoadConfig(root); config.URL != "http://home" || config.Token != "t2" || config.Machine != "build" {
+	if config, _ := LoadConfig(root); config.URL != "http://home" || config.Token != "t2" || config.Machine != "build" || config.ViewToken != "v1" {
 		t.Fatalf("user URL keeps the user token: %+v", config)
 	}
 	t.Setenv("AGENTFLOW_HUB_URL", "http://env")

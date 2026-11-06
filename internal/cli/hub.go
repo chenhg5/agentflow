@@ -56,8 +56,11 @@ func hubCommand(args []string, root string) error {
 		printHubHelp()
 		return nil
 	}
-	if len(parsed.Positionals) != 0 {
-		return usageError(fmt.Sprintf("hub %s accepts no positional arguments", verb), "Run `agentflow hub --help`.", "hub_arguments")
+	if hubClientVerbs[verb] {
+		return withFormat(hubClientCommand(verb, parsed, root), parsed.Format)
+	}
+	if err := noPositionals(verb, parsed); err != nil {
+		return err
 	}
 	switch verb {
 	case "serve":
@@ -176,8 +179,9 @@ func hubStatus(parsed parsedArgs, root string) error {
 		return internalError(err)
 	}
 	source := telemetry.SourceFor(config, root)
-	payload := map[string]any{"ok": true, "enabled": config.Enabled(), "hub": config.URL, "token_set": config.Token != "",
-		"machine": source.Machine, "project": source.Project, "pending": len(pending), "last_flush": last}
+	payload := map[string]any{"ok": true, "enabled": config.Enabled(), "hub": config.URL, "token_set": config.Token != "", "view_token_set": config.ViewToken != "",
+		"accept_commands": config.AcceptCommands,
+		"machine":         source.Machine, "project": source.Project, "pending": len(pending), "last_flush": last}
 	return writeData(payload, parsed.Output())
 }
 
@@ -186,6 +190,15 @@ func printHubHelp() {
   agentflow hub serve [--host 127.0.0.1] [--port 7075] [--db sqlite:<path>|memory:] [--retain 90d]
   agentflow hub push [--all] [--format json|table]
   agentflow hub status [--format json|table]
+
+  agentflow hub overview [--days 14]
+  agentflow hub runs [--workflow W] [--machine M] [--project P] [--status failed,...]
+                     [--since 2026-11-01] [--until ...] [--run ID] [--limit 50] [--offset 0]
+  agentflow hub run <machine>/<run-id> | <run-id>
+  agentflow hub workflows [--days 30]
+  agentflow hub machines
+  agentflow hub steps [--workflow W] [--days 30]
+  agentflow hub submit <machine>/<run-id> <node-id> --output '{...}' [--wait]
 
 The Hub collects runs from every machine into one web console and read API.
 
@@ -204,9 +217,23 @@ AGENTFLOW_HUB_TOKEN authenticates runners and is required beyond loopback; there
 the pages ask for it as the password (any user name), or for
 AGENTFLOW_HUB_VIEW_TOKEN when that is set.
 
+Reading the Hub: overview, runs, run, workflows, machines and steps print the
+Hub's data as JSON (a table on a terminal; --format ndjson gives one line per
+run, workflow, machine or step). "run" has everything the run page shows: step
+timings, errors, summaries, log tails, results, artifacts, the graph, steps
+waiting for input with their output_schema, and the commands sent to the run.
+"steps" ranks the steps of each workflow by failures and time spent, with the
+most common errors. They use --hub or AGENTFLOW_HUB_URL, and the view token
+(AGENTFLOW_HUB_VIEW_TOKEN, or "view_token" in ~/.agentflow/hub.json; the
+ingest token works when the Hub has no separate view token). "submit" answers a waiting step; the run's machine
+applies it when it accepts commands (accept_commands in its own config).
+
 Examples:
   AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0
-  AGENTFLOW_HUB_URL=http://hub.local:7075 AGENTFLOW_HUB_TOKEN=... agentflow hub push --all`)
+  AGENTFLOW_HUB_URL=http://hub.local:7075 AGENTFLOW_HUB_TOKEN=... agentflow hub push --all
+  agentflow hub runs --status failed --since 2026-11-01 --format ndjson
+  agentflow hub steps --workflow pr-pipeline --days 7
+  agentflow hub run wsl/run_20261106_ab12 | jq '.steps[] | select(.status=="failed")'`)
 }
 
 // hubApplier carries out commands from the Hub against the runs in root. Only

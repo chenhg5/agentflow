@@ -1097,6 +1097,9 @@ func parseArgs(args []string) (parsedArgs, error) {
 		case "--by-version":
 			parsed.ByVersion = true
 			continue
+		case "--wait":
+			parsed.Wait = true
+			continue
 		}
 		key, value, inline := splitFlag(arg)
 		if !inline {
@@ -1173,6 +1176,22 @@ func parseArgs(args []string) (parsedArgs, error) {
 			}
 		case "--run":
 			parsed.RunID = value
+		case "--hub":
+			parsed.Hub = value
+		case "--machine":
+			parsed.Machine = value
+		case "--project":
+			parsed.Project = value
+		case "--since":
+			parsed.Since = value
+		case "--until":
+			parsed.Until = value
+		case "--limit":
+			parsed.Limit = value
+		case "--offset":
+			parsed.Offset = value
+		case "--days":
+			parsed.Days = value
 		case "--db":
 			parsed.DB = value
 		case "--retain":
@@ -1249,6 +1268,15 @@ type parsedArgs struct {
 	IdempotencyKey    string
 	RunID             string
 	Summary           string
+	Hub               string
+	Machine           string
+	Project           string
+	Since             string
+	Until             string
+	Limit             string
+	Offset            string
+	Days              string
+	Wait              bool
 	Host              string
 	DB                string
 	Retain            string
@@ -1444,6 +1472,13 @@ func commandSchema() map[string]any {
 		{"name": "hub serve", "description": "Run the Hub: receive run reports from runners and serve the web console and read API.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host; beyond loopback AGENTFLOW_HUB_TOKEN is required", false), flag("--port", "integer", "HTTP port (default 7075); 0 chooses an available port", false), flag("--db", "string", "Store DSN: sqlite:<path> (default ~/.agentflow/hub/hub.db) or memory:", false), flag("--retain", "duration", "Keep finished runs this long, e.g. 90d or 720h (default 90d; 0 keeps them forever)", false)}, "examples": []string{"AGENTFLOW_HUB_TOKEN=... agentflow hub serve --host 0.0.0.0 --port 7075"}},
 		{"name": "hub push", "description": "Deliver pending run reports to the Hub; --all first records every run under runs/ in the workspace.", "flags": []map[string]any{flag("--all", "boolean", "Backfill every local run, not only pending reports", false), formatFlag}, "examples": []string{"agentflow hub push --all --format json"}},
 		{"name": "hub status", "description": "Show the Hub URL, machine name, outbox size, and the last delivery result.", "flags": []map[string]any{formatFlag}},
+		{"name": "hub overview", "description": "What the Hub's home page shows, as JSON: run counts, success rate, daily runs, runs waiting for people, recent failures, running runs and per-workflow stats.", "flags": []map[string]any{flag("--days", "integer", "Window in days (default 14, at most 90)", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}},
+		{"name": "hub runs", "description": "List runs from every machine, newest first, with the run page's filters.", "flags": []map[string]any{flag("--workflow", "string", "Workflow name", false), flag("--machine", "string", "Machine id", false), flag("--project", "string", "Project", false), flag("--status", "csv", "Statuses, e.g. failed,waiting_input", false), flag("--since", "RFC3339|YYYY-MM-DD", "Placed at or after", false), flag("--until", "RFC3339|YYYY-MM-DD", "Placed before", false), flag("--run", "string", "Run id", false), flag("--limit", "integer", "Page size (default 50, at most 200)", false), flag("--offset", "integer", "Skip this many", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub runs --status failed --since 2026-11-01 --format ndjson"}},
+		{"name": "hub run", "description": "One run as its page shows it: steps with timings, errors, summaries, log tails, results and artifacts; the workflow graph; its machine; steps waiting for input with their output_schema; and the commands sent to it.", "arguments": []map[string]any{{"name": "machine/run-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--machine", "string", "Machine, when the argument is a bare run id on several machines", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub run wsl/run_20261106_ab12"}},
+		{"name": "hub workflows", "description": "Per-workflow runs, success rate, p50/p95 duration, last status and machines.", "flags": []map[string]any{flag("--days", "integer", "Window in days (default 30, at most 90)", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}},
+		{"name": "hub machines", "description": "Machines reporting to the Hub: hostname, agentflow version, first/last seen, and capabilities (submit = takes input from the Hub).", "flags": []map[string]any{flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}},
+		{"name": "hub steps", "description": "Per-step analysis across runs: how often each step fails, retries and waits, p50/p95 duration, and its most common errors with the latest run that hit each. Failing steps first.", "flags": []map[string]any{flag("--workflow", "string", "Only this workflow", false), flag("--days", "integer", "Window in days (default 30, at most 90)", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub steps --workflow pr-pipeline --days 7"}},
+		{"name": "hub submit", "description": "Answer a step waiting for input through the Hub; its machine applies it like `run submit`. The output is checked against the step's output_schema first. Needs the machine to accept commands.", "arguments": []map[string]any{{"name": "machine/run-id", "required": true, "type": "string"}, {"name": "node-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--output", "JSON object", "The step's output", true), flag("--wait", "boolean", "Wait (up to 90s) until the machine applies or refuses it", false), flag("--hub", "url", "Hub address (default AGENTFLOW_HUB_URL / hub.json); reads with AGENTFLOW_HUB_VIEW_TOKEN, else AGENTFLOW_HUB_TOKEN", false), formatFlag}, "examples": []string{"agentflow hub submit wsl/run_20261106_ab12 approve --output '{\"decision\":\"approve\"}' --wait"}},
 		{"name": "version", "description": "Print version, commit, build time, Go version, and platform.", "flags": []map[string]any{formatFlag}},
 	}
 	return map[string]any{"schema_version": "1", "name": "agentflow", "description": "Run durable local workflows for Claude Code, Codex, and other agents.", "commands": commands}
@@ -1535,6 +1570,9 @@ Commands:
   hub serve          Run the Hub: runs from every machine in one web console
   hub push           Report runs to the Hub (--all backfills every run)
   hub status         Show Hub reporting configuration and the outbox
+  hub overview|runs|run|workflows|machines|steps
+                     Read the Hub as JSON (everything its pages show, plus step analysis)
+  hub submit         Answer a waiting step through the Hub
   version            Print version and build information
 
 Examples:

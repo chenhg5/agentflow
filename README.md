@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/logo.svg" alt="" width="72" height="72"></p>
+
 # AgentFlow
 
 AgentFlow runs local workflows described by `entry`, `nodes`, and explicit `edges`. Each node calls a named executor with JSON input and produces JSON output. Executors can run Codex, Claude Code, an interactive program, or a program you write in any language.

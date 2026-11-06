@@ -146,6 +146,7 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		}
 		check("workflow", app.RunFilter{Workflow: "a"}, "r3", "r1", "r0")
 		check("machine", app.RunFilter{Machine: "m2"}, "r3", "r2")
+		check("run id", app.RunFilter{RunID: "r2"}, "r2")
 		check("statuses", app.RunFilter{Statuses: []domain.Status{domain.StatusFailed, domain.StatusWaiting}}, "r4", "r3", "r1")
 		check("since/until", app.RunFilter{Since: base.Add(time.Hour), Until: base.Add(3 * time.Hour)}, "r2", "r1")
 		check("page", app.RunFilter{Limit: 2, Offset: 1}, "r3", "r2")

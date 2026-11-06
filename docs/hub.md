@@ -146,12 +146,39 @@ SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo
 | 路径 | 说明 |
 | --- | --- |
 | `GET /api/v1/overview?days=14` | 总数、成功率、每天的运行、等人处理、最近失败、各 workflow 统计、机器数 |
-| `GET /api/v1/runs?workflow=&machine=&project=&status=a,b&since=&until=&limit=&offset=` | 运行列表，新的在前，带 `total` |
-| `GET /api/v1/runs/{machine}/{runId}` | 一次运行和它的步骤 |
+| `GET /api/v1/runs?workflow=&machine=&project=&run=&status=a,b&since=&until=&limit=&offset=` | 运行列表，新的在前，带 `total`；`run=` 按运行 id 找（不知道在哪台机器时用） |
+| `GET /api/v1/runs/{machine}/{runId}` | 运行页上的全部：步骤（耗时、错误、summary/reason、日志尾、结果预览、产物）、`graph`（节点、边、`output_schema`）、`machine_info`（版本、`capabilities`）、`waiting_inputs`（等输入的步骤、`hub_can_submit`、`output_schema`）、`commands`（发给它的提交和结果） |
 | `GET /api/v1/workflows?days=30` | 各 workflow 的次数、成功率、P50/P95、最近结果 |
-| `GET /api/v1/machines` | 上报过的机器 |
+| `GET /api/v1/machines` | 上报过的机器，带 `capabilities`（`submit` 表示收 Hub 的输入） |
+| `GET /api/v1/steps?workflow=&days=30` | 每个 workflow 每一步的统计：到达次数、各状态次数、`failure_rate`、`retried`、P50/P95、等待中位数、最常见的 5 种错误（各带最近一次的运行）；失败多的排前面 |
 
 运行 id 只在一台机器上唯一，所以运行的主键是 `machine + runId`。
+
+### 用 CLI 读（给 agent）
+
+网页给人看；同样的数据 CLI 都能拿到，默认输出 JSON（终端里是简表，`--format ndjson` 一行一条）：
+
+```bash
+agentflow hub overview [--days 14]
+agentflow hub runs [--workflow W] [--machine M] [--project P] [--status failed,waiting_input] [--since 2026-11-01] [--until ...] [--run ID] [--limit 50] [--offset 0]
+agentflow hub run <machine>/<run-id>      # 或只给 run-id，Hub 上只有一台机器有它时自动找到
+agentflow hub workflows [--days 30]
+agentflow hub machines
+agentflow hub steps [--workflow W] [--days 30]
+agentflow hub submit <machine>/<run-id> <node-id> --output '{...}' [--wait]
+```
+
+地址取 `--hub`、`AGENTFLOW_HUB_URL` 或 `hub.json`；读用查看 token：`AGENTFLOW_HUB_VIEW_TOKEN` 或 `~/.agentflow/hub.json` 的 `view_token`，没有就用上报 token（Hub 没单独设查看 token 时也认它）。和上报 token 一样，工作区的 `hub.json` 指定了地址时，只会把同一个文件里的 token 发过去。
+
+`hub submit` 先读这次运行，确认这一步在等输入、机器开了 `accept_commands`、输出符合 `output_schema`，再提交；`--wait` 等到那台机器执行或拒绝（最多 90 秒）。机器只在跑着会上报的命令（`run worker`、`trigger serve`、`run start` 等）时取指令。
+
+一个分析的例子：
+
+```bash
+agentflow hub steps --workflow pr-pipeline --days 7 | jq '.steps[0]'          # 最该修的一步
+agentflow hub run "$(agentflow hub steps --workflow pr-pipeline | jq -r '.steps[0].errors[0] | .last_machine + "/" + .last_run_id')" \
+  | jq '.steps[] | select(.status == "failed") | {id, error, stderr_tail}'
+```
 
 ## 8. 在 Hub 上提交等待输入的节点
 

@@ -183,6 +183,9 @@ func Matches(run domain.Run, filter app.RunFilter) bool {
 	if filter.Project != "" && run.Project != filter.Project {
 		return false
 	}
+	if filter.RunID != "" && run.Key.RunID != filter.RunID {
+		return false
+	}
 	if len(filter.Statuses) > 0 {
 		found := false
 		for _, status := range filter.Statuses {

@@ -2,6 +2,11 @@
 
 Changes since [v0.5.0](v0.5.0.md).
 
+- Hub CLI for agents: `agentflow hub overview | runs | run | workflows | machines | steps` print everything the Hub's pages show as JSON (`--format ndjson` for one line per item, a short table on a terminal), and `agentflow hub submit <machine>/<run-id> <node> --output '{...}' [--wait]` answers a waiting step through the Hub after checking it against the step's `output_schema`. `hub run` accepts a bare run id. Reads use `AGENTFLOW_HUB_VIEW_TOKEN` (or `view_token` in `~/.agentflow/hub.json`), else the ingest token; `--hub` overrides the address.
+- Hub API: `GET /api/v1/runs/{machine}/{run}` now includes the graph, the machine, the steps waiting for input with their `output_schema`, and the commands sent to the run; `GET /api/v1/runs?run=` finds a run by id; machines list their capabilities; new `GET /api/v1/steps?workflow=&days=` ranks each workflow's steps by failures, with retries, p50/p95, wait time and the most common errors.
+- Logo: AgentFlow uses the ring logo (Hub, `agentflow web`, README).
+- Skill: `skills/agentflow/references/principles.md` adds general design principles for workflows: align with people first, least privilege and shadow writes, programs before agents, cheapest sufficient model with a budget, plain-language messages to people, probing dependencies and running only the part being tested, and using `hub steps` to decide what to fix.
+
 - Code orchestration: `agentflow code run <name> -- <script>` records a script as a run whose steps it drives; inside it, `agentflow code step <id> [-- command]` records a step (run like an executor: result file, logs, exit code; or work the script did, with `--output`/`--summary`), and `code end` / the script's exit code ends it. Code runs live in `runs/` like workflow runs (workflow version `code`), show in `run list/get`, report to the Hub as `orchestration: code`, and draw their graph in the order the script reached steps, parallel steps included.
 
 

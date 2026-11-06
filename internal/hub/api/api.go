@@ -36,6 +36,7 @@ func (a API) Register(mux *http.ServeMux, ingest, view Guard) {
 	mux.Handle("GET /api/v1/runs/{machine}/{run}", view(http.HandlerFunc(a.run)))
 	mux.Handle("GET /api/v1/workflows", view(http.HandlerFunc(a.workflows)))
 	mux.Handle("GET /api/v1/machines", view(http.HandlerFunc(a.machines)))
+	mux.Handle("GET /api/v1/steps", view(http.HandlerFunc(a.steps)))
 	// Runners pull commands and answer them with the ingest token.
 	mux.Handle("GET "+hubapi.CommandsPath, ingest(http.HandlerFunc(a.pendingCommands)))
 	mux.Handle("POST "+hubapi.CommandsPath+"/{id}", ingest(http.HandlerFunc(a.answerCommand)))
@@ -108,7 +109,7 @@ func (a API) runs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a API) run(w http.ResponseWriter, r *http.Request) {
-	run, err := a.Query.Run(r.Context(), domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")})
+	detail, err := a.Query.Detail(r.Context(), domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")})
 	if errors.Is(err, app.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
@@ -117,7 +118,7 @@ func (a API) run(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toRunJSON(run))
+	writeJSON(w, http.StatusOK, toRunDetailJSON(detail))
 }
 
 func (a API) workflows(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +139,16 @@ func (a API) machines(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"machines": toMachinesJSON(machines)})
 }
 
+func (a API) steps(w http.ResponseWriter, r *http.Request) {
+	days := Days(r, 30)
+	stats, err := a.Query.Steps(r.Context(), r.URL.Query().Get("workflow"), days)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"days": days, "steps": toStepStatsJSON(stats)})
+}
+
 // Days reads ?days=, clamped to 1..90.
 func Days(r *http.Request, fallback int) int {
 	days, err := strconv.Atoi(r.URL.Query().Get("days"))
@@ -150,7 +161,7 @@ func Days(r *http.Request, fallback int) int {
 // Filter reads a run filter from the query string. The pages use it too.
 func Filter(r *http.Request) (app.RunFilter, error) {
 	query := r.URL.Query()
-	filter := app.RunFilter{Workflow: query.Get("workflow"), Machine: query.Get("machine"), Project: query.Get("project")}
+	filter := app.RunFilter{Workflow: query.Get("workflow"), Machine: query.Get("machine"), Project: query.Get("project"), RunID: query.Get("run")}
 	for _, value := range strings.Split(query.Get("status"), ",") {
 		if value = strings.TrimSpace(value); value == "" {
 			continue

@@ -253,7 +253,8 @@ type runData struct {
 
 func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 	key := domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")}
-	run, err := p.Query.Run(r.Context(), key)
+	detail, err := p.Query.Detail(r.Context(), key)
+	run := detail.Run
 	if errors.Is(err, app.ErrNotFound) {
 		p.render(w, http.StatusNotFound, "missing", page{Title: "找不到这次运行", Tab: "runs",
 			Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: key.RunID}}, Data: key})
@@ -263,15 +264,8 @@ func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, err)
 		return
 	}
-	data := runData{Run: run, Flow: flowJSON(run), Timeline: timeline(run, clock()), Notice: r.URL.Query().Get("notice"), Problem: r.URL.Query().Get("problem")}
-	if data.Inputs, err = p.inputForms(r.Context(), run); err != nil {
-		p.fail(w, err)
-		return
-	}
-	if data.Commands, err = p.Commands.ForRun(r.Context(), run.Key); err != nil {
-		p.fail(w, err)
-		return
-	}
+	data := runData{Run: run, Flow: flowJSON(run), Timeline: timeline(run, clock()), Notice: r.URL.Query().Get("notice"), Problem: r.URL.Query().Get("problem"),
+		Inputs: p.inputForms(detail), Commands: detail.Commands}
 	for index, step := range run.Steps {
 		if step.Status == domain.StatusSucceeded || step.Status == domain.StatusSkipped {
 			data.Done++
@@ -355,34 +349,18 @@ func cacheStatic(next http.Handler) http.Handler {
 	})
 }
 
-// inputForms builds a form for each step of run that waits for input.
-func (p *Pages) inputForms(ctx context.Context, run domain.Run) ([]inputForm, error) {
-	if run.Status.Finished() {
-		return nil, nil
-	}
-	machine, err := p.Query.Machine(ctx, run.Key.Machine)
-	if err != nil {
-		return nil, err
-	}
-	schemas := map[string]map[string]any{}
-	if run.Graph != nil {
-		for _, node := range run.Graph.Nodes {
-			schemas[node.ID] = node.OutputSchema
-		}
-	}
+// inputForms builds a form for each step of the run that waits for input.
+func (p *Pages) inputForms(detail app.RunDetail) []inputForm {
 	var forms []inputForm
-	for _, step := range run.Steps {
-		if !step.Status.NeedsInput() {
-			continue
+	for _, input := range detail.Inputs {
+		form := inputForm{NodeID: input.NodeID, Executor: input.Executor, Accepts: input.Accepts, CSRF: p.csrfToken(detail.Run.Key)}
+		if !input.Since.IsZero() {
+			form.Waiting = duration(clock().Sub(input.Since).Milliseconds())
 		}
-		form := inputForm{NodeID: step.ID, Executor: step.Type, Accepts: machine.Accepts(domain.CapabilitySubmit), CSRF: p.csrfToken(run.Key)}
-		if !step.StartedAt.IsZero() {
-			form.Waiting = duration(clock().Sub(step.StartedAt).Milliseconds())
-		}
-		form.Fields, form.RawJSON = formFor(schemas[step.ID])
+		form.Fields, form.RawJSON = formFor(input.OutputSchema)
 		forms = append(forms, form)
 	}
-	return forms, nil
+	return forms
 }
 
 // submit takes the input form of a waiting step and queues it for the runner.

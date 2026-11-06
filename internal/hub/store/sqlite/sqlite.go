@@ -228,6 +228,9 @@ func whereClause(filter app.RunFilter) (string, []any) {
 	if filter.Project != "" {
 		add("project = ?", filter.Project)
 	}
+	if filter.RunID != "" {
+		add("run_id = ?", filter.RunID)
+	}
 	if len(filter.Statuses) > 0 {
 		marks := make([]string, len(filter.Statuses))
 		for index, status := range filter.Statuses {

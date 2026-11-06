@@ -19,6 +19,7 @@ type RunFilter struct {
 	Workflow string
 	Machine  string
 	Project  string
+	RunID    string
 	Statuses []domain.Status
 	Since    time.Time
 	Until    time.Time
