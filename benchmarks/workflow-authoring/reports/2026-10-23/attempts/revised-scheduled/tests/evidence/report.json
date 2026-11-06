@@ -1,0 +1,50 @@
+[
+  {
+    "scenario": "happy",
+    "run_id": "run_20261023085930_dee3bd4ed5426fd3",
+    "status": "succeeded",
+    "draft_visits": 1,
+    "finalize_visits": 1,
+    "start_exit": 0
+  },
+  {
+    "scenario": "sad",
+    "run_id": "run_20261023085930_fde455895fbb978a",
+    "status": "succeeded",
+    "draft_visits": 1,
+    "finalize_visits": 0,
+    "start_exit": 0
+  },
+  {
+    "scenario": "again_happy",
+    "run_id": "run_20261023085930_4a263671860b9466",
+    "status": "succeeded",
+    "draft_visits": 2,
+    "finalize_visits": 1,
+    "start_exit": 0
+  },
+  {
+    "scenario": "twice_again_happy",
+    "run_id": "run_20261023085930_fdbb3bcfa58c3ff0",
+    "status": "succeeded",
+    "draft_visits": 3,
+    "finalize_visits": 1,
+    "start_exit": 0
+  },
+  {
+    "scenario": "exhausted",
+    "run_id": "run_20261023085930_7c7c703f536846b8",
+    "status": "failed",
+    "draft_visits": 3,
+    "finalize_visits": 0,
+    "start_exit": 1
+  },
+  {
+    "scenario": "invalid_review",
+    "run_id": "run_20261023085930_b6abebecb86691de",
+    "status": "failed",
+    "draft_visits": 1,
+    "finalize_visits": 0,
+    "start_exit": 1
+  }
+]

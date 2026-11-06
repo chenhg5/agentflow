@@ -1,87 +1,225 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://agentflow.dev/schema/workflow-v1.json",
+  "$id": "https://agentflow.dev/schema/workflow-v3.json",
   "title": "AgentFlow Workflow",
   "type": "object",
-  "required": ["version", "name", "nodes"],
+  "required": [
+    "version",
+    "name",
+    "nodes"
+  ],
   "properties": {
-    "version": { "const": "1" },
-    "name": { "type": "string", "minLength": 1 },
-    "inputs": { "type": "object", "additionalProperties": { "$ref": "#/$defs/input" } },
-    "nodes": { "type": "array", "minItems": 1, "items": { "$ref": "#/$defs/node" } }
+    "version": {
+      "const": "3"
+    },
+    "name": {
+      "type": "string",
+      "minLength": 1
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": {
+        "$ref": "#/$defs/input"
+      }
+    },
+    "nodes": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/node"
+      }
+    },
+    "entry": {
+      "type": "string",
+      "description": "Version 3 entry node"
+    },
+    "allowUnboundedCycles": {
+      "type": "boolean",
+      "description": "Explicitly allow cycles with no maxIterations edge; defaults to false"
+    },
+    "edges": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/edge"
+      },
+      "description": "Version 3 control transitions; $end is terminal"
+    }
   },
   "$defs": {
+    "edge": {
+      "type": "object",
+      "required": [
+        "from",
+        "to"
+      ],
+      "properties": {
+        "from": {
+          "type": "string",
+          "minLength": 1
+        },
+        "to": {
+          "type": "string",
+          "minLength": 1
+        },
+        "when": {
+          "type": "string",
+          "description": "Condition evaluated against run state after the source node completes; the first matching edge is taken"
+        },
+        "maxIterations": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Maximum traversals of this edge in one run"
+        },
+        "map": {
+          "type": "object",
+          "description": "Optional target-input projection. Values may reference input, output, inputs, or nodes with {{ ... }} templates; otherwise the source output is forwarded unchanged."
+        }
+      },
+      "additionalProperties": false
+    },
     "input": {
       "type": "object",
-      "properties": { "type": { "enum": ["string", "number", "boolean", "path"] }, "required": { "type": "boolean" } },
+      "properties": {
+        "type": {
+          "enum": [
+            "string",
+            "number",
+            "boolean",
+            "path"
+          ]
+        },
+        "required": {
+          "type": "boolean"
+        }
+      },
       "additionalProperties": false
     },
     "node": {
       "type": "object",
-      "required": ["id", "type"],
+      "required": [
+        "id",
+        "execution"
+      ],
       "properties": {
-        "id": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["shell", "agent", "human"] },
-        "provider": { "type": "string" },
-        "command": { "type": "array", "minItems": 1, "items": { "type": "string" } },
-        "prompt": { "type": "string" },
-        "promptMode": { "enum": ["arg", "stdin"] },
-        "workspace": { "type": "string" },
-        "session": { "type": "string", "minLength": 1, "description": "Existing agent session ID or a template resolving to one" },
-        "input": { "type": "object", "description": "Structured input template passed to this node" },
-        "inputSchema": { "$ref": "#/$defs/contract", "description": "Runtime JSON contract for the rendered node input" },
-        "outputSchema": { "$ref": "#/$defs/contract", "description": "Runtime JSON contract for the structured node result" },
-        "inputFields": { "type": "array", "items": { "$ref": "#/$defs/field" }, "description": "Named input fields exposed to agents and used for automatic handoff" },
-        "outputFields": { "type": "array", "items": { "$ref": "#/$defs/field" }, "description": "Named output fields exposed to agents and used to derive a strict output contract" },
-        "inputMapping": { "type": "object", "additionalProperties": { "type": "string" }, "description": "Explicit target-field mappings such as $node.inspect.output.summary or $output.summary" },
-        "timeoutMs": { "type": "integer", "minimum": 1 },
-        "result": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "dispatch": {
+          "enum": ["first", "all"],
+          "description": "Choose the first matching outgoing edge (default) or activate every matching outgoing edge"
+        },
+        "join": {
+          "type": "object",
+          "required": ["from"],
+          "additionalProperties": false,
+          "properties": {
+            "from": {
+              "type": "array",
+              "minItems": 2,
+              "uniqueItems": true,
+              "items": {"type": "string", "minLength": 1}
+            }
+          },
+          "description": "Wait for one incoming payload from each listed predecessor; input is an object keyed by predecessor ID"
+        },
+        "inputSchema": {
+          "$ref": "#/$defs/contract",
+          "description": "Runtime JSON contract for the rendered node input"
+        },
+        "outputSchema": {
+          "$ref": "#/$defs/contract",
+          "description": "Runtime JSON contract for the structured node result"
+        },
+        "timeoutMs": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "retry": {
           "type": "object",
           "properties": {
-            "path": { "type": "string", "minLength": 1 },
-            "required": { "type": "boolean" }
+            "maxAttempts": {
+              "type": "integer",
+              "minimum": 1
+            }
           },
           "additionalProperties": false
         },
-        "needs": { "type": "array", "items": { "type": "string" } },
-        "when": { "type": "string" },
-        "retry": { "type": "object", "properties": { "maxAttempts": { "type": "integer", "minimum": 1 } }, "additionalProperties": false }
+        "resources": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "key",
+              "units"
+            ],
+            "properties": {
+              "key": {
+                "type": "string",
+                "minLength": 1
+              },
+              "units": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "additionalProperties": false
+          }
+        },
+        "execution": {
+          "type": "object",
+          "required": ["candidates"],
+          "additionalProperties": false,
+          "properties": {
+            "candidates": {
+              "type": "array",
+              "minItems": 1,
+              "items": {"$ref": "#/$defs/candidate"},
+              "description": "Ordered executor choices. Retries are exhausted for one candidate before fallback selects the next."
+            },
+            "fallback": {
+              "type": "object",
+              "additionalProperties": false,
+              "properties": {
+                "when": {"type": "string", "description": "Boolean Expr evaluated against the structured failure. Omitted means failure.kind == 'start_failed'."}
+              },
+              "description": "Policy permitting selection of the next candidate."
+            }
+          }
+        }
       },
       "additionalProperties": false
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["executor"],
+      "additionalProperties": false,
+      "properties": {
+        "executor": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Name of the executor registered in executors.json or a built-in executor"
+        },
+        "config": {
+          "type": "object",
+          "description": "Opaque executor configuration. The graph engine does not assign business meaning to its keys."
+        },
+        "session": {"$ref": "#/$defs/session"}
+      }
+    },
+    "session": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "mode": {"type": "string", "enum": ["new", "fixed", "inherit", "fork"]},
+        "id": {"type": "string"},
+        "from": {"type": "string"}
+      }
     },
     "contract": {
       "type": "object",
-      "description": "JSON Schema draft 2020-12 contract. AgentFlow validates the full schema at workflow load and node execution.",
-      "properties": {
-        "type": { "enum": ["object", "array", "string", "number", "integer", "boolean", "null"] },
-        "properties": { "type": "object", "additionalProperties": { "$ref": "#/$defs/contract" } },
-        "required": { "type": "array", "items": { "type": "string" } },
-        "additionalProperties": { "type": "boolean" },
-        "items": { "$ref": "#/$defs/contract" },
-        "enum": { "type": "array" },
-        "minimum": { "type": "number" },
-        "minLength": { "type": "integer", "minimum": 0 },
-        "pattern": { "type": "string" },
-        "format": { "type": "string" },
-        "const": {},
-        "oneOf": { "type": "array", "items": { "$ref": "#/$defs/contract" } },
-        "anyOf": { "type": "array", "items": { "$ref": "#/$defs/contract" } },
-        "allOf": { "type": "array", "items": { "$ref": "#/$defs/contract" } },
-        "$ref": { "type": "string" },
-        "description": { "type": "string" }
-      },
-      "additionalProperties": true
-    },
-    "field": {
-      "type": "object",
-      "required": ["name"],
-      "properties": {
-        "name": { "type": "string", "minLength": 1 },
-        "type": { "enum": ["object", "array", "string", "number", "integer", "boolean", "null"] },
-        "description": { "type": "string" },
-        "required": { "type": "boolean" }
-      },
-      "additionalProperties": false
+      "description": "JSON Schema draft 2020-12. The complete definition is compiled by workflow validate, including union types and nested schemas."
     }
-  }
+  },
+  "additionalProperties": false
 }

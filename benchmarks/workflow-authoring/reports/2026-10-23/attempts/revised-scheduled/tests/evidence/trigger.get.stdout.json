@@ -1,0 +1,267 @@
+{
+  "active_node": "",
+  "created_at": "2026-10-23T08:58:48.222272Z",
+  "duration_ms": 66,
+  "finished_at": "2026-10-23T08:58:48.290025Z",
+  "history": [
+    {
+      "nodeId": "draft",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+        "attempts": 1,
+        "durationMs": 24,
+        "inputBytes": 404,
+        "outputBytes": 47,
+        "startedAt": "2026-10-23T08:58:48.224101Z",
+        "finishedAt": "2026-10-23T08:58:48.24823Z",
+        "result": {
+          "check": "check-v1",
+          "summary": "proposal-v1"
+        },
+        "input": {
+          "feedback": null,
+          "prompt": "你是产品研究团队的提案作者。针对主题 产品研究：改进首次使用体验 起草可执行的改进提案。若有审核返工意见，必须据此修改；上一轮审核意见：。仅输出 JSON 对象，字段 summary（提案正文，非空字符串）和 check（核查方法，非空字符串）。",
+          "topic": "产品研究：改进首次使用体验"
+        },
+        "artifacts": {
+          "input": "artifacts/draft.1.input.json",
+          "result": "artifacts/draft.1.result.json",
+          "stderrLog": "artifacts/logs/draft.1.stderr.log",
+          "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+        },
+        "leaseToken": "9608bca042cdfb27b7e152531517a1c0"
+      }
+    },
+    {
+      "nodeId": "review",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+        "attempts": 1,
+        "durationMs": 21,
+        "inputBytes": 335,
+        "outputBytes": 49,
+        "startedAt": "2026-10-23T08:58:48.24871Z",
+        "finishedAt": "2026-10-23T08:58:48.27039Z",
+        "result": {
+          "note": "scheduled-approval",
+          "signal": "happy"
+        },
+        "input": {
+          "actions": [
+            {
+              "label": "通过，继续制定下一步",
+              "output": {
+                "note": "",
+                "signal": "happy"
+              }
+            },
+            {
+              "label": "返工，请补充修改意见",
+              "output": {
+                "note": "",
+                "signal": "again"
+              }
+            },
+            {
+              "label": "终止本次提案",
+              "output": {
+                "note": "",
+                "signal": "sad"
+              }
+            }
+          ],
+          "content": {
+            "check": "check-v1",
+            "summary": "proposal-v1"
+          },
+          "recipient": "research-reviewer-local"
+        },
+        "artifacts": {
+          "input": "artifacts/review.1.input.json",
+          "result": "artifacts/review.1.result.json",
+          "stderrLog": "artifacts/logs/review.1.stderr.log",
+          "stdoutLog": "artifacts/logs/review.1.stdout.log"
+        },
+        "leaseToken": "f06130be75758950daeb4ed28ded98f0"
+      }
+    },
+    {
+      "nodeId": "finalize",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+        "attempts": 1,
+        "durationMs": 18,
+        "inputBytes": 574,
+        "outputBytes": 68,
+        "startedAt": "2026-10-23T08:58:48.271015Z",
+        "finishedAt": "2026-10-23T08:58:48.289692Z",
+        "result": {
+          "next_step": "Execute proposal-v1",
+          "verification": "Use check-v1"
+        },
+        "input": {
+          "prompt": "你是产品研究团队的行动计划作者。主题：产品研究：改进首次使用体验。最新提案：map[check:check-v1 summary:proposal-v1]。最新审核结果与意见：map[note:scheduled-approval signal:happy]。审核已通过，请结合最新提案和审核意见制定下一步及验证方法。仅输出 JSON 对象，字段 next_step 和 verification 均为非空字符串。",
+          "proposal": {
+            "check": "check-v1",
+            "summary": "proposal-v1"
+          },
+          "review": {
+            "note": "scheduled-approval",
+            "signal": "happy"
+          },
+          "topic": "产品研究：改进首次使用体验"
+        },
+        "artifacts": {
+          "input": "artifacts/finalize.1.input.json",
+          "result": "artifacts/finalize.1.result.json",
+          "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+          "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+        },
+        "leaseToken": "d7f59eb3682174d0be36df97f4eba4c2"
+      }
+    }
+  ],
+  "idempotency_key": "weekday-research-0915:bench-local-fd62980cdbfa420fa92ffba4dc8ec83d",
+  "inputs": {
+    "reviewer": "research-reviewer-local",
+    "topic": "产品研究：改进首次使用体验"
+  },
+  "nodes": {
+    "draft": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+      "attempts": 1,
+      "durationMs": 24,
+      "inputBytes": 404,
+      "outputBytes": 47,
+      "startedAt": "2026-10-23T08:58:48.224101Z",
+      "finishedAt": "2026-10-23T08:58:48.24823Z",
+      "result": {
+        "check": "check-v1",
+        "summary": "proposal-v1"
+      },
+      "input": {
+        "feedback": null,
+        "prompt": "你是产品研究团队的提案作者。针对主题 产品研究：改进首次使用体验 起草可执行的改进提案。若有审核返工意见，必须据此修改；上一轮审核意见：。仅输出 JSON 对象，字段 summary（提案正文，非空字符串）和 check（核查方法，非空字符串）。",
+        "topic": "产品研究：改进首次使用体验"
+      },
+      "artifacts": {
+        "input": "artifacts/draft.1.input.json",
+        "result": "artifacts/draft.1.result.json",
+        "stderrLog": "artifacts/logs/draft.1.stderr.log",
+        "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+      },
+      "leaseToken": "9608bca042cdfb27b7e152531517a1c0"
+    },
+    "finalize": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+      "attempts": 1,
+      "durationMs": 18,
+      "inputBytes": 574,
+      "outputBytes": 68,
+      "startedAt": "2026-10-23T08:58:48.271015Z",
+      "finishedAt": "2026-10-23T08:58:48.289692Z",
+      "result": {
+        "next_step": "Execute proposal-v1",
+        "verification": "Use check-v1"
+      },
+      "input": {
+        "prompt": "你是产品研究团队的行动计划作者。主题：产品研究：改进首次使用体验。最新提案：map[check:check-v1 summary:proposal-v1]。最新审核结果与意见：map[note:scheduled-approval signal:happy]。审核已通过，请结合最新提案和审核意见制定下一步及验证方法。仅输出 JSON 对象，字段 next_step 和 verification 均为非空字符串。",
+        "proposal": {
+          "check": "check-v1",
+          "summary": "proposal-v1"
+        },
+        "review": {
+          "note": "scheduled-approval",
+          "signal": "happy"
+        },
+        "topic": "产品研究：改进首次使用体验"
+      },
+      "artifacts": {
+        "input": "artifacts/finalize.1.input.json",
+        "result": "artifacts/finalize.1.result.json",
+        "stderrLog": "artifacts/logs/finalize.1.stderr.log",
+        "stdoutLog": "artifacts/logs/finalize.1.stdout.log"
+      },
+      "leaseToken": "d7f59eb3682174d0be36df97f4eba4c2"
+    },
+    "review": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+      "attempts": 1,
+      "durationMs": 21,
+      "inputBytes": 335,
+      "outputBytes": 49,
+      "startedAt": "2026-10-23T08:58:48.24871Z",
+      "finishedAt": "2026-10-23T08:58:48.27039Z",
+      "result": {
+        "note": "scheduled-approval",
+        "signal": "happy"
+      },
+      "input": {
+        "actions": [
+          {
+            "label": "通过，继续制定下一步",
+            "output": {
+              "note": "",
+              "signal": "happy"
+            }
+          },
+          {
+            "label": "返工，请补充修改意见",
+            "output": {
+              "note": "",
+              "signal": "again"
+            }
+          },
+          {
+            "label": "终止本次提案",
+            "output": {
+              "note": "",
+              "signal": "sad"
+            }
+          }
+        ],
+        "content": {
+          "check": "check-v1",
+          "summary": "proposal-v1"
+        },
+        "recipient": "research-reviewer-local"
+      },
+      "artifacts": {
+        "input": "artifacts/review.1.input.json",
+        "result": "artifacts/review.1.result.json",
+        "stderrLog": "artifacts/logs/review.1.stderr.log",
+        "stdoutLog": "artifacts/logs/review.1.stdout.log"
+      },
+      "leaseToken": "f06130be75758950daeb4ed28ded98f0"
+    }
+  },
+  "ok": true,
+  "outcome": "completed",
+  "run_id": "run_20261023085848_8c3e1d895fed5640",
+  "started_at": "2026-10-23T08:58:48.223961Z",
+  "status": "succeeded",
+  "trigger": {
+    "id": "weekday-research-0915",
+    "kind": "cron",
+    "deliveryId": "bench-local-fd62980cdbfa420fa92ffba4dc8ec83d",
+    "scheduledAt": "2026-10-26T01:15:00Z",
+    "receivedAt": "2026-10-23T08:58:48.216704Z"
+  },
+  "updated_at": "2026-10-23T08:58:48.290025Z",
+  "visits": {
+    "draft": 1,
+    "finalize": 1,
+    "review": 1
+  },
+  "workflow": "product-research-weekday-review",
+  "workflow_digest": "978bbe879f20"
+}

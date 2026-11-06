@@ -1,0 +1,89 @@
+{
+  "action": "run.start",
+  "dry_run": true,
+  "edges": [
+    {
+      "from": "draft",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "finalize",
+      "when": "nodes.review.result.signal == \"happy\""
+    },
+    {
+      "from": "review",
+      "to": "draft",
+      "when": "nodes.review.result.signal == \"again\"",
+      "maxIterations": 2
+    },
+    {
+      "from": "review",
+      "to": "$end",
+      "when": "nodes.review.result.signal == \"sad\""
+    },
+    {
+      "from": "finalize",
+      "to": "$end"
+    }
+  ],
+  "entry": "draft",
+  "inputs": {
+    "reviewer": "reviewer-local",
+    "topic": "预检"
+  },
+  "nodes": [
+    {
+      "executor": "codex",
+      "id": "draft",
+      "input": {
+        "feedback": null,
+        "prompt": "你是产品研究团队的提案作者。针对主题 预检 起草可执行的改进提案。若有审核返工意见，必须据此修改；上一轮审核意见：。仅输出 JSON 对象，字段 summary（提案正文，非空字符串）和 check（核查方法，非空字符串）。",
+        "topic": "预检"
+      }
+    },
+    {
+      "executor": "local-review",
+      "id": "review",
+      "input": {
+        "actions": [
+          {
+            "label": "通过，继续制定下一步",
+            "output": {
+              "note": "",
+              "signal": "happy"
+            }
+          },
+          {
+            "label": "返工，请补充修改意见",
+            "output": {
+              "note": "",
+              "signal": "again"
+            }
+          },
+          {
+            "label": "终止本次提案",
+            "output": {
+              "note": "",
+              "signal": "sad"
+            }
+          }
+        ],
+        "content": null,
+        "recipient": "reviewer-local"
+      }
+    },
+    {
+      "executor": "codex",
+      "id": "finalize",
+      "input": {
+        "prompt": "你是产品研究团队的行动计划作者。主题：预检。最新提案：。最新审核结果与意见：。审核已通过，请结合最新提案和审核意见制定下一步及验证方法。仅输出 JSON 对象，字段 next_step 和 verification 均为非空字符串。",
+        "proposal": null,
+        "review": null,
+        "topic": "预检"
+      }
+    }
+  ],
+  "ok": true,
+  "workflow": "product-research-weekday-review"
+}

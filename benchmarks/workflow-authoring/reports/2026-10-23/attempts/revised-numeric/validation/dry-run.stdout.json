@@ -1,0 +1,63 @@
+{
+  "action": "run.start",
+  "dry_run": true,
+  "edges": [
+    {
+      "from": "measure",
+      "to": "accept",
+      "when": "nodes.measure.result.score > 80 && len(nodes.measure.result.defects) == 0"
+    },
+    {
+      "from": "measure",
+      "to": "recheck",
+      "when": "nodes.measure.result.urgent == true || nodes.measure.result.score >= 50"
+    },
+    {
+      "from": "measure",
+      "to": "$end"
+    },
+    {
+      "from": "accept",
+      "to": "$end"
+    },
+    {
+      "from": "recheck",
+      "to": "$end"
+    }
+  ],
+  "entry": "measure",
+  "inputs": {
+    "sample": "dry-run"
+  },
+  "nodes": [
+    {
+      "executor": "quality-measure",
+      "id": "measure",
+      "input": {
+        "sample": "dry-run"
+      }
+    },
+    {
+      "executor": "quality-finish",
+      "id": "accept",
+      "input": {
+        "branch": "accept",
+        "defects": null,
+        "score": null,
+        "urgent": null
+      }
+    },
+    {
+      "executor": "quality-finish",
+      "id": "recheck",
+      "input": {
+        "branch": "recheck",
+        "defects": null,
+        "score": null,
+        "urgent": null
+      }
+    }
+  ],
+  "ok": true,
+  "workflow": "plant-7-quality-inspection"
+}

@@ -1,0 +1,25 @@
+{
+  "executors": {
+    "author": {
+      "kind": "codex",
+      "model": "gpt-5.6-sol",
+      "workspace": "executors/agents/author",
+      "sandbox": "workspace-write",
+      "skipGitRepoCheck": true,
+      "extraArgs": ["--add-dir", "../../../runs"]
+    },
+    "verifier": {
+      "kind": "codex",
+      "model": "gpt-5.6-sol",
+      "workspace": "executors/agents/verifier",
+      "sandbox": "workspace-write",
+      "skipGitRepoCheck": true,
+      "extraArgs": ["--add-dir", "../../../runs"]
+    },
+    "report_writer": {
+      "kind": "command",
+      "workspace": "executors/programs/report_writer",
+      "command": ["python3", "main.py"]
+    }
+  }
+}

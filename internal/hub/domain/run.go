@@ -13,17 +13,23 @@ import (
 type Status string
 
 const (
-	StatusPending   Status = "pending"
-	StatusQueued    Status = "queued"
-	StatusRunning   Status = "running"
-	StatusWaiting   Status = "waiting_human"
-	StatusSucceeded Status = "succeeded"
-	StatusFailed    Status = "failed"
-	StatusCancelled Status = "cancelled"
-	StatusSkipped   Status = "skipped"
+	StatusPending Status = "pending"
+	StatusQueued  Status = "queued"
+	StatusRunning Status = "running"
+	StatusWaiting Status = "waiting_human"
+	// StatusWaitingInput is the v0.4 engine's wait for an external submission
+	// (a person through a card or form, or a program).
+	StatusWaitingInput Status = "waiting_input"
+	// StatusWaitingResource waits for a shared resource; nothing is needed from a person.
+	StatusWaitingResource Status = "waiting_resource"
+	StatusSucceeded       Status = "succeeded"
+	StatusFailed          Status = "failed"
+	StatusCancelled       Status = "cancelled"
+	StatusSkipped         Status = "skipped"
 )
 
-var knownStatuses = map[Status]bool{StatusPending: true, StatusQueued: true, StatusRunning: true, StatusWaiting: true, StatusSucceeded: true, StatusFailed: true, StatusCancelled: true, StatusSkipped: true}
+var knownStatuses = map[Status]bool{StatusPending: true, StatusQueued: true, StatusRunning: true, StatusWaiting: true,
+	StatusWaitingInput: true, StatusWaitingResource: true, StatusSucceeded: true, StatusFailed: true, StatusCancelled: true, StatusSkipped: true}
 
 // Known reports whether s is a status the Hub understands.
 func (s Status) Known() bool { return knownStatuses[s] }
@@ -33,8 +39,16 @@ func (s Status) Finished() bool {
 	return s == StatusSucceeded || s == StatusFailed || s == StatusCancelled
 }
 
-// Active reports whether a run in this status is still going.
-func (s Status) Active() bool { return s == StatusPending || s == StatusQueued || s == StatusRunning }
+// Active reports whether a run in this status is still going without anyone's help.
+func (s Status) Active() bool {
+	return s == StatusPending || s == StatusQueued || s == StatusRunning || s == StatusWaitingResource
+}
+
+// NeedsInput reports whether a run in this status waits for someone to act.
+func (s Status) NeedsInput() bool { return s == StatusWaiting || s == StatusWaitingInput }
+
+// WaitingStatuses are the statuses that wait for someone to act.
+var WaitingStatuses = []Status{StatusWaiting, StatusWaitingInput}
 
 // RunKey identifies a run across machines: run ids are only unique per machine.
 type RunKey struct {
@@ -136,7 +150,7 @@ func (r Run) FailedStep() (Step, bool) {
 // WaitingStep is the step waiting for a person, if any.
 func (r Run) WaitingStep() (Step, bool) {
 	for _, step := range r.Steps {
-		if step.Status == StatusWaiting {
+		if step.Status.NeedsInput() {
 			return step, true
 		}
 	}

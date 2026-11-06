@@ -1,0 +1,27 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "mood",
+    "feedback",
+    "confidence"
+  ],
+  "properties": {
+    "mood": {
+      "type": "string",
+      "enum": [
+        "go",
+        "back",
+        "stop"
+      ]
+    },
+    "feedback": {
+      "type": "string"
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1
+    }
+  }
+}

@@ -6,41 +6,64 @@ import (
 	"github.com/chenhg5/agentflow/internal/model"
 )
 
-func TestDescribeMergesControlDataAndConditionChannels(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "graph", Nodes: []model.Node{
-		{ID: "inspect", Type: "shell", Command: []string{"true"}},
-		{ID: "review", Type: "human", Prompt: "approve", Needs: []string{"inspect"}, When: "nodes.inspect.result.ready == true", InputMapping: map[string]string{"summary": "$node.inspect.output.summary"}},
+func TestDescribeAndValidateConditionalCycle(t *testing.T) {
+	workflow := model.Workflow{Version: "3", Name: "graph", Entry: "draft", Nodes: []model.Node{
+		{ID: "draft", Execution: oneCandidate("codex")}, {ID: "review", Execution: oneCandidate("external")},
+	}, Edges: []model.Transition{
+		{From: "draft", To: "review", Map: &map[string]any{"summary": "{{ output.summary }}"}},
+		{From: "review", To: "draft", When: "nodes.review.result.decision == 'again'", MaxIterations: 2},
+		{From: "review", To: End},
 	}}
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatalf("valid graph: %v", problems)
+	}
 	document := Describe(workflow)
-	if len(document.Edges) != 1 {
-		t.Fatalf("edges = %#v", document.Edges)
+	if len(document.Edges) != 3 || document.Edges[0].Map == nil || (*document.Edges[0].Map)["summary"] != "{{ output.summary }}" || document.Edges[1].Condition != workflow.Edges[1].When || document.Edges[1].MaxIterations != 2 {
+		t.Fatalf("unexpected graph view: %+v", document)
 	}
-	edge := document.Edges[0]
-	if edge.Source != "inspect" || edge.Target != "review" || len(edge.Channels) != 3 {
-		t.Fatalf("unexpected edge: %#v", edge)
+	workflow.Edges[1].MaxIterations = 0
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("unbounded cycle should fail")
 	}
-	if edge.Mapping["summary"] != "$node.inspect.output.summary" {
-		t.Fatalf("mapping = %#v", edge.Mapping)
+	workflow.AllowUnboundedCycles = true
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatalf("explicitly unbounded cycle should pass: %v", problems)
 	}
 }
 
-func TestValidateRejectsUndeclaredMappingDependency(t *testing.T) {
-	workflow := model.Workflow{Version: "1", Name: "graph", Nodes: []model.Node{
-		{ID: "source", Type: "shell", Command: []string{"true"}},
-		{ID: "consumer", Type: "shell", InputMapping: map[string]string{"value": "$node.source.output.value"}, Command: []string{"true"}},
+func TestParallelDispatchAndJoinValidation(t *testing.T) {
+	workflow := model.Workflow{Version: "3", Name: "parallel", Entry: "start", Nodes: []model.Node{
+		{ID: "start", Execution: oneCandidate("process"), Dispatch: "all"},
+		{ID: "left", Execution: oneCandidate("process")},
+		{ID: "right", Execution: oneCandidate("process")},
+		{ID: "join", Execution: oneCandidate("process"), Join: &model.JoinSpec{From: []string{"left", "right"}}},
+	}, Edges: []model.Transition{
+		{From: "start", To: "left"}, {From: "start", To: "right"},
+		{From: "left", To: "join"}, {From: "right", To: "join"}, {From: "join", To: End},
 	}}
-	errors := Validate(workflow)
-	if len(errors) != 1 || errors[0] != "node consumer inputMapping.value references source without declaring it in needs" {
-		t.Fatalf("errors = %v", errors)
+	if problems := Validate(workflow); len(problems) != 0 {
+		t.Fatalf("valid parallel graph: %v", problems)
+	}
+	if channels := Describe(workflow).Edges[0].Channels; len(channels) != 2 || channels[1] != ChannelParallel {
+		t.Fatalf("fan-out edge missing parallel channel: %v", channels)
+	}
+	workflow.Nodes[0].Dispatch = "first"
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("serial dispatch must reject multiple defaults")
+	}
+	workflow.Nodes[0].Dispatch = "all"
+	workflow.Nodes[3].Execution.Candidates[0].Session.Mode = "inherit"
+	workflow.Nodes[3].Execution.Candidates[0].Session.From = "start"
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("join session source must be a declared predecessor")
+	}
+	workflow.Nodes[3].Execution.Candidates[0].Session = model.SessionSpec{}
+	workflow.Nodes[3].Join.From = []string{"left", "unknown"}
+	if problems := Validate(workflow); len(problems) == 0 {
+		t.Fatal("join must reject non-incoming predecessor")
 	}
 }
 
-func TestParseNodeOutput(t *testing.T) {
-	node, field, ok := ParseNodeOutput("$node.inspect.output.summary.text")
-	if !ok || node != "inspect" || field != "summary.text" {
-		t.Fatalf("parsed = %q %q %v", node, field, ok)
-	}
-	if _, _, ok := ParseNodeOutput("$output.summary"); ok {
-		t.Fatal("$output reference should not identify a source node")
-	}
+func oneCandidate(executor string) model.Execution {
+	return model.Execution{Candidates: []model.ExecutorCandidate{{Executor: executor}}}
 }

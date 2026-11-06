@@ -1,0 +1,20 @@
+{
+  "triggers": [
+    {
+      "id": "weekday-research-review",
+      "enabled": true,
+      "source": {
+        "kind": "cron",
+        "expression": "15 9 * * 1-5",
+        "timezone": "Asia/Shanghai"
+      },
+      "target": {
+        "workflow": "workflow.json"
+      },
+      "inputs": {
+        "topic": "Improve product onboarding",
+        "reviewer": "local-product-reviewer"
+      }
+    }
+  ]
+}

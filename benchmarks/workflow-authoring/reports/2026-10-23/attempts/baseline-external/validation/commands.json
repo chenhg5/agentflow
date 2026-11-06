@@ -1,0 +1,218 @@
+[
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow workflow validate workflow.json --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow workflow validate validation/workflow.test.json --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start workflow.json --input 'topic=preview topic' --dry-run --format json",
+    "exit_code": 10
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --format json",
+    "exit_code": 1
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input topic= --format json",
+    "exit_code": 1
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=persistent review' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_2f54ea3b401e34d1 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run resume run_20261023084812_2f54ea3b401e34d1 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_2f54ea3b401e34d1 review --output '{\"mood\": \"go\", \"feedback\": \"local review\", \"confidence\": 0.8}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=stop topic' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_8bcfa9f1003e853f review --output '{\"mood\": \"stop\", \"feedback\": \"local review\", \"confidence\": 0}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=low confidence topic' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_d04220160ed63dd1 review --output '{\"mood\": \"go\", \"feedback\": \"add examples\", \"confidence\": 0.799999}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_d04220160ed63dd1 review --output '{\"mood\": \"go\", \"feedback\": \"local review\", \"confidence\": 1}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=bounded back topic' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_09608de895893aa4 review --output '{\"mood\": \"back\", \"feedback\": \"change 1\", \"confidence\": 1}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_09608de895893aa4 review --output '{\"mood\": \"back\", \"feedback\": \"change 2\", \"confidence\": 1}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_09608de895893aa4 review --output '{\"mood\": \"back\", \"feedback\": \"still needs work\", \"confidence\": 1}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=bounded low confidence topic' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_89d0a52b9aedeca9 review --output '{\"mood\": \"go\", \"feedback\": \"uncertain 1\", \"confidence\": 0}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_89d0a52b9aedeca9 review --output '{\"mood\": \"go\", \"feedback\": \"uncertain 2\", \"confidence\": 0}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_89d0a52b9aedeca9 review --output '{\"mood\": \"go\", \"feedback\": \"still uncertain\", \"confidence\": 0.79}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=approval after last revision' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_eee33bb3fc11356d review --output '{\"mood\": \"back\", \"feedback\": \"local review\", \"confidence\": 0.9}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_eee33bb3fc11356d review --output '{\"mood\": \"back\", \"feedback\": \"local review\", \"confidence\": 0.9}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_eee33bb3fc11356d review --output '{\"mood\": \"go\", \"feedback\": \"local review\", \"confidence\": 0.8}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=stop after revisions' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_f10cd6e47669a5d8 review --output '{\"mood\": \"back\", \"feedback\": \"local review\", \"confidence\": 0.9}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_f10cd6e47669a5d8 review --output '{\"mood\": \"back\", \"feedback\": \"local review\", \"confidence\": 0.9}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_f10cd6e47669a5d8 review --output '{\"mood\": \"stop\", \"feedback\": \"local review\", \"confidence\": 1}' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run start validation/workflow.test.json --input 'topic=strict review contract' --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"approve\", \"feedback\": \"\", \"confidence\": 0.9}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"decision\": \"go\", \"feedback\": \"\", \"confidence\": 0.9}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"go\", \"feedback\": null, \"confidence\": 0.9}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"go\", \"feedback\": 1, \"confidence\": 0.9}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"go\", \"feedback\": \"\", \"confidence\": \"0.9\"}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"go\", \"feedback\": \"\", \"confidence\": true}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"go\", \"feedback\": \"\", \"confidence\": -0.01}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"go\", \"feedback\": \"\", \"confidence\": 1.01}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"go\", \"feedback\": \"\", \"confidence\": 0.9, \"extra\": 1}' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '[]' --format json",
+    "exit_code": 2
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run get run_20261023084812_98a15fe380efa3e3 --format json",
+    "exit_code": 0
+  },
+  {
+    "command": "/private/tmp/agentflow-bench-baseline-external/agentflow run submit run_20261023084812_98a15fe380efa3e3 review --output '{\"mood\": \"stop\", \"feedback\": \"\", \"confidence\": 0}' --format json",
+    "exit_code": 0
+  }
+]

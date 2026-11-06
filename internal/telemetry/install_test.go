@@ -3,7 +3,6 @@ package telemetry_test
 import (
 	"context"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -32,12 +31,9 @@ func TestRunsReachTheHub(t *testing.T) {
 	t.Setenv("AGENTFLOW_HUB_TOKEN", "tok")
 	t.Setenv("AGENTFLOW_MACHINE", "ci")
 
-	root := filepath.Join(t.TempDir(), ".agentflow")
+	root := t.TempDir()
 	stop := telemetry.Start(root, time.Hour, 5*time.Second)
-	workflow := model.Workflow{Version: "1", Name: "hello", Nodes: []model.Node{
-		{ID: "say", Type: "shell", Command: []string{"sh", "-c", `printf '{"summary":"said hello"}' > "$AGENTFLOW_RESULT_FILE"`}},
-	}}
-	run, err := store.CreateRun(root, workflow, map[string]string{}, "")
+	run, err := store.CreateRun(root, oneStep(`printf '{"summary":"said hello"}' > "$AGENTFLOW_RESULT_FILE"`), map[string]string{}, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +46,7 @@ func TestRunsReachTheHub(t *testing.T) {
 	if err != nil {
 		t.Fatalf("run not on the hub: %v", err)
 	}
-	if got.Status != domain.StatusSucceeded || got.Workflow != "hello" || len(got.Steps) != 1 || got.Steps[0].Summary != "said hello" {
+	if got.Status != domain.StatusSucceeded || got.Workflow != "hello" || len(got.Steps) != 1 || got.Steps[0].Summary != "said hello" || got.Steps[0].Type != "process" {
 		t.Fatalf("hub has %+v", got)
 	}
 	if pending, _ := telemetry.NewOutbox(root).Pending(); len(pending) != 0 {
@@ -62,13 +58,21 @@ func TestStartIsANoOpWithoutAHub(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("USERPROFILE", t.TempDir())
 	t.Setenv("AGENTFLOW_HUB_URL", "")
-	root := filepath.Join(t.TempDir(), ".agentflow")
+	root := t.TempDir()
 	stop := telemetry.Start(root, time.Hour, time.Second)
-	workflow := model.Workflow{Version: "1", Name: "hello", Nodes: []model.Node{{ID: "say", Type: "shell", Command: []string{"sh", "-c", "exit 0"}}}}
-	run, _ := store.CreateRun(root, workflow, map[string]string{}, "")
+	run, _ := store.CreateRun(root, oneStep(`printf '{}' > "$AGENTFLOW_RESULT_FILE"`), map[string]string{}, "")
 	engine.Execute(run, nil)
 	stop()
 	if pending, _ := telemetry.NewOutbox(root).Pending(); len(pending) != 0 {
 		t.Fatal("nothing should be recorded without a hub")
+	}
+}
+
+func oneStep(script string) model.Workflow {
+	return model.Workflow{Version: "3", Name: "hello", Entry: "say",
+		Nodes: []model.Node{{ID: "say", Execution: model.Execution{Candidates: []model.ExecutorCandidate{
+			{Executor: "process", Config: map[string]any{"command": []string{"sh", "-c", script}}},
+		}}}},
+		Edges: []model.Transition{{From: "say", To: "$end"}},
 	}
 }

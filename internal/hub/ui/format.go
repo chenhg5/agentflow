@@ -18,14 +18,16 @@ type statusLook struct {
 }
 
 var statusLooks = map[domain.Status]statusLook{
-	domain.StatusSucceeded: {"成功", "good", "check"},
-	domain.StatusFailed:    {"失败", "bad", "x"},
-	domain.StatusRunning:   {"运行中", "agent", "spin"},
-	domain.StatusPending:   {"待开始", "neutral", "dashed"},
-	domain.StatusQueued:    {"排队中", "neutral", "dashed"},
-	domain.StatusWaiting:   {"等人处理", "human", "person"},
-	domain.StatusCancelled: {"已取消", "neutral", "ban"},
-	domain.StatusSkipped:   {"已跳过", "neutral", "skip"},
+	domain.StatusSucceeded:       {"成功", "good", "check"},
+	domain.StatusFailed:          {"失败", "bad", "x"},
+	domain.StatusRunning:         {"运行中", "agent", "spin"},
+	domain.StatusPending:         {"待开始", "neutral", "dashed"},
+	domain.StatusQueued:          {"排队中", "neutral", "dashed"},
+	domain.StatusWaiting:         {"等人处理", "human", "person"},
+	domain.StatusWaitingInput:    {"等待输入", "human", "person"},
+	domain.StatusWaitingResource: {"等资源", "warn", "dashed"},
+	domain.StatusCancelled:       {"已取消", "neutral", "ban"},
+	domain.StatusSkipped:         {"已跳过", "neutral", "skip"},
 }
 
 func lookOf(status domain.Status) statusLook {

@@ -1,0 +1,11 @@
+{
+  "executors": {
+    "channel": {
+      "command": [
+        "python3",
+        "fixtures/channel.py"
+      ],
+      "workspace": "."
+    }
+  }
+}

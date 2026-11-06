@@ -1,4 +1,17 @@
 .agentflow/
+/runs/
+/dispatch/
+/trigger-deliveries/
+/trigger-cursors/
+/cron-state.lock
+/scheduler.lock
+/trigger-dispatch.lock
+/resource-state/
+/resources.lock
+/queue.json
+/queue.lock
+/worker.lock
+/worker.json
 node_modules/
 /agentflow
 bin/
@@ -10,3 +23,6 @@ dist/
 *.secret
 *.pem
 *.key
+
+__pycache__/
+benchmarks/workflow-authoring/results/

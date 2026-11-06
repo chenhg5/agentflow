@@ -1,0 +1,6 @@
+{
+  "pr_id": "sample-42",
+  "head": "8fba010db0f2e1c30cf68cb434318526510148aa",
+  "patch": "diff --git a/settings.py b/settings.py\n--- a/settings.py\n+++ b/settings.py\n@@ -1,2 +1,2 @@\n def notifications_enabled(settings):\n-    return settings.get('enabled', True)\n+    return settings.get('enabled', False)\n",
+  "feedback": ""
+}

@@ -1,0 +1,21 @@
+{
+  "passed": true,
+  "cli_invocations": 51,
+  "invalid_payloads_rejected": 13,
+  "real_models_called": false,
+  "checks": [
+    "workflow validation",
+    "dry-run exit 10",
+    "required topic",
+    "fresh-process durable reload and resume",
+    "go at confidence 0.8",
+    "stop normal success",
+    "back independent of confidence",
+    "go below threshold returns",
+    "feedback in next draft input and prompt",
+    "review sees latest draft",
+    "two returns then acceptance",
+    "third return fails max_iterations without fourth draft",
+    "strict review schema rejects malformed output and preserves pause"
+  ]
+}

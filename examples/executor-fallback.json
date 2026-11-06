@@ -1,0 +1,38 @@
+{
+  "version": "3",
+  "name": "executor-fallback",
+  "entry": "work",
+  "nodes": [
+    {
+      "id": "work",
+      "execution": {
+        "candidates": [
+          {
+            "executor": "codex",
+            "config": {
+              "workspace": "./intentionally-missing-primary-workspace",
+              "instruction": "Return a JSON object with source set to primary."
+            }
+          },
+          {
+            "executor": "process",
+            "config": {
+              "command": [
+                "sh",
+                "-c",
+                "printf '{\"source\":\"fallback\"}' > \"$AGENTFLOW_RESULT_FILE\""
+              ]
+            }
+          }
+        ]
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": ["source"],
+        "properties": {"source": {"type": "string"}},
+        "additionalProperties": false
+      }
+    }
+  ],
+  "edges": [{"from": "work", "to": "$end"}]
+}

@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "run_id": "run_20261023085848_8c3e1d895fed5640",
+  "status": "succeeded",
+  "trigger": {
+    "trigger_id": "weekday-research-0915",
+    "delivery_id": "bench-local-fd62980cdbfa420fa92ffba4dc8ec83d",
+    "status": "queued",
+    "run": {
+      "run_id": "run_20261023085848_8c3e1d895fed5640",
+      "status": "queued"
+    },
+    "duplicate": true
+  }
+}

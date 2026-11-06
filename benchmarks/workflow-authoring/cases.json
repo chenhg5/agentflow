@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": "scheduled-review",
+      "split": "development",
+      "roles": ["draft", "review", "finalize"],
+      "prompt": "给一个产品研究团队搭建本地工作流。每个工作日 Asia/Shanghai 09:15 自动启动：先由 Codex 起草改进提案，输出 summary/check；再调用 fixtures/channel.py 发给 reviewer 输入指定的人审核；审核返回 signal（happy/again/sad）与 note。happy 后交给 Codex 输出 next_step/verification，again 带上 note 回到起草（最多返工两次），sad 正常结束且不运行最后一步。最后一步必须拿到最新提案和审核意见。topic/reviewer 是必填运行输入。channel.py 的 JSON 输入必须含 recipient、content、actions，actions 是 label/output 对象数组，输出是审核 JSON。这个程序是本地模拟渠道，不需要联网或另起扫描 workflow 的服务。为各个步骤定义输入输出契约，写好 executor 入口配置和 cron 配置，说明如何启动定时器。",
+      "schedule": "15 9 * * 1-5",
+      "timezone": "Asia/Shanghai"
+    },
+    {
+      "id": "numeric-routing",
+      "split": "development",
+      "roles": ["measure", "accept", "recheck"],
+      "prompt": "给工厂质检搭一个纯程序工作流，无需 Agent 提示词。先调用 fixtures/measure.py，其输入是 sample（字符串，来自必填运行输入），输出 score（数字）、defects（字符串数组）、urgent（布尔）。只有 score > 80 且 defects 为空时进入 accept；否则 urgent=true 或 score >= 50 时进入 recheck；其他情况正常结束。accept/recheck 也由自定义程序执行，将 score/defects/urgent 原类型传给它，输出 branch 为 accept/recheck。fixtures/finish.py 可以作为这两个步骤的入口，它从 input.branch 和其他输入生成结果。配置 command、workspace、env，并在 env 里传 QUALITY_SITE=plant-7（finish.py 会检查）。三个程序都是本地程序，任意节点都不应要求 prompt。不要把条件写死在程序里，条件属于图的边。",
+      "scenarios": [
+        {"score": 81, "defects": [], "urgent": false, "target": "accept"},
+        {"score": 80, "defects": [], "urgent": false, "target": "recheck"},
+        {"score": 81, "defects": ["dent"], "urgent": false, "target": "recheck"},
+        {"score": 49, "defects": [], "urgent": true, "target": "recheck"},
+        {"score": 49, "defects": ["dent"], "urgent": false, "target": null}
+      ]
+    },
+    {
+      "id": "external-loop",
+      "split": "development",
+      "roles": ["draft", "review", "finalize"],
+      "prompt": "搭一个可持久暂停的文案工作流：Codex 写文案并输出 summary/check；之后等另一个独立终端程序提交任意 JSON，无需启动通知程序。外部输出约定 mood 是 go/back/stop，feedback 是字符串，confidence 是 0 到 1 的数字。只有 mood=go 且 confidence >= 0.8 才进入 Codex 的整理步骤（输出 next_step/verification）；mood=back 或 mood=go 但 confidence<0.8 时带 feedback 返回起草，最多两次；mood=stop 正常结束。topic 是必填运行输入。请定义严格的审核输出契约，提供 submit 的本地操作示例；进程退出、重新加载 run 后仍能从暂停处推进。不要将 mood 重命名成 decision，也不要把 stop 当执行异常。"
+    },
+    {
+      "id": "mixed-language",
+      "split": "holdout",
+      "roles": ["collect", "report"],
+      "prompt": "给一个农场做纯本地数据工作流。请自己写两个执行器：Python collect 接收运行输入 batch（必填字符串），返回 batch、readings=[3,7,11] 和 meta={unit:'kg',valid:true}；Node.js report 接收这些字段（保持数组、对象、布尔的 JSON 类型），计算 total=21 并返回 batch/total/unit/valid。两个程序都遵循工具的输入输出文件协议，不依赖标准输出传数据。注册两个自定义 executor，设置工作目录和环境变量 FARM_SITE=orchard-2，程序校验环境变量。图从 collect 到 report 再正常结束，提供输入输出 JSON Schema。程序允许用 Python/Node 标准库，交付可运行文件，不要只写伪代码。"
+    }
+  ]
+}

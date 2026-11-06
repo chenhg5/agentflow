@@ -1,0 +1,1 @@
+{"version": "2", "name": "template-probe", "entry": "probe", "nodes": [{"id": "probe", "executor": "external", "input": {"topic": "{{ input.topic }}", "plural": "{{ inputs.topic }}", "prior": "{{ nodes.review.result.note }}"}, "outputSchema": {"type": "object"}}], "edges": [{"from": "probe", "to": "$end"}], "input_schema": {}}

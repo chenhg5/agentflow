@@ -1,26 +1,59 @@
 {
-  "version": "1",
+  "version": "3",
   "name": "smoke",
+  "entry": "greet",
   "inputs": {
-    "name": { "type": "string", "required": true }
+    "name": {
+      "type": "string",
+      "required": true
+    }
   },
   "nodes": [
     {
       "id": "greet",
-      "type": "shell",
-      "command": ["sh", "-c", "printf 'hello %s\\n' \"$1\"; printf '{\"message\":\"hello %s\"}\\n' \"$1\" > \"$AGENTFLOW_RESULT_FILE\"", "sh", "{{ inputs.name }}"]
+      "execution": {"candidates": [{"executor": "process", "config": {
+        "command": [
+          "sh",
+          "-c",
+          "printf 'hello %s\\n' \"$1\"; printf '{\"message\":\"hello %s\"}\\n' \"$1\" > \"$AGENTFLOW_RESULT_FILE\"",
+          "sh",
+          "{{ inputs.name }}"
+        ]
+      }}]}
     },
     {
       "id": "approve",
-      "type": "human",
-      "needs": ["greet"],
-      "prompt": "Approve the greeting?"
+      "execution": {"candidates": [{"executor": "external"}]}
     },
     {
       "id": "finish",
-      "type": "shell",
-      "needs": ["approve"],
-      "command": ["sh", "-c", "printf 'workflow complete\\n'; printf '{\"done\":true}\\n' > \"$AGENTFLOW_RESULT_FILE\"", "sh"]
+      "execution": {"candidates": [{"executor": "process", "config": {
+        "command": [
+          "sh",
+          "-c",
+          "printf 'workflow complete\\n'; printf '{\"done\":true}\\n' > \"$AGENTFLOW_RESULT_FILE\"",
+          "sh"
+        ]
+      }}]}
+    }
+  ],
+  "edges": [
+    {
+      "from": "greet",
+      "to": "approve"
+    },
+    {
+      "from": "approve",
+      "to": "finish",
+      "when": "nodes.approve.result.decision == 'happy'"
+    },
+    {
+      "from": "approve",
+      "to": "$end"
+    },
+    {
+      "from": "finish",
+      "to": "$end"
     }
   ]
 }

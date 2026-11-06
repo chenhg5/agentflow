@@ -1,0 +1,32 @@
+{
+  "version": "3",
+  "name": "parallel-node-demo",
+  "entry": "start",
+  "nodes": [
+    {
+      "id": "start",
+      "dispatch": "all",
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "printf '{\"request\":\"demo\"}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}
+    },
+    {
+      "id": "left",
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "sleep 1; printf '{\"result\":\"left complete\"}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}
+    },
+    {
+      "id": "right",
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "sleep 1; printf '{\"result\":\"right complete\"}' > \"$AGENTFLOW_RESULT_FILE\""]}}]}
+    },
+    {
+      "id": "join",
+      "join": {"from": ["left", "right"]},
+      "execution": {"candidates": [{"executor": "process", "config": {"command": ["sh", "-c", "cat \"$AGENTFLOW_INPUT_FILE\" > \"$AGENTFLOW_RESULT_FILE\""]}}]}
+    }
+  ],
+  "edges": [
+    {"from": "start", "to": "left"},
+    {"from": "start", "to": "right"},
+    {"from": "left", "to": "join"},
+    {"from": "right", "to": "join"},
+    {"from": "join", "to": "$end"}
+  ]
+}

@@ -1,0 +1,12 @@
+{
+  "case": "numeric-routing",
+  "split": "development",
+  "binary_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+  "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf",
+  "prepared_at": 1792745702.338998,
+  "agent_label": "codex-app-fresh-subagent",
+  "context_mode": "fork_turns=none; no task conversation inherited",
+  "model_identifier": "not exposed; inherited default",
+  "agent_task_name": "/root/revised_numeric",
+  "operator_cli_probes": 1
+}

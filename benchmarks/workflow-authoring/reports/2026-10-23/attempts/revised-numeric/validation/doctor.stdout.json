@@ -1,0 +1,51 @@
+{
+  "cwd": "/private/tmp/agentflow-bench-revised-numeric",
+  "executor_status": [
+    {
+      "name": "claude-code",
+      "kind": "claude-code",
+      "binary": "claude",
+      "available": true
+    },
+    {
+      "name": "codex",
+      "kind": "codex",
+      "binary": "codex",
+      "available": true
+    },
+    {
+      "name": "external",
+      "kind": "external",
+      "binary": "",
+      "available": true
+    },
+    {
+      "name": "process",
+      "kind": "command",
+      "binary": "",
+      "available": true
+    },
+    {
+      "name": "quality-finish",
+      "kind": "command",
+      "binary": "python3",
+      "available": true
+    },
+    {
+      "name": "quality-measure",
+      "kind": "command",
+      "binary": "python3",
+      "available": true
+    }
+  ],
+  "executors": [
+    "claude-code",
+    "codex",
+    "external",
+    "process",
+    "quality-finish",
+    "quality-measure"
+  ],
+  "ok": true,
+  "run_store": "/private/tmp/agentflow-bench-revised-numeric/.agentflow/runs"
+}

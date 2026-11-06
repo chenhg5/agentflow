@@ -1,0 +1,58 @@
+[
+  {
+    "attempt": "baseline-scheduled",
+    "artifact_directory": "attempts/baseline-scheduled",
+    "original_workspace": "/tmp/agentflow-bench-baseline-scheduled",
+    "tool_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+    "local_tool_snapshot": "results/tool-snapshots/3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50/agentflow",
+    "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d"
+  },
+  {
+    "attempt": "baseline-numeric",
+    "artifact_directory": "attempts/baseline-numeric",
+    "original_workspace": "/tmp/agentflow-bench-baseline-numeric",
+    "tool_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+    "local_tool_snapshot": "results/tool-snapshots/3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50/agentflow",
+    "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d"
+  },
+  {
+    "attempt": "baseline-external",
+    "artifact_directory": "attempts/baseline-external",
+    "original_workspace": "/tmp/agentflow-bench-baseline-external",
+    "tool_sha256": "3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50",
+    "local_tool_snapshot": "results/tool-snapshots/3213b301ca0845886669dc8c6e40f25c4acce75a80a181a871f5d10687faae50/agentflow",
+    "skill_sha256": "22cf3c7dc77c66dae4efb8a51a8e08210ae0db6969c402931c5c385cf098819d"
+  },
+  {
+    "attempt": "revised-scheduled",
+    "artifact_directory": "attempts/revised-scheduled",
+    "original_workspace": "/tmp/agentflow-bench-revised-scheduled",
+    "tool_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+    "local_tool_snapshot": "results/tool-snapshots/926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9/agentflow",
+    "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+  },
+  {
+    "attempt": "revised-numeric",
+    "artifact_directory": "attempts/revised-numeric",
+    "original_workspace": "/tmp/agentflow-bench-revised-numeric",
+    "tool_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+    "local_tool_snapshot": "results/tool-snapshots/926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9/agentflow",
+    "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+  },
+  {
+    "attempt": "revised-external",
+    "artifact_directory": "attempts/revised-external",
+    "original_workspace": "/tmp/agentflow-bench-revised-external",
+    "tool_sha256": "926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9",
+    "local_tool_snapshot": "results/tool-snapshots/926edf8dd21967d63ee43c6edcd2cbae1df451438cc7848f8bddd3f06248b3c9/agentflow",
+    "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+  },
+  {
+    "attempt": "cli-holdout",
+    "artifact_directory": "attempts/cli-holdout",
+    "original_workspace": "/tmp/agentflow-bench-cli-holdout",
+    "tool_sha256": "8b9039882848a7cfb1791c8dd42e31276ce354073784038e0c6b5cdd4074f05d",
+    "local_tool_snapshot": "results/tool-snapshots/8b9039882848a7cfb1791c8dd42e31276ce354073784038e0c6b5cdd4074f05d/agentflow",
+    "skill_sha256": "4c040eaf93a45b6a9a9d69ce7f0c448c5d7b8d85ba1be032887580db29dc0bcf"
+  }
+]

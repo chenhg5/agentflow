@@ -1,0 +1,8 @@
+{
+  "workflow": "workflow.json",
+  "roles": {
+    "measure": "measure",
+    "accept": "accept",
+    "recheck": "recheck"
+  }
+}

@@ -1,0 +1,18 @@
+{
+  "executors": {
+    "codex": {
+      "kind": "codex",
+      "binary": "codex",
+      "workspace": ".",
+      "skipGitRepoCheck": true
+    },
+    "local-review": {
+      "kind": "command",
+      "command": [
+        "python3",
+        "./fixtures/channel.py"
+      ],
+      "workspace": "."
+    }
+  }
+}

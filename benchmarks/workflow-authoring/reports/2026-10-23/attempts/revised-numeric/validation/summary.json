@@ -1,0 +1,155 @@
+{
+  "passed": true,
+  "check_count": 17,
+  "checks": [
+    {
+      "name": "workflow-and-executors",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "name": "local-executors",
+      "passed": true,
+      "exit_code": 0
+    },
+    {
+      "name": "dry-run",
+      "passed": true,
+      "exit_code": 10
+    },
+    {
+      "name": "accept-default",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_e694ca5ca67aa404",
+      "visits": [
+        "measure",
+        "accept"
+      ]
+    },
+    {
+      "name": "accept-priority-over-urgent",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_b5d3c00170e7c7f6",
+      "visits": [
+        "measure",
+        "accept"
+      ]
+    },
+    {
+      "name": "accept-fractional-score",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_f90f7ef2a493acfe",
+      "visits": [
+        "measure",
+        "accept"
+      ]
+    },
+    {
+      "name": "recheck-score-80",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_bc9322f689e9fd7a",
+      "visits": [
+        "measure",
+        "recheck"
+      ]
+    },
+    {
+      "name": "recheck-high-score-with-defects",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_b50d7ecb9526ce10",
+      "visits": [
+        "measure",
+        "recheck"
+      ]
+    },
+    {
+      "name": "recheck-score-50",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_b0ae5fb6bae8146b",
+      "visits": [
+        "measure",
+        "recheck"
+      ]
+    },
+    {
+      "name": "recheck-urgent-low-score",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_96979a6d5fd1cf5f",
+      "visits": [
+        "measure",
+        "recheck"
+      ]
+    },
+    {
+      "name": "recheck-urgent-negative-score",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_ba04d0d36be2af1d",
+      "visits": [
+        "measure",
+        "recheck"
+      ]
+    },
+    {
+      "name": "end-below-50",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_cade978926d28f98",
+      "visits": [
+        "measure"
+      ]
+    },
+    {
+      "name": "end-low-score-with-defects",
+      "passed": true,
+      "exit_code": 0,
+      "run_id": "run_20261023085729_28ce6ca67cceac3e",
+      "visits": [
+        "measure"
+      ]
+    },
+    {
+      "name": "missing-required-sample",
+      "passed": true,
+      "exit_code": 2,
+      "error": {
+        "error": {
+          "code": "missing_input",
+          "input": null,
+          "message": "missing required input: sample",
+          "retryable": false,
+          "suggestion": "Add `--input sample=<value>`."
+        },
+        "ok": false
+      }
+    },
+    {
+      "name": "invalid-score-string",
+      "passed": true,
+      "exit_code": 1,
+      "run_id": "run_20261023085730_c6f087eae973afb5",
+      "error": "output schema validation failed: /score: at '/score': got string, want number"
+    },
+    {
+      "name": "invalid-defects-item",
+      "passed": true,
+      "exit_code": 1,
+      "run_id": "run_20261023085730_ee68ab8b63005f84",
+      "error": "output schema validation failed: /defects/0: at '/defects/0': got number, want string"
+    },
+    {
+      "name": "invalid-urgent-string",
+      "passed": true,
+      "exit_code": 1,
+      "run_id": "run_20261023085730_52a78767a5475312",
+      "error": "output schema validation failed: /urgent: at '/urgent': got string, want boolean"
+    }
+  ]
+}

@@ -29,7 +29,10 @@ func SourceFor(config Config, root string) hubapi.Source {
 	if machine == "" {
 		machine = "unknown"
 	}
-	project := filepath.Dir(root)
+	project, err := filepath.Abs(root)
+	if err != nil {
+		project = root
+	}
 	return hubapi.Source{Machine: machine, Hostname: hostname, Project: filepath.Base(project), Path: project, Version: version.Version}
 }
 
@@ -72,8 +75,7 @@ func FromRun(run *model.Run, source hubapi.Source, asOf time.Time) hubapi.RunRep
 		measured := durations[definition.ID]
 		step := hubapi.StepReport{
 			ID:          definition.ID,
-			Type:        definition.Type,
-			Provider:    definition.Provider,
+			Type:        executorOf(definition, state),
 			Status:      state.Status,
 			SkipReason:  state.Reason,
 			Attempts:    state.Attempts,
@@ -127,6 +129,18 @@ func inputs(values map[string]string) map[string]string {
 func text(value any) string {
 	if s, ok := value.(string); ok {
 		return s
+	}
+	return ""
+}
+
+// executorOf names what ran a node: the candidate the engine selected, or the
+// first candidate before one was selected.
+func executorOf(node model.Node, state *model.NodeState) string {
+	if state.SelectedExecutor != "" {
+		return state.SelectedExecutor
+	}
+	if len(node.Execution.Candidates) > 0 {
+		return node.Execution.Candidates[0].Executor
 	}
 	return ""
 }

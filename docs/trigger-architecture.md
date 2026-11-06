@@ -2,6 +2,8 @@
 
 本文档定义外部触发能力的领域边界和第一版实现约束。当前 MVP 已提供 `trigger fire`、`trigger serve`、cron、webhook、幂等 delivery、持久化 dispatch 和 queued worker；新的事件源仍然不能直接实现成 engine 中的特殊分支。
 
+`trigger serve` 的范围是当前独立 workflow 工作区，不是机器上的全局服务。一个 `triggers.json` 可以指向多个图文件。推荐单图用根目录 `workflow.json`，多图全部放入 `workflows/<name>.json`，根目录不再留图副本；图路径显式配置，目录不赋予图调用关系。服务启动时读取配置，改动目标后需在无任务执行时重新加载服务。
+
 ## 1. Bounded contexts
 
 AgentFlow 分成四个相互独立的上下文：
@@ -67,7 +69,7 @@ type TriggerEvent struct {
 }
 ```
 
-- `DeliveryID` 是 source 提供的稳定事件 ID，用于幂等。
+- `DeliveryID` 是 source 提供的稳定事件 ID，用于幂等。持久化 receipt 和运行 idempotency key 由 `(trigger ID, delivery ID)` 共同计算，放在当前工作区；不同 trigger 收到相同 delivery ID 仍各自投递。
 - cron 使用 `triggerID + scheduledAt` 生成稳定的 `DeliveryID`。
 - webhook 优先使用配置的 header，例如 `X-GitHub-Delivery`；没有时由 adapter 生成 ID。
 - `Payload` 是原始事件数据，不直接拼接进 shell 命令。
@@ -134,17 +136,19 @@ Dispatcher 的职责顺序固定为：
 1. 加载 `TriggerDefinition`。
 2. 检查 trigger 是否 enabled。
 3. 校验 event 的 source kind 和 trigger ID。
-4. 应用 input bindings。
-5. 生成 deterministic idempotency key。
-6. 执行并发策略。
-7. 持久化 delivery receipt。
-8. 调用 `RunStarter` 创建 queued run。
+4. 生成稳定事件事实及 occurrence/delivery key，检查已有 receipt。
+5. 已完成 receipt 去重；pending receipt 恢复原 prepared 请求，不对自己的恢复重新执行 forbid。
+6. 新请求执行并发策略；其他未完成创建 intent 也算 active。
+7. 解析 input bindings，调用 Prepare 固定图和输入，持久化 pending receipt。
+8. 调用 Start 原子创建 queued run，保存 completed receipt 后才允许推进 cron 水位。
 
 ### Run execution port
 
 ```go
 type RunStarter interface {
+    Prepare(context.Context, StartRunCommand) (StartRunCommand, error)
     Start(context.Context, StartRunCommand) (RunRef, error)
+    ValidateReplay(context.Context, StartRunCommand, RunRef) error
 }
 ```
 
@@ -155,10 +159,10 @@ Dispatcher 依赖 `RunStarter`，不依赖 `engine.Execute`。这样 HTTP source
 第一版 cron 规则：
 
 - 使用标准五字段 cron：`minute hour day-of-month month day-of-week`。
-- 必须显式指定 `timezone`；缺省使用项目配置的 timezone，不使用运行机器的隐式本地时区。
+- 建议显式指定 IANA `timezone`；当前省略时使用 UTC，不使用运行机器的隐式本地时区。
 - 每次 occurrence 产生一个 event，即使上一次 run 仍在执行。
 - 默认 `misfire: skip`：进程停止期间错过的 occurrence 不补跑。
-- `misfire: fire-once` 可以作为后续策略，启动时最多补一个未处理 occurrence。
+- `misfire: fire-once` 已支持：恢复已持久化的计划后，最多新增补一个最新的未处理 occurrence；更早项记录 skipped 数量/范围。详见 [稳定 occurrence 与补触发](cron-occurrences.md)。
 - 默认 `concurrency: forbid`：同一 trigger 有 active run 时，新 occurrence 记录为 skipped。
 - 后续可以增加 `queue` 和 `replace`，但必须先定义队列上限和取消语义。
 
@@ -230,7 +234,7 @@ Webhook adapter 在完成鉴权和 body 限制后才产生 `TriggerEvent`。它�
 建议的数据布局：
 
 ```text
-.agentflow/
+workflow/
 ├── triggers.json
 ├── trigger-deliveries/
 │   └── <delivery-id>.json
@@ -241,6 +245,12 @@ Webhook adapter 在完成鉴权和 body 限制后才产生 `TriggerEvent`。它�
 ```
 
 `trigger-deliveries` 是幂等记录，`dispatch` 是可靠入队记录，`runs` 仍然是执行事实来源。
+
+同一工作区由 `scheduler.lock` 的操作系统文件锁限制为一个长期服务进程；进程退出后锁自动释放。不同工作区可以各自运行服务。纯 cron 工作区不创建 HTTP listener；有启用的 webhook 时才监听 HTTP，所有 webhook 共享该工作区的一个 listener。默认端口 `0` 自动选择并输出实际地址，也可显式指定不同端口。端口占用会在启动 timer 和恢复 queued jobs 前报错，不会由启动失败的服务执行任务。启用的 webhook path（含尾部 `/` 归一化）不得重复。
+
+同一工作区的 CLI `trigger fire` 与服务投递使用 `trigger-dispatch.lock` 做跨进程事务串行化，保护 receipt 去重、重叠策略检查和 run 创建。默认 `concurrency=forbid` 按 trigger ID 检查 pending/queued/running/waiting_input/waiting_resource（含未完成创建的 receipt intent）；`allow` 允许同一 trigger 重叠入队。该策略没有跨 trigger 或跨工作区的仓库/session 资源互斥语义。
+
+当前 CLI 启动一个 run worker，因此同一服务的不同 triggered run 顺序执行；单个 run 内的 `dispatch: all` 节点并行仍独立生效。外部等待节点退出本次执行后释放 worker，后续 run 可以继续。跨 run 增加 worker 数和全局多工作区 supervisor 是独立能力，当前没有自动全局发现服务。
 
 第一版长期运行命令：
 
@@ -292,8 +302,12 @@ cli / http / cron adapters
 2. `agentflow trigger fire` 复用同一个 dispatcher，支持稳定 delivery ID 和并发策略。
 3. `agentflow trigger serve` 启动五字段 cron、按 timezone 调度、webhook HTTP listener 和 queued worker。
 4. webhook 支持 body limit、HMAC SHA-256、bearer token、标量 JSONPath binding 和重复 delivery 去重。
-5. `.agentflow/dispatch/<run-id>.json` 在服务重启时恢复 queued job；run 和 trigger metadata 继续写入现有观测接口。
+5. `dispatch/<run-id>.json` 在服务重启时恢复 queued job；run 和 trigger metadata 继续写入现有观测接口。
 
-后续可以增加 `queue`/`replace` 并发语义、misfire 补偿策略、外部队列 source 和 UI 中的 trigger delivery 视图，但这些扩展不需要修改 engine。
+后续可以增加 `queue`/`replace` 并发语义、catch-up-all 策略、外部队列 source 和 UI 中的 trigger delivery 视图，但这些扩展不需要修改 engine。
 
 Trigger 的单元测试使用 fake `RunStarter` 和本地 shell workflow，不调用真实 Claude Code/Codex；真实 provider smoke test 继续单独保留。
+
+## Shared durable admission
+
+The generic `internal/queue` owns worker admission. Trigger Runtime only validates and publishes creation requests; `trigger serve` uses the same OS worker lock as `run worker`. If another worker owns the workspace it only produces requests. Managed `trigger fire` returns acceptance, and its executions and subsequent controls share that budget. See [durable queue](durable-queue.md) for generations, ownership, recovery and relationships.

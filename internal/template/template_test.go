@@ -2,7 +2,7 @@ package template
 
 import "testing"
 
-func TestRenderAndEvaluateWhen(t *testing.T) {
+func TestRender(t *testing.T) {
 	context := map[string]any{
 		"inputs": map[string]string{"name": "Codex"},
 		"nodes":  map[string]any{"review": map[string]any{"result": map[string]any{"decision": "PASS"}}},
@@ -10,9 +10,7 @@ func TestRenderAndEvaluateWhen(t *testing.T) {
 	if got := Render("hello {{ inputs.name }}", context); got != "hello Codex" {
 		t.Fatalf("render = %q", got)
 	}
-	if !EvaluateWhen(`nodes.review.result.decision contains "PASS"`, context) {
-		t.Fatal("expected contains expression to pass")
-	}
+
 }
 
 func TestRenderValuePreservesExactPlaceholderType(t *testing.T) {
@@ -26,5 +24,12 @@ func TestRenderValuePreservesExactPlaceholderType(t *testing.T) {
 	}
 	if value["ok"] != "prefix=true" {
 		t.Fatalf("embedded placeholder was not rendered as text: %#v", value["ok"])
+	}
+}
+
+func TestRenderMappingValueUsesEmptyStringForMissingReference(t *testing.T) {
+	value := RenderMappingValue(map[string]any{"known": "{{ output.count }}", "missing": "{{ input.absent }}", "literal": nil}, map[string]any{"output": map[string]any{"count": float64(3)}}).(map[string]any)
+	if value["known"] != float64(3) || value["missing"] != "" || value["literal"] != nil {
+		t.Fatalf("unexpected mapped values: %#v", value)
 	}
 }

@@ -103,7 +103,7 @@ type statusTab struct {
 	Href   string
 }
 
-var statusTabs = []statusTab{{Label: "全部"}, {Label: "运行中", Status: "running"}, {Label: "等人处理", Status: "waiting_human"}, {Label: "失败", Status: "failed"}, {Label: "成功", Status: "succeeded"}, {Label: "已取消", Status: "cancelled"}}
+var statusTabs = []statusTab{{Label: "全部"}, {Label: "运行中", Status: "running"}, {Label: "等人处理", Status: "waiting_human,waiting_input"}, {Label: "失败", Status: "failed"}, {Label: "成功", Status: "succeeded"}, {Label: "已取消", Status: "cancelled"}}
 
 type runsData struct {
 	Runs      []domain.Run

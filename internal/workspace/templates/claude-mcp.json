@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "workflow_tools": {
+      "type": "stdio",
+      "command": "python3",
+      "args": ["tools/mcp_server.py", "tools/manifest.json"]
+    }
+  }
+}

@@ -1,0 +1,192 @@
+{
+  "active_node": "",
+  "created_at": "2026-10-23T08:59:30.339413Z",
+  "duration_ms": 35,
+  "finished_at": "2026-10-23T08:59:30.375758Z",
+  "history": [
+    {
+      "nodeId": "draft",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+        "attempts": 1,
+        "durationMs": 17,
+        "inputBytes": 374,
+        "outputBytes": 47,
+        "startedAt": "2026-10-23T08:59:30.340099Z",
+        "finishedAt": "2026-10-23T08:59:30.357395Z",
+        "result": {
+          "check": "check-v1",
+          "summary": "proposal-v1"
+        },
+        "input": {
+          "feedback": null,
+          "prompt": "你是产品研究团队的提案作者。针对主题 deterministic local test 起草可执行的改进提案。若有审核返工意见，必须据此修改；上一轮审核意见：。仅输出 JSON 对象，字段 summary（提案正文，非空字符串）和 check（核查方法，非空字符串）。",
+          "topic": "deterministic local test"
+        },
+        "artifacts": {
+          "input": "artifacts/draft.1.input.json",
+          "result": "artifacts/draft.1.result.json",
+          "stderrLog": "artifacts/logs/draft.1.stderr.log",
+          "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+        },
+        "leaseToken": "ad48cfa8500cb59e48eb2951a4911e27"
+      }
+    },
+    {
+      "nodeId": "review",
+      "visit": 1,
+      "state": {
+        "status": "succeeded",
+        "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+        "attempts": 1,
+        "durationMs": 17,
+        "inputBytes": 326,
+        "outputBytes": 41,
+        "startedAt": "2026-10-23T08:59:30.3578Z",
+        "finishedAt": "2026-10-23T08:59:30.375415Z",
+        "result": {
+          "note": "stop-initial",
+          "signal": "sad"
+        },
+        "input": {
+          "actions": [
+            {
+              "label": "通过，继续制定下一步",
+              "output": {
+                "note": "",
+                "signal": "happy"
+              }
+            },
+            {
+              "label": "返工，请补充修改意见",
+              "output": {
+                "note": "",
+                "signal": "again"
+              }
+            },
+            {
+              "label": "终止本次提案",
+              "output": {
+                "note": "",
+                "signal": "sad"
+              }
+            }
+          ],
+          "content": {
+            "check": "check-v1",
+            "summary": "proposal-v1"
+          },
+          "recipient": "reviewer-local"
+        },
+        "artifacts": {
+          "input": "artifacts/review.1.input.json",
+          "result": "artifacts/review.1.result.json",
+          "stderrLog": "artifacts/logs/review.1.stderr.log",
+          "stdoutLog": "artifacts/logs/review.1.stdout.log"
+        },
+        "leaseToken": "a7846ca40025f18359053121f3348dc5"
+      }
+    }
+  ],
+  "inputs": {
+    "reviewer": "reviewer-local",
+    "topic": "deterministic local test"
+  },
+  "nodes": {
+    "draft": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+      "attempts": 1,
+      "durationMs": 17,
+      "inputBytes": 374,
+      "outputBytes": 47,
+      "startedAt": "2026-10-23T08:59:30.340099Z",
+      "finishedAt": "2026-10-23T08:59:30.357395Z",
+      "result": {
+        "check": "check-v1",
+        "summary": "proposal-v1"
+      },
+      "input": {
+        "feedback": null,
+        "prompt": "你是产品研究团队的提案作者。针对主题 deterministic local test 起草可执行的改进提案。若有审核返工意见，必须据此修改；上一轮审核意见：。仅输出 JSON 对象，字段 summary（提案正文，非空字符串）和 check（核查方法，非空字符串）。",
+        "topic": "deterministic local test"
+      },
+      "artifacts": {
+        "input": "artifacts/draft.1.input.json",
+        "result": "artifacts/draft.1.result.json",
+        "stderrLog": "artifacts/logs/draft.1.stderr.log",
+        "stdoutLog": "artifacts/logs/draft.1.stdout.log"
+      },
+      "leaseToken": "ad48cfa8500cb59e48eb2951a4911e27"
+    },
+    "finalize": {
+      "status": "skipped",
+      "reason": "not_selected"
+    },
+    "review": {
+      "status": "succeeded",
+      "workspace": "/private/tmp/agentflow-bench-revised-scheduled",
+      "attempts": 1,
+      "durationMs": 17,
+      "inputBytes": 326,
+      "outputBytes": 41,
+      "startedAt": "2026-10-23T08:59:30.3578Z",
+      "finishedAt": "2026-10-23T08:59:30.375415Z",
+      "result": {
+        "note": "stop-initial",
+        "signal": "sad"
+      },
+      "input": {
+        "actions": [
+          {
+            "label": "通过，继续制定下一步",
+            "output": {
+              "note": "",
+              "signal": "happy"
+            }
+          },
+          {
+            "label": "返工，请补充修改意见",
+            "output": {
+              "note": "",
+              "signal": "again"
+            }
+          },
+          {
+            "label": "终止本次提案",
+            "output": {
+              "note": "",
+              "signal": "sad"
+            }
+          }
+        ],
+        "content": {
+          "check": "check-v1",
+          "summary": "proposal-v1"
+        },
+        "recipient": "reviewer-local"
+      },
+      "artifacts": {
+        "input": "artifacts/review.1.input.json",
+        "result": "artifacts/review.1.result.json",
+        "stderrLog": "artifacts/logs/review.1.stderr.log",
+        "stdoutLog": "artifacts/logs/review.1.stdout.log"
+      },
+      "leaseToken": "a7846ca40025f18359053121f3348dc5"
+    }
+  },
+  "ok": true,
+  "outcome": "completed",
+  "run_id": "run_20261023085930_fde455895fbb978a",
+  "started_at": "2026-10-23T08:59:30.339973Z",
+  "status": "succeeded",
+  "updated_at": "2026-10-23T08:59:30.375759Z",
+  "visits": {
+    "draft": 1,
+    "review": 1
+  },
+  "workflow": "product-research-weekday-review",
+  "workflow_digest": "978bbe879f20"
+}

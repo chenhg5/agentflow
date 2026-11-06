@@ -1,0 +1,20 @@
+{
+  "executors": {
+    "codex": {
+      "kind": "codex",
+      "binary": "codex",
+      "sandbox": "workspace-write"
+    },
+    "claude-code": {
+      "kind": "claude-code",
+      "binary": "claude"
+    },
+    "custom-program": {
+      "kind": "command",
+      "command": [
+        "python3",
+        "./adapters/custom.py"
+      ]
+    }
+  }
+}

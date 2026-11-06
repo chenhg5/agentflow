@@ -1,0 +1,82 @@
+[
+  {
+    "case": "happy",
+    "run_id": "run_20261023085121_6ee2fddd50bee8b6",
+    "status": "succeeded",
+    "outcome": "completed",
+    "visits": {
+      "draft": 1,
+      "finalize": 1,
+      "review": 1
+    }
+  },
+  {
+    "case": "sad",
+    "run_id": "run_20261023085121_4989adbad184368c",
+    "status": "succeeded",
+    "outcome": "completed",
+    "visits": {
+      "draft": 1,
+      "review": 1
+    }
+  },
+  {
+    "case": "again-happy",
+    "run_id": "run_20261023085121_66dc1bf99fc8cc9f",
+    "status": "succeeded",
+    "outcome": "completed",
+    "visits": {
+      "draft": 2,
+      "finalize": 1,
+      "review": 2
+    }
+  },
+  {
+    "case": "twice-happy",
+    "run_id": "run_20261023085122_e8b7ce166af972fe",
+    "status": "succeeded",
+    "outcome": "completed",
+    "visits": {
+      "draft": 3,
+      "finalize": 1,
+      "review": 3
+    }
+  },
+  {
+    "case": "exhausted",
+    "run_id": "run_20261023085122_703fa53b8d1e70a9",
+    "status": "failed",
+    "outcome": "max_iterations",
+    "visits": {
+      "draft": 3,
+      "review": 3
+    }
+  },
+  {
+    "case": "invalid-review",
+    "run_id": "run_20261023085122_9e5f5b830757373f",
+    "status": "failed",
+    "outcome": "error",
+    "visits": {
+      "draft": 1,
+      "review": 1
+    }
+  },
+  {
+    "case": "cron-fire",
+    "receipt": {
+      "ok": true,
+      "run_id": "run_20261023085122_58b27666e2bf8e73",
+      "status": "waiting_input",
+      "trigger": {
+        "trigger_id": "weekday-research-review",
+        "delivery_id": "local-cron-validation-12d43ecad271451ca99e1ab3964f7696",
+        "status": "queued",
+        "run": {
+          "run_id": "run_20261023085122_58b27666e2bf8e73",
+          "status": "queued"
+        }
+      }
+    }
+  }
+]

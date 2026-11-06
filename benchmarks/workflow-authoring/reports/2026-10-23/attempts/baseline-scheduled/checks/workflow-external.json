@@ -1,0 +1,333 @@
+{
+  "version": "2",
+  "name": "weekday-product-research-localcheck",
+  "entry": "draft",
+  "inputs": {
+    "topic": {
+      "type": "string",
+      "required": true
+    },
+    "reviewer": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "draft",
+      "executor": "external",
+      "input": {
+        "topic": "{{ inputs.topic }}",
+        "reviewer": "{{ inputs.reviewer }}",
+        "review_note": "{{ nodes.review.result.note }}",
+        "prompt": "你是产品研究团队的提案起草人。研究主题：{{ inputs.topic }}。为这个主题起草一份具体可执行的改进提案，包含提案摘要和自查。最新审核意见：{{ nodes.review.result.note }}。首次运行时审核意见为空；若有审核意见，必须据此返工。只输出符合输出契约的 JSON 对象，summary 为提案摘要字符串，check 为自查字符串，不添加 Markdown。"
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "topic",
+          "reviewer",
+          "review_note",
+          "prompt"
+        ],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "minLength": 1
+          },
+          "reviewer": {
+            "type": "string",
+            "minLength": 1
+          },
+          "review_note": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "summary",
+          "check"
+        ],
+        "properties": {
+          "summary": {
+            "type": "string",
+            "minLength": 1
+          },
+          "check": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "timeoutMs": 300000,
+      "retry": {
+        "maxAttempts": 1
+      }
+    },
+    {
+      "id": "review",
+      "executor": "local-review-channel",
+      "input": {
+        "recipient": "{{ inputs.reviewer }}",
+        "content": {
+          "topic": "{{ inputs.topic }}",
+          "summary": "{{ nodes.draft.result.summary }}",
+          "check": "{{ nodes.draft.result.check }}"
+        },
+        "actions": [
+          {
+            "label": "认可并继续",
+            "output": {
+              "signal": "happy",
+              "note": ""
+            }
+          },
+          {
+            "label": "需要返工",
+            "output": {
+              "signal": "again",
+              "note": ""
+            }
+          },
+          {
+            "label": "结束研究",
+            "output": {
+              "signal": "sad",
+              "note": ""
+            }
+          }
+        ]
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "recipient",
+          "content",
+          "actions"
+        ],
+        "properties": {
+          "recipient": {
+            "type": "string",
+            "minLength": 1
+          },
+          "content": {
+            "type": "object",
+            "required": [
+              "topic",
+              "summary",
+              "check"
+            ],
+            "properties": {
+              "topic": {
+                "type": "string",
+                "minLength": 1
+              },
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "actions": {
+            "type": "array",
+            "minItems": 3,
+            "maxItems": 3,
+            "items": {
+              "type": "object",
+              "required": [
+                "label",
+                "output"
+              ],
+              "properties": {
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "output": {
+                  "type": "object",
+                  "required": [
+                    "signal",
+                    "note"
+                  ],
+                  "properties": {
+                    "signal": {
+                      "type": "string",
+                      "enum": [
+                        "happy",
+                        "again",
+                        "sad"
+                      ]
+                    },
+                    "note": {
+                      "type": "string"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "signal",
+          "note"
+        ],
+        "properties": {
+          "signal": {
+            "type": "string",
+            "enum": [
+              "happy",
+              "again",
+              "sad"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      },
+      "timeoutMs": 300000,
+      "retry": {
+        "maxAttempts": 1
+      }
+    },
+    {
+      "id": "finalize",
+      "executor": "external",
+      "input": {
+        "topic": "{{ inputs.topic }}",
+        "proposal": "{{ nodes.draft.result }}",
+        "review": "{{ nodes.review.result }}",
+        "prompt": "你是产品研究团队的后续执行规划人。研究主题：{{ inputs.topic }}。请基于最新已认可提案与审核意见输出可执行的下一步和验证方法。最新提案 summary：{{ nodes.draft.result.summary }}；check：{{ nodes.draft.result.check }}。审核 signal：{{ nodes.review.result.signal }}；note：{{ nodes.review.result.note }}。只输出 JSON 对象，next_step 为下一步行动字符串，verification 为验证方法字符串，不添加 Markdown。"
+      },
+      "inputSchema": {
+        "type": "object",
+        "required": [
+          "topic",
+          "proposal",
+          "review",
+          "prompt"
+        ],
+        "properties": {
+          "topic": {
+            "type": "string",
+            "minLength": 1
+          },
+          "proposal": {
+            "type": "object",
+            "required": [
+              "summary",
+              "check"
+            ],
+            "properties": {
+              "summary": {
+                "type": "string",
+                "minLength": 1
+              },
+              "check": {
+                "type": "string",
+                "minLength": 1
+              }
+            },
+            "additionalProperties": false
+          },
+          "review": {
+            "type": "object",
+            "required": [
+              "signal",
+              "note"
+            ],
+            "properties": {
+              "signal": {
+                "type": "string",
+                "enum": [
+                  "happy",
+                  "again",
+                  "sad"
+                ]
+              },
+              "note": {
+                "type": "string"
+              }
+            },
+            "additionalProperties": false
+          },
+          "prompt": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "required": [
+          "next_step",
+          "verification"
+        ],
+        "properties": {
+          "next_step": {
+            "type": "string",
+            "minLength": 1
+          },
+          "verification": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      },
+      "timeoutMs": 300000,
+      "retry": {
+        "maxAttempts": 1
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "draft",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "finalize",
+      "when": "nodes.review.result.signal == \"happy\""
+    },
+    {
+      "from": "review",
+      "to": "draft",
+      "when": "nodes.review.result.signal == \"again\"",
+      "maxIterations": 2
+    },
+    {
+      "from": "review",
+      "to": "$end"
+    },
+    {
+      "from": "finalize",
+      "to": "$end"
+    }
+  ]
+}

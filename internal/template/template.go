@@ -31,6 +31,16 @@ func RenderArray(values []string, context map[string]any) []string {
 // exact placeholder. For example, "{{ nodes.build.result.count }}" resolves to
 // a number, while "count={{ nodes.build.result.count }}" remains a string.
 func RenderValue(value any, context map[string]any) any {
+	return renderValue(value, context, nil)
+}
+
+// RenderMappingValue preserves value types and renders a missing exact
+// reference as an empty string, which is useful for optional edge data.
+func RenderMappingValue(value any, context map[string]any) any {
+	return renderValue(value, context, "")
+}
+
+func renderValue(value any, context map[string]any, missing any) any {
 	switch current := value.(type) {
 	case string:
 		match := placeholder.FindStringSubmatch(current)
@@ -38,19 +48,19 @@ func RenderValue(value any, context map[string]any) any {
 			if resolved, ok := Lookup(context, strings.TrimSpace(match[1])); ok {
 				return resolved
 			}
-			return nil
+			return missing
 		}
 		return Render(current, context)
 	case map[string]any:
 		result := make(map[string]any, len(current))
 		for key, item := range current {
-			result[key] = RenderValue(item, context)
+			result[key] = renderValue(item, context, missing)
 		}
 		return result
 	case []any:
 		result := make([]any, len(current))
 		for index, item := range current {
-			result[index] = RenderValue(item, context)
+			result[index] = renderValue(item, context, missing)
 		}
 		return result
 	default:
@@ -81,28 +91,26 @@ func Lookup(context map[string]any, expression string) (any, bool) {
 	return current, true
 }
 
-func EvaluateWhen(expression string, context map[string]any) bool {
-	if strings.TrimSpace(expression) == "" {
-		return true
+// References lists substitutions in nested JSON input, without evaluating them.
+func References(value any) []string {
+	var refs []string
+	switch current := value.(type) {
+	case string:
+		for _, match := range placeholder.FindAllStringSubmatch(current, -1) {
+			refs = append(refs, strings.TrimSpace(match[1]))
+		}
+	case map[string]any:
+		for _, item := range current {
+			refs = append(refs, References(item)...)
+		}
+	case []any:
+		for _, item := range current {
+			refs = append(refs, References(item)...)
+		}
+	case []string:
+		for _, item := range current {
+			refs = append(refs, References(item)...)
+		}
 	}
-	for _, operator := range []string{"==", "!=", "contains"} {
-		parts := strings.SplitN(expression, operator, 2)
-		if len(parts) != 2 {
-			continue
-		}
-		left, _ := Lookup(context, strings.TrimSpace(parts[0]))
-		right := strings.TrimSpace(parts[1])
-		if len(right) >= 2 && ((right[0] == '"' && right[len(right)-1] == '"') || (right[0] == '\'' && right[len(right)-1] == '\'')) {
-			right = right[1 : len(right)-1]
-		}
-		if operator == "==" {
-			return fmt.Sprint(left) == right
-		}
-		if operator == "!=" {
-			return fmt.Sprint(left) != right
-		}
-		return strings.Contains(fmt.Sprint(left), right)
-	}
-	value, ok := Lookup(context, strings.TrimSpace(expression))
-	return ok && fmt.Sprint(value) != "" && fmt.Sprint(value) != "false"
+	return refs
 }

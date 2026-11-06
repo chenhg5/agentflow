@@ -1,0 +1,10 @@
+{
+  "name": "workflow_tools",
+  "tools": [{
+    "name": "read_input",
+    "description": "Read this workflow node's structured JSON input.",
+    "inputSchema": {"type": "object", "properties": {}, "additionalProperties": false},
+    "annotations": {"readOnlyHint": true},
+    "command": ["python3", "tools/read_input.py"]
+  }]
+}

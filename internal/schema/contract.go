@@ -9,50 +9,8 @@ import (
 	jsonschema "github.com/santhosh-tekuri/jsonschema/v6"
 )
 
-var fieldTypes = map[string]bool{"object": true, "array": true, "string": true, "number": true, "integer": true, "boolean": true, "null": true}
-
-// SchemaForFields turns Multigent-style field declarations into a strict
-// object contract. Field declarations remain useful metadata for agents and
-// UI while the generated schema enforces the same requirements at runtime.
-func SchemaForFields(fields []model.FieldSpec) map[string]any {
-	if len(fields) == 0 {
-		return nil
-	}
-	properties := map[string]any{}
-	required := []any{}
-	for _, field := range fields {
-		definition := map[string]any{"type": field.Type}
-		if field.Type == "" {
-			definition["type"] = "string"
-		}
-		if field.Description != "" {
-			definition["description"] = field.Description
-		}
-		properties[field.Name] = definition
-		if field.Required {
-			required = append(required, field.Name)
-		}
-	}
-	result := map[string]any{"type": "object", "properties": properties, "additionalProperties": false}
-	if len(required) > 0 {
-		result["required"] = required
-	}
-	return result
-}
-
-func EffectiveInputSchema(node model.Node) map[string]any {
-	if len(node.InputSchema) > 0 {
-		return node.InputSchema
-	}
-	return SchemaForFields(node.InputFields)
-}
-
-func EffectiveOutputSchema(node model.Node) map[string]any {
-	if len(node.OutputSchema) > 0 {
-		return node.OutputSchema
-	}
-	return SchemaForFields(node.OutputFields)
-}
+func EffectiveInputSchema(node model.Node) map[string]any  { return node.InputSchema }
+func EffectiveOutputSchema(node model.Node) map[string]any { return node.OutputSchema }
 
 // ValidateDefinition compiles the complete JSON Schema contract. Workflow
 // validation and runtime validation therefore use the same implementation.

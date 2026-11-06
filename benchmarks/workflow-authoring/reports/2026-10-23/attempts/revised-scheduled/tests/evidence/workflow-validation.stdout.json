@@ -1,0 +1,57 @@
+{
+  "graph": {
+    "edges": [
+      {
+        "id": "edge-0",
+        "source": "draft",
+        "target": "review",
+        "channels": [
+          "control"
+        ]
+      },
+      {
+        "id": "edge-1",
+        "source": "review",
+        "target": "finalize",
+        "channels": [
+          "control",
+          "condition"
+        ],
+        "condition": "nodes.review.result.signal == \"happy\""
+      },
+      {
+        "id": "edge-2",
+        "source": "review",
+        "target": "draft",
+        "channels": [
+          "control",
+          "condition"
+        ],
+        "condition": "nodes.review.result.signal == \"again\"",
+        "maxIterations": 2
+      },
+      {
+        "id": "edge-3",
+        "source": "review",
+        "target": "$end",
+        "channels": [
+          "control",
+          "condition"
+        ],
+        "condition": "nodes.review.result.signal == \"sad\""
+      },
+      {
+        "id": "edge-4",
+        "source": "finalize",
+        "target": "$end",
+        "channels": [
+          "control"
+        ]
+      }
+    ]
+  },
+  "ok": true,
+  "valid": true,
+  "version": "2",
+  "workflow": "product-research-weekday-review"
+}

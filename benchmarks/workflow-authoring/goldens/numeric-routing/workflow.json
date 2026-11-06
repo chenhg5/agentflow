@@ -1,0 +1,184 @@
+{
+  "version": "3",
+  "name": "numeric-routing",
+  "entry": "measure",
+  "inputs": {
+    "sample": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "measure",
+      "execution": {"candidates": [{"executor": "measure"}]},
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "sample": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "sample"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "number"
+          },
+          "defects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "urgent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "score",
+          "defects",
+          "urgent"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "accept",
+      "execution": {"candidates": [{"executor": "finish", "config": {"branch": "accept"}}]},
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "number"
+          },
+          "defects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "urgent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "score",
+          "defects",
+          "urgent"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "defects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "urgent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "branch",
+          "score",
+          "defects",
+          "urgent"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "recheck",
+      "execution": {"candidates": [{"executor": "finish", "config": {"branch": "recheck"}}]},
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "score": {
+            "type": "number"
+          },
+          "defects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "urgent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "score",
+          "defects",
+          "urgent"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "branch": {
+            "type": "string"
+          },
+          "score": {
+            "type": "number"
+          },
+          "defects": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "urgent": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "branch",
+          "score",
+          "defects",
+          "urgent"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "measure",
+      "to": "accept",
+      "when": "nodes.measure.result.score > 80 && len(nodes.measure.result.defects) == 0"
+    },
+    {
+      "from": "measure",
+      "to": "recheck",
+      "when": "nodes.measure.result.urgent || nodes.measure.result.score >= 50"
+    },
+    {
+      "from": "measure",
+      "to": "$end"
+    },
+    {
+      "from": "accept",
+      "to": "$end"
+    },
+    {
+      "from": "recheck",
+      "to": "$end"
+    }
+  ]
+}

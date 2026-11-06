@@ -1,0 +1,14 @@
+{
+  "ok": true,
+  "run_id": "run_20261023085122_58b27666e2bf8e73",
+  "status": "waiting_input",
+  "trigger": {
+    "trigger_id": "weekday-research-review",
+    "delivery_id": "local-cron-validation-12d43ecad271451ca99e1ab3964f7696",
+    "status": "queued",
+    "run": {
+      "run_id": "run_20261023085122_58b27666e2bf8e73",
+      "status": "queued"
+    }
+  }
+}

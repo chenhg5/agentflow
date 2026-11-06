@@ -23,7 +23,7 @@ func reportsRuns(args []string) bool {
 	switch args[0] {
 	case "run":
 		switch args[1] {
-		case "start", "approve", "reject", "resume", "cancel":
+		case "start", "enqueue", "worker", "submit", "resume", "retry", "cancel", "evaluate":
 			return true
 		}
 	case "trigger":
@@ -73,7 +73,7 @@ func hubServe(parsed parsedArgs) error {
 		}
 		dsn = "sqlite:" + filepath.Join(home, ".agentflow", "hub", "hub.db")
 	}
-	port := 8787
+	port := 7075
 	if parsed.PortSet {
 		port = parsed.Port
 	}
@@ -96,10 +96,10 @@ func hubServe(parsed parsedArgs) error {
 func hubReporter(root string) (*telemetry.Reporter, func(), telemetry.Config, error) {
 	config, err := telemetry.LoadConfig(root)
 	if err != nil {
-		return nil, nil, config, usageError("hub config: "+err.Error(), "Fix .agentflow/hub.json or ~/.agentflow/hub.json.", "hub_config")
+		return nil, nil, config, usageError("hub config: "+err.Error(), "Fix hub.json in the workspace or ~/.agentflow/hub.json.", "hub_config")
 	}
 	if !config.Enabled() {
-		return nil, nil, config, usageError("no Hub configured", "Set AGENTFLOW_HUB_URL (and AGENTFLOW_HUB_TOKEN), or write .agentflow/hub.json with {\"url\": ..., \"token\": ...}.", "hub_not_configured")
+		return nil, nil, config, usageError("no Hub configured", "Set AGENTFLOW_HUB_URL (and AGENTFLOW_HUB_TOKEN), or write hub.json in the workspace with {\"url\": ..., \"token\": ...}.", "hub_not_configured")
 	}
 	reporter, remove, err := telemetry.Install(root)
 	if err != nil {
@@ -142,7 +142,7 @@ func hubPush(parsed parsedArgs, root string) error {
 func hubStatus(parsed parsedArgs, root string) error {
 	config, err := telemetry.LoadConfig(root)
 	if err != nil {
-		return usageError("hub config: "+err.Error(), "Fix .agentflow/hub.json or ~/.agentflow/hub.json.", "hub_config")
+		return usageError("hub config: "+err.Error(), "Fix hub.json in the workspace or ~/.agentflow/hub.json.", "hub_config")
 	}
 	outbox := telemetry.NewOutbox(root)
 	pending, err := outbox.Pending()
@@ -161,16 +161,17 @@ func hubStatus(parsed parsedArgs, root string) error {
 
 func printHubHelp() {
 	fmt.Println(`Usage:
-  agentflow hub serve [--host 127.0.0.1] [--port 8787] [--db sqlite:<path>|memory:]
+  agentflow hub serve [--host 127.0.0.1] [--port 7075] [--db sqlite:<path>|memory:]
   agentflow hub push [--all] [--format json|table]
   agentflow hub status [--format json|table]
 
 The Hub collects runs from every machine into one web console and read API.
 
-Runner side: set AGENTFLOW_HUB_URL and AGENTFLOW_HUB_TOKEN (or .agentflow/hub.json,
-or ~/.agentflow/hub.json with {"url": ..., "token": ..., "machine": ...}). Every
-run start / approve / reject / resume / cancel and trigger fire / serve then
-records each state change in .agentflow/outbox and delivers it in the background.
+Runner side: set AGENTFLOW_HUB_URL and AGENTFLOW_HUB_TOKEN (or hub.json in the
+workflow workspace, or ~/.agentflow/hub.json, with {"url": ..., "token": ...,
+"machine": ...}). Commands that change runs (run start / enqueue / worker /
+submit / resume / retry / cancel / evaluate, trigger fire / serve) then record
+each state change in <workspace>/hub-outbox and deliver it in the background.
 A Hub that is down never fails a run: reports wait in the outbox. Use
 "hub push --all" once to backfill runs from before the Hub was configured.
 
@@ -181,5 +182,5 @@ AGENTFLOW_HUB_VIEW_TOKEN when that is set.
 
 Examples:
   AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0
-  AGENTFLOW_HUB_URL=http://hub.local:8787 AGENTFLOW_HUB_TOKEN=... agentflow hub push --all`)
+  AGENTFLOW_HUB_URL=http://hub.local:7075 AGENTFLOW_HUB_TOKEN=... agentflow hub push --all`)
 }

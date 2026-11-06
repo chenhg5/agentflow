@@ -1,0 +1,7 @@
+[mcp_servers.source_tools]
+command = "python3"
+args = ["../../../lib/mcp_bridge/server.py", "tools/manifest.json"]
+env_vars = ["AGENTFLOW_ROOT"]
+required = true
+startup_timeout_sec = 10
+default_tools_approval_mode = "writes"

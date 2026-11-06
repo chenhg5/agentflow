@@ -1,0 +1,26 @@
+{
+  "executors": {
+    "farm-collect": {
+      "kind": "command",
+      "command": [
+        "python3",
+        "./executors/collect.py"
+      ],
+      "workspace": ".",
+      "env": {
+        "FARM_SITE": "orchard-2"
+      }
+    },
+    "farm-report": {
+      "kind": "command",
+      "command": [
+        "node",
+        "./executors/report.js"
+      ],
+      "workspace": ".",
+      "env": {
+        "FARM_SITE": "orchard-2"
+      }
+    }
+  }
+}

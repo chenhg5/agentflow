@@ -1,0 +1,70 @@
+{
+  "baseline": {
+    "schema_workflow": {
+      "exit_code": 3,
+      "available": false
+    },
+    "schema_executors": {
+      "exit_code": 3,
+      "available": false
+    },
+    "schema_trigger": {
+      "exit_code": 3,
+      "available": false
+    },
+    "unknown_template_reference": {
+      "exit_code": 0,
+      "error": null
+    },
+    "misplaced_trigger_input": {
+      "exit_code": 0,
+      "error": null
+    },
+    "empty_object_resume": {
+      "exit_code": 1,
+      "status": "failed",
+      "node_error": "input schema validation failed: /: at '': got null, want object"
+    },
+    "empty_history_type": "NoneType"
+  },
+  "current": {
+    "schema_workflow": {
+      "exit_code": 0,
+      "available": true
+    },
+    "schema_executors": {
+      "exit_code": 0,
+      "available": true
+    },
+    "schema_trigger": {
+      "exit_code": 0,
+      "available": true
+    },
+    "unknown_template_reference": {
+      "exit_code": 2,
+      "error": {
+        "code": "invalid_workflow",
+        "input": "bad-reference",
+        "message": "node step has unknown input reference \"input.sample\"; use inputs.<declared-name> or nodes.<node-id>.result/input/status/artifacts",
+        "retryable": false,
+        "suggestion": "Run `agentflow schema workflow` and correct the definition."
+      }
+    },
+    "misplaced_trigger_input": {
+      "exit_code": 2,
+      "error": {
+        "code": "invalid_trigger_config",
+        "input": null,
+        "message": "invalid triggers.json: json: unknown field \"inputs\"",
+        "retryable": false,
+        "suggestion": "Run `agentflow schema trigger` and correct .agentflow/triggers.json."
+      }
+    },
+    "empty_object_resume": {
+      "exit_code": 0,
+      "status": "waiting_input",
+      "node_error": null
+    },
+    "empty_history_type": "list"
+  }
+}

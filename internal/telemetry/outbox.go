@@ -22,8 +22,8 @@ type Outbox struct {
 	dir string
 }
 
-// NewOutbox uses <root>/outbox.
-func NewOutbox(root string) *Outbox { return &Outbox{dir: filepath.Join(root, "outbox")} }
+// NewOutbox uses <workspace>/hub-outbox.
+func NewOutbox(root string) *Outbox { return &Outbox{dir: filepath.Join(root, "hub-outbox")} }
 
 // Dir is where pending reports live.
 func (o *Outbox) Dir() string { return o.dir }

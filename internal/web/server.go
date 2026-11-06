@@ -1,6 +1,8 @@
 package web
 
 import (
+	"bytes"
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"github.com/chenhg5/agentflow/internal/graph"
 	"github.com/chenhg5/agentflow/internal/metrics"
 	"github.com/chenhg5/agentflow/internal/model"
+	"github.com/chenhg5/agentflow/internal/schema"
 	"github.com/chenhg5/agentflow/internal/store"
 )
 
@@ -46,6 +49,7 @@ func NewServer(options Options) *Server {
 	server.mux.HandleFunc("/api/state", server.handleState)
 	server.mux.HandleFunc("/api/runs", server.handleRuns)
 	server.mux.HandleFunc("/api/runs/", server.handleRun)
+	server.mux.HandleFunc("/api/node", server.handleNodeDetail)
 	return server
 }
 
@@ -139,8 +143,16 @@ func loadWorkflow(path string) (model.Workflow, error) {
 		return model.Workflow{}, fmt.Errorf("cannot read workflow %s: %w", path, err)
 	}
 	var workflow model.Workflow
-	if err := json.Unmarshal(data, &workflow); err != nil {
+	decoder := json.NewDecoder(bytes.NewReader(data))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&workflow); err != nil {
 		return model.Workflow{}, fmt.Errorf("invalid workflow JSON: %w", err)
+	}
+	if problems := schema.ValidateWorkflowJSON(data); len(problems) > 0 {
+		return model.Workflow{}, fmt.Errorf("invalid workflow: %s", strings.Join(problems, "; "))
+	}
+	if problems := schema.Validate(workflow); len(problems) > 0 {
+		return model.Workflow{}, fmt.Errorf("invalid workflow: %s", strings.Join(problems, "; "))
 	}
 	return workflow, nil
 }
@@ -154,11 +166,13 @@ func dashboardView(root string) map[string]any {
 		return map[string]any{"mode": "dashboard", "runs": []any{}, "error": err.Error()}
 	}
 	type runSummary struct {
-		RunID     string `json:"run_id"`
-		Workflow  string `json:"workflow"`
-		Status    string `json:"status"`
-		CreatedAt string `json:"created_at"`
-		UpdatedAt string `json:"updated_at"`
+		ParentRunID string            `json:"parent_run_id,omitempty"`
+		Correlation map[string]string `json:"correlation,omitempty"`
+		RunID       string            `json:"run_id"`
+		Workflow    string            `json:"workflow"`
+		Status      string            `json:"status"`
+		CreatedAt   string            `json:"created_at"`
+		UpdatedAt   string            `json:"updated_at"`
 	}
 	runs := make([]runSummary, 0, len(entries))
 	for _, entry := range entries {
@@ -170,16 +184,34 @@ func dashboardView(root string) map[string]any {
 			continue
 		}
 		runs = append(runs, runSummary{
+			ParentRunID: run.State.ParentRunID, Correlation: run.State.Correlation,
 			RunID: run.RunID, Workflow: run.State.WorkflowName, Status: run.State.Status,
 			CreatedAt: run.State.CreatedAt, UpdatedAt: run.State.UpdatedAt,
 		})
 	}
 	sort.Slice(runs, func(i, j int) bool { return runs[i].UpdatedAt > runs[j].UpdatedAt })
-	return map[string]any{"mode": "dashboard", "runs": runs}
+	view := map[string]any{"mode": "dashboard", "runs": runs}
+	if snapshot, err := store.QueueSnapshot(root); err == nil {
+		view["queue"] = snapshot
+		if resources, err := store.ResourceStatus(context.Background(), root); err == nil {
+			view["resources"] = resources
+		} else {
+			view["resources_error"] = err.Error()
+		}
+	} else {
+		view["queue_error"] = err.Error()
+	}
+	return view
 }
 
 func runView(run *model.Run, root string) map[string]any {
-	return map[string]any{
+	children, counts, relationErr := store.Children(root, run.RunID)
+	refs := []map[string]any{}
+	for _, child := range children {
+		refs = append(refs, map[string]any{"run_id": child.RunID, "status": child.State.Status, "parent_node_id": child.State.ParentNodeID, "correlation": child.State.Correlation})
+	}
+	view := map[string]any{
+		"relations":        map[string]any{"parent_run_id": run.State.ParentRunID, "parent_node_id": run.State.ParentNodeID, "correlation": run.State.Correlation, "children": refs, "child_status_counts": counts},
 		"mode":             "run",
 		"workflow":         run.Workflow,
 		"graph":            graph.Describe(run.Workflow),
@@ -192,6 +224,44 @@ func runView(run *model.Run, root string) map[string]any {
 			"metrics": metrics.Snapshot(run, time.Now().UTC()),
 		},
 	}
+	if relationErr != nil {
+		view["relations_error"] = relationErr.Error()
+	}
+	switch run.State.Status {
+	case "succeeded", "failed", "cancelled":
+		if baseline := previousFinishedRun(run, root); baseline != nil {
+			view["comparison"] = metrics.Compare(run, baseline, time.Now().UTC())
+		}
+	}
+	return view
+}
+
+func previousFinishedRun(current *model.Run, root string) *model.Run {
+	entries, err := os.ReadDir(filepath.Join(root, "runs"))
+	if err != nil {
+		return nil
+	}
+	var candidates []*model.Run
+	for _, entry := range entries {
+		if !entry.IsDir() || entry.Name() == current.RunID {
+			continue
+		}
+		candidate, err := store.LoadRun(root, entry.Name())
+		if err != nil || candidate.State.WorkflowName != current.State.WorkflowName {
+			continue
+		}
+		switch candidate.State.Status {
+		case "succeeded", "failed", "cancelled":
+			if current.State.CreatedAt == "" || candidate.State.CreatedAt < current.State.CreatedAt {
+				candidates = append(candidates, candidate)
+			}
+		}
+	}
+	sort.Slice(candidates, func(i, j int) bool { return candidates[i].State.CreatedAt > candidates[j].State.CreatedAt })
+	if len(candidates) == 0 {
+		return nil
+	}
+	return candidates[0]
 }
 
 func writeJSON(w http.ResponseWriter, value any) {

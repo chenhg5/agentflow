@@ -1,0 +1,15 @@
+{
+  "ok": true,
+  "run_id": "run_20261023085053_f952c866c82b14b9",
+  "status": "succeeded",
+  "commands": [
+    {
+      "command": "./agentflow run start validation/workflow.test.json --input topic=independent-submit-helper --format json",
+      "exit_code": 0
+    },
+    {
+      "command": "python3 submit_review.py run_20261023085053_f952c866c82b14b9 review-stop.json",
+      "exit_code": 0
+    }
+  ]
+}

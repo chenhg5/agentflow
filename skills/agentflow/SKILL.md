@@ -1,360 +1,192 @@
 ---
 name: agentflow
-version: 1.0.0
-description: "使用 AgentFlow 与用户共同设计、校验、执行和观测 JSON workflow；当用户想把多个 Claude Code、Codex、shell 或人工审批步骤编排成可恢复流程时使用。"
+metadata:
+  version: "3.10.0"
+description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与显式条件边组成的本地工作流。"
 ---
 
-# AgentFlow Workflow Orchestration
+# AgentFlow workflow
 
-你负责把用户的目标落成一个可验证、可恢复、可观测的 AgentFlow workflow。先和用户确认流程边界，再生成或修改 workflow JSON；不要猜测 provider、workspace、session 或审批规则。
+先查 `agentflow schema --all --format json`、`schema workspace` 和 `schema workflow`。自定义程序查 `schema executors`，定时或 webhook 查 `schema trigger`。根据用户要求确定入口数据、每个节点的输出契约、边条件和完成标准，再创建工作流。
 
-## 1. 先向用户确认
+## 先设计职责与数据
 
-至少确认这些信息：
+搭建或迁移时先在 `DESIGN.md` 或 RUNBOOK 中说明：节点职责与输入输出契约；每个 agent 的角色、上下文来源、skills、工具与权限、工作目录和 session 策略；所有结果的后继节点、数据映射、并行汇合与返工；人工介入的时机、展示材料、允许输出、回传关联和恢复；完成标准与实际验证范围。按任务选 agent、程序或外部交互，不按节点数量凑角色。涉及 agent、人工审核或旧项目迁移时，先读 [设计与验收指引](references/design.md)。
 
-1. **目标**：流程最终要产出什么，成功标准是什么。
-2. **输入**：运行时需要哪些值，哪些是必填；敏感值不要写入 workflow 文件。
-3. **节点**：哪些步骤由 shell 执行，哪些步骤由 agent 执行，哪些步骤必须人工审批。
-4. **依赖**：节点之间的先后关系；没有依赖的节点可以并行执行，但当前 MVP 的 Runner 会按定义顺序推进可执行节点。
-5. **工作目录**：每个 agent 使用哪个绝对或相对 workspace。
-6. **会话**：是启动新 session，还是继续已有 session；已有 session 的 ID 从哪里来。
-7. **失败策略**：超时、重试次数、失败后是否跳过下游节点。
-8. **输出**：每个节点要写入哪些结构化 JSON 字段，哪些文件需要作为 artifact 保留。
+内置 Codex/Claude 是启动适配器，不会自动提供专业角色。新角色用 initializer 建自己的常驻资源；复用外部 agent 时指出实际指令/skill/tool 来源，不能仅因项目目录存在就称它是已有专业 agent。工具或 skills 无需额外配置时说明依据。角色职责、政策等稳定上下文与每次任务的输入分开组织。图只管理通用契约与边，业务角色和通信渠道不进入引擎规则。
 
-如果用户还没有提供 session ID，应明确让该值成为 workflow input，或先使用 provider 的新 session command；不要把“当前目录最近的会话”当成确定绑定。
+## 独立工作区
 
-## 2. 先查 CLI 契约
-
-在编排前查询当前版本的命令和 workflow schema：
+采用目录规范 v1。先用工具生成可运行的基础，再按任务调整：
 
 ```bash
-agentflow --help
-agentflow run --help
-agentflow schema --all --format json
-agentflow schema workflow --format json
+agentflow workspace init my-workflow
+cd my-workflow
+agentflow executor init author --kind codex
+agentflow executor init archive --kind command
 ```
 
-优先使用长命令和 JSON 输出。通过管道调用时 CLI 默认返回 JSON；stdout 是数据，stderr 是诊断。
+`workspace init` 生成根目录图、注册表、README、忽略规则和一个可运行的 JSON 透传程序。替换示例节点与程序为实际任务，删除不用的示例注册和文件。`executor init --kind codex` 生成该 agent 的 `AGENTS.md`、`.agents/skills/workflow-contract/SKILL.md`、`.codex/config.toml` 与 `tools/` 输入工具；按角色改写常驻指令、增加所需 skills/工具。`AGENTS.md` 是 Codex 原生常驻指令，不是 API system role。配置加载取决于提供方的项目信任设置；不要修改全局 Codex 配置来让 demo 通过。
 
-## 3. Workflow 最小结构
+`executor init <name> --kind claude-code` 生成 `CLAUDE.md`、`.claude/skills/`、`.mcp.json` 和相同输入工具。Claude 的项目 MCP 配置仍受本地信任与授权设置控制，生成文件不代表已经加载。`workspace init` 的 `DESIGN.md` 是待按任务填写的设计起点，不是交付完成证据。
+
+已有 agent 用 `executor add <name> --kind codex --workspace /existing/path` 只登记关联，也可登记工作区内的软链。不要对已有目录执行 init，不复制、覆盖或补写它的指令和工具。其他程序可用 `executor add <name> --kind command --workspace <existing-directory> --command '["node","main.js"]'` 登记，语言不限。先检查已有目录与 session 的真实信息，缺失时明确报告，不猜 ID。
+
+优先建立独立的 workflow 工作区或仓库，由它调度用户的项目、仓库版本和现有 agent。不要默认在业务仓库内创建工作流目录。单图工作区用根目录 `workflow.json`；多图工作区将所有图统一放入 `workflows/<name>.json`，按用途命名，不在根目录额外保留“主图”或副本。这是推荐的搭建约定，引擎仍支持显式文件路径；目录层级不代表图之间的调用关系。根目录保留共享的 `executors.json`、可选 `triggers.json` 与生成的 `runs/`，从这个根目录运行 CLI。
+
+从单图扩展到多图时，将原图移入 `workflows/`，同步修改 trigger、程序入口、测试和文档的路径，不留兼容副本或软链。`workspace validate` 默认检查根目录图及启用的 trigger 目标；没有 trigger 的图要分别用 `--workflow workflows/<name>.json` 校验，不会自动扫描目录。运行中的 trigger 服务启动时读取配置，修改后需确认无执行中的任务再重新加载服务。
+
+推荐在 `executors/agents/<name>/` 聚合 agent 工作目录，在 `executors/programs/<name>/` 放普通程序。目录可以是软链，注册表的 `workspace` 也可以直接指向外部路径。用户已有 agent 时复用其目录、指令、skill 和工具，无需再建一份；修改前先确认是否属于当前任务范围。目录与 session 是两个独立关联：已有目录不代表已有 session，已有 session ID 不代表目录；在每个 `execution.candidates[]` 中用 `session` 显式指定 new/fixed/inherit/fork。恢复持久会话并不等于接管正在运行的交互进程。
+
+图不依赖目录分类。引擎从工作区根目录读取注册表，只通过 executor 名称启动程序。内置 CLI 适配器随 AgentFlow 安装，具体 agent/程序工作目录可本地存放或引用外部资源。仓库的 URL、ref、commit、worktree 等由 executor 的配置及输入输出承载，记录为运行结果或 artifacts；引擎不自动 checkout 仓库。
+
+## 图结构与数据流
+
+只使用 version `3`。`entry` 是起点，`edges` 是唯一控制流，节点数组顺序没有执行含义。入口节点得到 run input；之后每条被选中的边默认将源节点的完整 JSON 输出作为目标节点的输入。需要保留源节点输入或重组字段时，在边上写通用 `map`；节点没有 `input` 字段，也不要把业务指令伪装成上游数据。
+
+循环默认必须有 `maxIterations` 限制。只有任务明确要求无限返工/持续运行时，才在 workflow 顶层设置 `allowUnboundedCycles: true`；这只是运行策略，不代表任何业务决策。
+`maxIterations` 限制该边的穿越次数；命中已达上限的边时，运行失败（outcome: max_iterations），不会再尝试后面的默认边。向用户解释超限后果；业务需要超限转交时显式建模并验证。
+
+需要同图节点并发时，在分叉源节点写 `"dispatch":"all"`，从它连向各并行节点；在汇合节点写 `"join":{"from":["a","b"]}`，列出所有必须到达的直接前驱。每条边的 `map` 独立构造该分支或汇合输入。汇合节点收到以来源节点 ID 为键的 JSON 对象。不要为了并行而把两个节点塞进一个 shell 程序；参考 `examples/parallel.json`。普通条件分支继续使用默认的 `first`，不会同时执行多条边。
 
 ```json
 {
-  "version": "1",
-  "name": "release-review",
-  "inputs": {
-    "workspace": { "type": "path", "required": true },
-    "session_id": { "type": "string", "required": false }
-  },
+  "version": "3", "name": "example", "entry": "draft",
+  "inputs": {"topic": {"type": "string", "required": true}},
   "nodes": [
-    {
-      "id": "inspect",
-      "type": "agent",
-      "provider": "claude-code",
-      "workspace": "{{ inputs.workspace }}",
-      "session": "{{ inputs.session_id }}",
-      "prompt": "检查当前变更，并把结论写入 AGENTFLOW_RESULT_FILE。"
-    },
-    {
-      "id": "approve",
-      "type": "human",
-      "needs": ["inspect"],
-      "prompt": "请审批检查结论。"
-    }
+    {"id": "draft", "execution": {"candidates": [{"executor": "author", "config": {"instruction": "根据收到的主题起草方案"}}]}, "outputSchema": {"type": "object"}},
+    {"id": "review", "execution": {"candidates": [{"executor": "external"}]}, "outputSchema": {"type": "object"}}
+  ],
+  "edges": [
+    {"from": "draft", "to": "review"},
+    {"from": "review", "to": "draft", "when": "nodes.review.result.score < 5", "maxIterations": 2},
+    {"from": "review", "to": "$end"}
   ]
 }
 ```
 
-### 节点约定
+节点的结构字段包括 `id`、`execution.candidates`、可选 `execution.fallback`、`inputSchema`、`outputSchema`、`timeoutMs`、`retry.maxAttempts`，以及并行控制的 `dispatch` 和 `join`。候选按优先级排列，每个候选包含 `executor`、可选的不透明 `config` 与独立 `session`；即使只有一个 executor 也必须写 candidates。不要使用已移除的节点顶层 `executor`、`config` 或 `execution.session`。`inputSchema` 校验到达逻辑节点的数据，`outputSchema` 校验成功候选的结果。结果必须是 JSON 对象。业务字段可任意命名，`happy`、`reject`、`decision`、`score` 等没有引擎特权。
 
-- `shell`：使用 `command`，适合确定性的脚本和校验。
-- `agent`：使用 `provider`、`prompt`、可选的 `workspace` 和 `session`。
-- `human`：使用 `prompt`，运行后状态为 `waiting_human`，必须通过 CLI 决策才能继续。
-- `needs`：声明依赖节点 ID。
-- `when`：根据 `inputs` 或上游 `result` 做条件跳过。
-- `retry.maxAttempts`：包含首次执行在内的最大尝试次数。
-- `timeoutMs`：单次命令超时。
+候选失败不会穿越业务边。`retry.maxAttempts` 是每个候选各自的命令尝试上限，耗尽后才判断是否选择下一候选。默认只在进程未启动的 `failure.kind == 'start_failed'` 时回退；进程已经启动后的非零退出、超时、缺失/无效结果或 output schema 失败默认直接使节点失败。确需其他策略时写通用 Expr，例如 `"fallback":{"when":"failure.kind == 'exit_code' && failure.code == 75"}`。不要根据业务错误文本、产品名或模型名写引擎回退条件。
 
-## 4. Provider、workspace 和 session
+节点完成后按顺序评估出边，选第一条条件为真的边。无 `when` 的默认边必须在最后。条件用 Expr，支持比较、算术、逻辑、集合和正则等。条件可读源节点的 `input`、`output`，也可读运行 `inputs` 和历史 `nodes`。循环必须有 `maxIterations`。每次重新进入节点，输入来自刚穿越的边；历史访问另存于 run history。
 
-Provider 配置在 `.agentflow/providers.json` 或 `~/.agentflow/providers.json`，不放进 workflow：
+迁移已有流程时，先确认源系统的条件归一化、默认边、未命中路由、结束和循环语义。不能为了让本地测试通过，就擅自补默认结束边、改变循环限制或把路由错误变成成功。原本无出边的终点可显式连 `$end`；有出边但没有条件命中是另一种情况。源语义不明时记录缺口，不猜业务意图。验证应覆盖普通路径以及未命中、大小写/空白等适用边界；不要无依据收紧源数据契约。
 
-```json
-{
-  "providers": {
-    "claude-code": {
-      "kind": "claude-code",
-      "binary": "claude"
-    },
-    "codex": {
-      "kind": "codex",
-      "binary": "codex",
-      "model": "gpt-5.6-sol",
-      "sandbox": "workspace-write"
-    }
-  }
-}
-```
+`config` 可引用当前节点输入 `{{ input.field }}`、运行输入 `{{ inputs.topic }}` 或历史节点结果 `{{ nodes.draft.result.summary }}`；执行器注册中的 command、workspace 和 env 可引用 `{{ input.field }}` 与 `{{ config.field }}`。边的 `when` 可写 `output.score > 80`，不加模板括号。边的 `map` 可写 `{"summary":"{{ input.summary }}","review":"{{ output.comments }}"}`；省略 `map` 会原样传递输出，`"map":{}` 会传空对象。精确模板保留 JSON 类型，拼接字符串时转换为字符串；边映射中缺失的引用变为空字符串。
 
-规则：
+## Session 策略
 
-- `claude-code` 和 `codex` 是内置 provider，provider 负责拼接各自 CLI 的启动和 resume 参数。
-- `binary`、`model`、`sandbox` 等运行参数放在 provider 配置，不要写进 workflow。
-- 自定义 agent 使用 `kind: "command"`，并提供 `command` 与 `resumeCommand` 模板。
-- 有 `session` 时，内置 provider 会调用对应 CLI 的 resume 子命令；自定义 command provider 必须提供 `resumeCommand`。
-- 有 session 但无法 resume 时，节点应失败并修复 provider 配置；不要静默启动新 session。
-- Runner 使用节点的 workspace 作为进程工作目录，并设置 `AGENTFLOW_WORKSPACE`、`AGENTFLOW_SESSION_ID`。
-- provider command 可以使用 `{{ prompt }}`、`{{ workspace }}`、`{{ session_id }}`、`{{ result_file }}`、`{{ run_id }}` 和 `{{ node_id }}`。
-- Agent 也可以在结构化结果中返回 `session_id`，后续节点用 `{{ nodes.<id>.result.session_id }}` 继续该会话。
+Session 是引擎的执行策略，不属于节点 input。每个 execution candidate 可写：
 
-## 5. 结构化结果契约
+- `{"session":{"mode":"new"}}`：每次访问新起空白 session；省略时也是此模式。
+- `{"session":{"mode":"fixed"}}`：本次 run 第一次选择该节点的这个 executor 时创建 session，重访或重试该候选时继续使用。可加 `"id":"existing-session-id"` 指定已有 session；`id` 可引用已声明的运行输入。
+- `{"session":{"mode":"inherit"}}`：沿用进入本节点的上一节点兼容 session；可用 `from` 明确指定来源节点。
+- `{"session":{"mode":"fork"}}`：从兼容的上游 session 派生新 session；可用 `from` 指定来源节点。
 
-Agent 成功退出前必须向 `AGENTFLOW_RESULT_FILE` 写入一个 JSON object：
+内置 `external` 等待器只支持默认/`new`，会明确拒绝 `fixed`、`inherit`、`fork`。需要持久会话时，使用实现对应 session 契约的 executor。
+
+`inherit`/`fork` 缺少来源 session 会失败，不能猜测。`from` 指定的来源必须在本节点执行前已完成；并行时用边和 `join` 明确保证先后关系，不要引用尚未执行的未来节点。原生 provider 只有同类 provider 的注册别名兼容；自定义 command 必须是同一个注册身份，不能把失败候选的 session 传给另一 provider。`fork` 必须报告新的 ID，避免后续错误地复用父 session。Codex 和 Claude Code 适配器从 CLI JSON 日志提取 session ID。自定义执行器在 `AGENTFLOW_SESSION_FILE` 写入新 ID；固定/沿用模式下引擎已经知道所选 ID。自定义执行器如需 session 操作，在注册项中提供 `command`、`resumeCommand` 和 `forkCommand`，按需使用 `{{session_id}}`。
+
+## 注册与执行程序
+
+`executors.json` 把任意名字关联到程序入口，语言和通信方式不限：
 
 ```json
-{
-  "decision": "pass",
-  "summary": "测试通过",
-  "session_id": "optional-session-id"
-}
+{"executors":{"my-interaction":{"command":["python3","main.py"],"workspace":"executors/programs/my-interaction","env":{"APP_PROFILE":"local"}}}}
 ```
 
-不要把 stdout 或 stderr 当作节点输出。Runner 会把它们保存成日志 artifact，并只把结果文件解析为 `node.result`。下游节点通过 `{{ nodes.inspect.result.summary }}` 读取结果。
+节点候选写 `{"executor":"my-interaction"}`。程序从 `AGENTFLOW_INPUT_FILE` 读取上游 JSON，从 `AGENTFLOW_CONFIG_FILE` 读取当前候选配置，完成工作后把 JSON 写到 `AGENTFLOW_RESULT_FILE` 并正常退出。stdout/stderr 是日志。执行器无需也不应修改 run state；引擎检查结果并自动推进边。飞书、钉钉、电话、终端等由执行器处理，图不认识这些产品。
 
-节点可以把上下游边界写成显式契约：
+`AGENTFLOW_ROOT` 是 workflow 工作区根目录，`AGENTFLOW_WORKSPACE` 是本次 executor 的执行目录；二者可以位于不同仓库或通过软链关联。使用引擎提供的绝对文件路径完成输入输出，不按执行目录猜测 runs 的位置。
 
-```json
-{
-  "input": { "summary": "{{ nodes.inspect.result.summary }}" },
-  "inputSchema": {
-    "type": "object",
-    "required": ["summary"],
-    "properties": { "summary": { "type": "string" } },
-    "additionalProperties": false
-  },
-  "outputSchema": {
-    "type": "object",
-    "required": ["decision"],
-    "properties": { "decision": { "type": "string" } }
-  }
-}
-```
+引擎证据归 `runs/<run-id>/`：图快照、state、events，以及每个节点访问/候选/尝试独立的 input/config/result/session/stdout/stderr。检查 `selectedExecutor`、`attemptSequence`、结构化 `failure` 和每次尝试的 artifacts；不要把中间候选失败误当成业务节点失败。业务产物位置由程序明确选择，例如以 `AGENTFLOW_ROOT` 为基准写 `output/`，并在 JSON 结果中返回路径。`output/` 不是引擎结果通道。不要把运行文件写到源码、agent 目录或被调度业务仓库。
 
-`input` 在节点启动前渲染并校验，`outputSchema` 在结果文件解析后校验。契约使用 JSON Schema draft 2020-12；不要只依赖 prompt 描述字段。精确占位符会保留源值类型；不要通过 stdout/stderr 传递业务数据。
+内置执行器有 `codex`、`claude-code`、`process`、`external`。前两者读取 `config.instruction`、可选 `config.workspace`；`process` 读取 `config.command`；`external` 等待 `run submit`。缺少配置的程序入口须通过 `executors.json` 注册。
 
-对于字段较多的流程，使用 Multigent 风格的字段声明：
+环境继承属于 executor 注册配置。根据实际 `agentflow schema executors` 能力设置 `environment`：省略/`{"mode":"inherit"}` 继承宿主变量；`{"mode":"allowlist","inherit":["PATH","LANG"]}` 只继承指定变量；`{"mode":"empty"}` 不继承宿主变量。随后加入显式 env 与引擎保留通道；不能配置或继承 `AGENTFLOW_*` 来覆盖当前调用。原生 CLI 需要的 HOME/认证须显式安排。环境白名单不是文件系统 sandbox，获配秘密的程序也不能主动把值写入日志。workspace validate 和启动事件只报告模式/变量名，不报告值。
 
-```json
-{
-  "id": "verify",
-  "type": "agent",
-  "needs": ["inspect"],
-  "inputFields": [
-    { "name": "summary", "type": "string", "description": "检查摘要", "required": true }
-  ],
-  "outputFields": [
-    { "name": "verified", "type": "boolean", "description": "是否通过", "required": true }
-  ],
-  "inputMapping": { "summary": "$node.inspect.output.summary" }
-}
-```
+同一 worker 运行模型角色和持有测试凭据的 runner 时，为它们分别选环境白名单；`env:{}` 不会清空宿主环境。秘密通过受控运行时/wrapper 获取，不放进 graph、input 或 config artifact。
 
-`outputFields` 在没有 `outputSchema` 时会生成严格 object schema，缺少必填字段或返回未知字段都会失败。`inputMapping` 支持 `$node.<id>.output.<field>`、`$output.<field>` 和 `$input.<field>`；没有显式 mapping 时，直接依赖节点之间同名字段会自动传递，显式 `input` 模板优先级最高。每个节点的渲染后输入会保存为 `.agentflow/runs/<run-id>/artifacts/<node-id>.input.json`，便于审计和重放。
+## 验证与运行
 
-## 6. 校验和执行流程
-
-### 6.1 校验
+对可能重复派发的创建请求使用 `--idempotency-key`。工作区 + workflow name + key 对应同一图内容、inputs 和不可变 parent/correlation 元数据；并发复用只创建一条 run，变更请求返回 conflict/exit 5。CLI 和 trigger 共用创建事务。保留 runs/requests 创建日志及执行 outbox；创建中断后复用同 key 或重启 worker 恢复，不要删除 state/journal 来“重新开始”。这不保证任意程序外部副作用 exactly-once。
 
 ```bash
-agentflow workflow validate workflow.json --format json
-```
-
-校验失败时，根据 JSON 错误里的 `code`、`message`、`suggestion` 修复后再试。不要跳过校验直接执行。
-
-### 6.2 预演
-
-```bash
-agentflow run start workflow.json \
-  --input workspace=/absolute/repo \
-  --input session_id=<session-id> \
-  --dry-run \
-  --format json
-```
-
-退出码 `10` 表示 dry-run 成功；它不会创建或执行 run。检查预演中的节点顺序、workspace、session 和输入。
-
-### 6.3 正式执行
-
-为可重试的启动使用稳定的幂等 key：
-
-```bash
-agentflow run start workflow.json \
-  --input workspace=/absolute/repo \
-  --input session_id=<session-id> \
-  --idempotency-key <stable-request-key> \
-  --format json
-```
-
-同一 workflow、输入和幂等 key 会复用已有 run；同 key 对应不同请求时退出码为 `5`。
-
-### 6.4 人工审批和恢复
-
-当 run 返回 `waiting_human`：
-
-```bash
+agentflow workspace validate --format json
+agentflow workspace validate --input topic=value --format json
+agentflow workflow validate workflow.json --check-executors --format json
+agentflow run start workflow.json --input topic=value --dry-run --format json
+agentflow run start workflow.json --input topic=value --format json
+agentflow run submit <run-id> <node-id> --token <leaseToken> --output '{"score":8}' --format json
 agentflow run get <run-id> --format json
-agentflow run approve <run-id> <node-id> --message "approved" --format json
-# 或
-agentflow run reject <run-id> <node-id> --message "需要修改" --format json
-```
-
-审批命令由 Runner 推进下游节点。不要让 agent 直接修改 `.agentflow/runs/<run-id>/state.json`，也不要让 agent 自己启动下一个节点。
-
-如果进程被中断，先查看状态，再恢复：
-
-```bash
-agentflow run resume <run-id> --dry-run --format json
+agentflow run logs <run-id> --format ndjson
+agentflow run retry <run-id> --format json
 agentflow run resume <run-id> --format json
 ```
 
-## 7. 观测单次执行和历史效率
+`workspace validate` 静态检查图、注册、目录/软链、可执行入口与触发配置，返回 `execution_verified:false`。`--input key=value` 可解析依赖 run input 的路径；依赖尚未执行的上游输出时仍为 unresolved。`agent_resources` 列出每个原生 agent 候选的工作目录、session、常驻指令/skill/tool 配置文件与摘要及未确认项，只表示发现资源，不证明 provider 实际加载、认证成功或角色质量。
 
-### 单次 run
+交付前用代表输入实跑，逐一核对关键节点是否实际执行、输出内容与验收标准是否匹配。零任务、`review_limit=0`、跳过关键节点、空结果 smoke 或降级成功都不能代替真实任务验收。用至少一个非空样本验证 agent 的上下文和工具确实起作用，并分别检验人工通过、返工、拒绝及适用的无效/重复回传；值名和路线以用户定义为准。无法调用真实模型时可用临时注册表替身验证数据契约，保留原注册表并明确列出模型/角色行为未验证。附简短 RUNBOOK，写明启动/恢复方法、产物位置、运行 ID 和逐节点验证范围。
 
-```bash
-agentflow run metrics <run-id> --format json
-```
+验证过程也要遵守任务的写入范围。若只允许当前工作区，临时输入、schema 和结果文件放工作区内的 `scratch/` 并在结束后清理；`mktemp` 或 `tempfile` 要显式指定这个目录，不使用默认的系统 `/tmp`。
 
-返回：
+`submit` 用于 external 节点。定时/webhook 配置放 `triggers.json`，先 validate 和 fire，再持续运行 `trigger serve`。交付前用本地替身检验分支、返工、次数上限和无效输出。`run start --dry-run` 的成功退出码为 10。需要观察耗时用 `run metrics/stats`，业务质量数值由外部评估器写入 `run evaluate`，再用 `run compare` 对比。
 
-- run 总耗时和状态；
-- 每个节点的 `duration_ms`、`waiting_ms`、`attempts`；
-- `input_bytes`：发送给节点的渲染后 prompt 加结构化 input 字节数；
-- `output_bytes`：结构化 result 文件字节数；
-- `stdout_bytes` / `stderr_bytes`：日志字节数；
-- agent 的 workspace 和 session ID。
+`trigger serve` 按工作区运行，一个进程加载该工作区所有 trigger；一个工作区只启动一份服务。不同工作区使用独立的配置与运行记录。纯 cron 不占 HTTP 端口；启用 webhook 时各工作区使用不同固定端口或 `--port 0` 自动选择。worker 默认一个活动 run，可用 `run worker --concurrency N` 或 `trigger serve --concurrency N` 配置；两者共享所有者，已有 worker 时 trigger 只入队，不另开额度。trigger ID 和启用的 webhook path 在工作区内不得重复；delivery ID 的去重范围是该 trigger。默认同一 trigger 有活动 run 就跳过新 occurrence，显式 `policy.concurrency=allow` 才允许重叠入队；跨 trigger/工作区对同一仓库或 session 的访问没有自动资源互斥。
 
-事件时间线和原始日志：
+人工交互可能持续很久或需要重启恢复时，优先把执行器注册为 `kind: external`，由独立适配器服务接收请求和提交结果。图只保存不透明 config；通信渠道、卡片和按钮输出归适配器/工作流配置。适配器必须持久化收到的选择，校验操作人、消息 ID 和本次调用 token；提交时传 waiting node 的 `leaseToken`，防止旧回调命中新一轮。发送前用 `run submit --dry-run --token ...` 校验每个按钮的输出。卡片更新应可重试；明确区分结果已接收和整个流程已完成。参考 `examples/lark-review/README.md`，保留连接离线时点击可能需重试的边界。
 
-```bash
-agentflow run logs <run-id> --format ndjson
-agentflow run get <run-id> --format json
-```
 
-运行数据默认保存在：
+## 持久队列与父子运行
 
-```text
-.agentflow/runs/<run-id>/
-├── workflow.json
-├── state.json
-├── events.jsonl
-└── artifacts/
-    ├── <node>.result.json
-    └── logs/<node>.stdout.log
-    └── logs/<node>.stderr.log
-```
+批量派发使用 `run enqueue <graph> --input key=value --idempotency-key <key>`，然后运行 `run worker --concurrency N`；producer 入队后即可退出。不能用异步 shell/Popen 代替持久队列。enqueue 或 --async 会持久启用托管队列；之后 start/trigger fire/submit/retry/resume/cancel 都返回持久接收状态，实际执行由同一 worker 准入，省略 --async 也不能绕过。worker 离线时请求保留在队列，须启动服务；用 `run queue` 查看 active/queued/waiting/terminal、owner 和 heartbeat，用 run get 查询最终结果。
 
-### 历史聚合
+并发数约束活动 **run**；图内并行节点可能启动多个进程，不能声称限制了全局 executor 数。waiting_input 释放 run 槽位；同时还有运行节点则继续占位。中断恢复不重跑已确认完成的节点，但未确认完成的 attempt 可能重放，外部副作用应幂等。硬杀 worker 不保证杀死子进程；cancel 在执行边界处理。
 
-```bash
-agentflow run stats --format json
-agentflow run stats release-review --format json
-agentflow run stats release-review --by-version --format json
-agentflow run stats release-review --digest <workflow_digest> --format json
-```
+子运行在创建时用 `--parent <run> --parent-node <node>`、可重复 `--correlation key=value` 关联。程序可从 AGENTFLOW_RUN_ID 和 AGENTFLOW_NODE_ID 取父标识，cwd 使用 AGENTFLOW_ROOT。仅支持同 store 的已存在父/节点，关系和字符串标签不可变且参与创建幂等校验。`run list --parent <id> --correlation key=value` 查询子集，run get 父运行显示子状态计数，Web 双向跳转。父成功表示其派发工作完成；子状态独立，取消不级联。相同业务对象跨批次复用由业务 ledger 决定，图不理解标签业务含义。
 
-聚合结果包括成功/失败/等待审批/取消数量，run 和节点耗时的平均值、P50、P95、最大值，以及输入、输出和日志字节总量。run 级别的 `duration_ms` 只统计已结束的 run，并拆成 `active_ms`（执行）和 `waiting_ms`（等人）两部分，所以还在等审批的 run 不会拉高平均值。
+## 复用飞书交互程序
 
-每个 run 都记录 `workflow_digest`：workflow 定义内容的哈希（只改格式不变，改了节点、契约或输入就会变）。`--by-version` 按版本分组、按首次运行时间排序，用来比较改流程前后的效果。
+用户要求飞书人工确认时，先定位同版本源码/完整发行包的 `examples/lark-review/SETUP.md`，按五步指引操作。仅安装二进制不保证附带该目录；找不到时获取匹配的源码/示例，不猜开发者机器路径。配套文件包含完整 workflow.json、executors.json、config.example.json、config.schema.json 和 lark_adapter.py。
 
-查询某个 workflow 的最新结果时用稳定命令，不要读取 `.agentflow/runs/*/state.json`：
+确认卡片内容、按钮任意 JSON 输出、机器人 profile 和同应用用户 open_id；同步调整输出契约与边。profile 与服务参数一致；executor 名称在注册表/节点/服务三处一致。用 --check-config 本地检查，再验证图和 dry-run；external 注册不会自动启动服务。保持单消费者，由用户真实点击验证自动推进，不自行 submit 伪装飞书成功。身份/权限参考 lark-shared，查人参考 lark-contact，发送与卡片遵循 lark-im。
 
-```bash
-agentflow run latest release-review --status succeeded,failed --format json   # 没有匹配时退出码 3
-agentflow run list --workflow release-review --status waiting_human --format json
-```用它回答“哪个节点最慢”“审批等待占多少时间”“输出是否异常膨胀”“失败是否集中在某个节点”。
+需要自由意见时，用 adapter config 的 form.fields（text/multiline，每项 maxLength 1–1000），actions[].formOutput 以新 output 键映射字段名；不得覆盖固定的审核对象或版本键，不用引擎模板引用尚未填写的值。requiredFormFields 按动作生效，合并后的真实输出才做 schema preflight。sections 展示报告链接和版本，固定 output 携带对应标识。可配只读/幂等 preSubmit argv hook；严格应用批准前仍需确定性业务 gate，不能用预检冒充原子业务操作。
 
-## 8. Web 可视化
+需要审核期限时，adapter config.deadline 使用 at（含时区）或 afterSeconds，加显式 timeout output。相对时间从外部候选 attempt 开始，deadline 和首次选择持久化，重启不延长。超时输出经普通边到结束/超时节点；没有默认批准，不用 run-wide cancel 误取消后续轮次。node.timeoutMs 不控制 external 等待。UI 区分已保存、引擎已接收及整个 run 已成功；模拟表单测试不能代替已授权的真人飞书输入/回调验收。
 
-需要和用户一起检查流程结构时，打开 workflow 图：
+## 跨 run 资源额度
 
-```bash
-agentflow web workflow.json
-```
+涉及共享写入、固定 session 或全局 executor 上限时，在工作区 `resources.json` 统一声明 key 的 capacity，在需要启动进程的节点写 `resources: [{"key":"writer","units":1}]`。key 仅标识通用资源，图不理解仓库/审批含义；同路径或同 session 不会自动加锁。未知 key、重复 key、零/超额 units 会在创建/执行前拒绝。先查 `schema resources`。
 
-需要检查一次实际执行时，打开 run 图：
+worker concurrency 限制活动 run，resources 限制实际占资源 attempt，二者独立；要限制全部进程，给所有对应节点声明同一 quota。多项资源原子申请；不足进入 waiting_resource，不消耗 attempt/retry/fallback。仅剩资源等待时会让出 run 名额；额度释放后 worker 自动唤醒。external 不占主动资源。fallback/retry 为新 attempt 重新申请，正常退出后释放；程序须在返回前结束自己派生的写入任务，不得后台脱离 claim 生命周期。
 
-```bash
-agentflow web --run <run-id>
-```
+`resource list`、`run queue` 可查额度、持有者和 orphaned claim。owner 消失不表示进程/后代已退出，额度不会按 TTL 被抢占。先确认整个遗留执行范围停止，再用 `resource resolve <claim> --confirm-stopped --reason <已观察到的清理证据>`；仍存活的已记录 PID 会被拒绝。PID 已退出也不能代替后代进程核对。首版只覆盖同机同 store，不能当作跨机器分布式锁。
 
-Web 页面会显示节点依赖、节点类型、状态、耗时、attempts 和输出大小；run 页面会每两秒刷新一次状态。CLI 会打印本地 URL。可以用 `--port 0` 选择可用端口，用 `--host 0.0.0.0` 暴露到局域网时必须确认网络访问范围。
+## 稳定定时上下文与补触发
 
-### 多台机器的运行：Hub
+需要按计划日期处理时，在 triggers.json 的 bindings 用 {"from":"event","path":"scheduled_at"}，并按需映射 received_at、trigger_id、delivery_id、schedule_timezone、catch_up 到 workflow inputs。这些是只读事件事实，不能用 attributes 假冒；节点仍消费普通 JSON。scheduled_at 是原计划 UTC 时刻，received_at 是首次实际接收，排队/重试/重启不能重新按执行时间算日期。日期和时区换算放普通 normalization 程序，图引擎不懂日报。
+
+misfire 默认 skip；显式 fire-once 才会在恢复后最多新增补最新一个漏掉的 occurrence，更早项只记录 skipped 数量/范围。已持久化的计划/receipt 先恢复到同一个 run，不因 forbid 误判自己的恢复；不是 catch-up-all，也不保证全部漏日报已补齐。首次启用、定义改变及观察到的重新启用都会建立当前基线，不回补更早历史；删除的触发器不再调度，未完成计划保留在 status，恢复定义后处理。配置改动需重启服务。
+
+用 trigger status 检查 baselines、pending plan、skipped 范围和 active_run 决策。保留 trigger-cursors/、trigger-deliveries/ 和 runs/ 的持久记录，不删除它们来“重置”生产定时。先在隔离 store 用可注入时钟/确定性替身验证；切换现有 host timer 时只能保留一个调度来源。CLI trigger fire 是显式临时投递，带自定义 delivery ID 时不属于自动 cron occurrence 流。
+
+## 解读静态 session / 并行可用性
+
+workspace validate 的 analysis 按 node/candidate/source/reference 给出 guaranteed、conditional、unavailable，另有 incoming/source_route、source_protocols 和 reason_code。guaranteed 只证明该 input/result 容器的图上先后，不证明字段存在、任务质量或真实 provider session；顶层始终 execution_verified:false。不要把 valid:true 或发现了候选 binding 当成启动/业务成功。
+
+同一来源路线内的多个 provider/no-session 候选是条件分支，逐一保留协议：有兼容也有不兼容时标 conditional；全部确定不兼容仍是 error，不统一降级成 warning。不同已知 activation route 仍分别检查。new 模式的程序成功也可能没有 session ID，保留没有 ID 的分支；fixed/fork 的成功完成由运行时强制检查 ID。external 等待不产出完成结果或 provider session，不能让 sibling 读到尚未完成的结果。要强保证先后，用显式边和 join.from；nodes 数组顺序不保证先后。缺少确定性 ordering 时按 conditional 处理，不假装已有结果。
+
+fixed 无 ID 首访从空白开始，后续只有历史中已记录的兼容 session 才复用。条件回访仍可能因 resumeCommand/协议失败选到 external，不能据首访成功推断后面一定完成。看到 fixed_revisit_launch_failure / source_protocol_conditional / completion_conditional 时，检查候选策略、补正确 resume/fork 入口或设计同步/缺失处理；用真实节点输出和 preserved lease/history 验证对应路径。任意程序的语义无法静态证明，未知保持 inconclusive；不能用全放宽或全拒绝掩盖问题。
+
+## Hub：多台机器的运行汇总
 
 用户想在一个地方看所有机器上的运行时，用 Hub（详见 `docs/hub.md`）：
 
 ```bash
 agentflow hub status --format json      # enabled=false 说明还没配
-agentflow hub push --all --format json  # 配好后补报已有运行
+agentflow hub push --all --format json  # 配好后补报这个工作区已有的运行
 ```
 
-配置靠 `AGENTFLOW_HUB_URL`、`AGENTFLOW_HUB_TOKEN`（或 `.agentflow/hub.json`），token 向用户要，不要写进仓库。配好后状态变化会自动上报，Hub 挂了不影响运行。想让 Hub 上看得懂每一步，就在节点结果里写 `summary` 和 `reason`。
-
-## 9. 谁来启动 workflow
-
-workflow 本身是完整的，谁启动它只是入口。以下方式等价，按用户已有的东西选：
-
-- Claude Code 或 Codex 自己的定时任务唤醒 agent，agent 调 `agentflow run start <workflow.json> --idempotency-key <窗口标识>`，再用 `agentflow run latest <name>` 看结果；
-- 系统 cron / launchd / CI 调 `agentflow run start` 或 `agentflow trigger fire`；
-- `agentflow trigger serve` 常驻处理 cron 和 webhook（下文）；
-- 人直接在命令行启动。
-
-幂等 key 用“这次唤醒对应的业务窗口”，例如 `release-2026-10-23-beta`，这样重复唤醒不会重复执行。
-
-### Cron 和 webhook trigger
-
-Trigger 配置放在 `.agentflow/triggers.json`，不是 workflow JSON。先检查再运行服务：
-
-```bash
-agentflow trigger validate --format json
-agentflow trigger list --format json
-agentflow trigger serve --host 127.0.0.1 --port 7071
-```
-
-`trigger serve` 内置 cron scheduler、webhook HTTP server 和持久化 run worker。每个事件先写入 `trigger-deliveries/`，再写入 `dispatch/<run-id>.json`，随后异步执行目标 workflow。进程重启会恢复仍处于 queued 的 dispatch。
-
-如果使用系统 cron/launchd/Kubernetes CronJob，只调用一次 dispatcher：
-
-```bash
-agentflow trigger fire nightly-review \
-  --scheduled-at 2026-10-13T02:00:00+08:00 \
-  --delivery-id nightly-review-20261013 \
-  --format json
-```
-
-Webhook 默认是 `POST` 到 trigger 的 `source.path`。使用 `source.auth` 配置 HMAC SHA-256 或 bearer token；签名 secret 只能来自环境变量。`delivery-id` 是幂等边界，重复投递会复用原 run。`policy.concurrency: "forbid"` 会在同一 trigger 有活动 run 时记录 skipped。
-
-## 10. 效率优化闭环
-
-1. 先看 `run stats <workflow-name>`，定位 P95 高或失败率高的节点。
-2. 再看对应 run 的 `run metrics`，区分 agent 执行时间、人工等待时间和重试时间。
-3. 用 `run logs --format ndjson` 对照 `node.started`、`node.retrying`、`node.failed` 事件。
-4. 根据字节数判断 prompt/result/log 是否过大；不要用 stdout 文本猜结构化输出。
-5. 调整 workflow：拆分过大的 prompt、增加明确的 result schema、设置合理 timeout/retry、减少不必要的人审节点。
-6. 重新 `workflow validate`、`run start --dry-run`，再用新的幂等 key 执行。
-7. 用 `run stats <workflow-name> --by-version` 比较修改前后两个版本的 P95、`active_ms`、`waiting_ms`、失败数、attempts 和字节量是否改善。
-
-## 10. 与用户协作的交付格式
-
-在提交 workflow 前，向用户说明：
-
-- workflow 的目标、输入和最终输出；
-- 每个节点做什么以及依赖关系；
-- 哪些节点会调用真实 agent、使用哪个 workspace/session；
-- 哪些节点需要人工审批；
-- 失败、重试、超时和取消如何处理；
-- 如何执行、如何审批、如何查看 metrics/stats；
-- 内置 provider 使用哪个 binary、model、sandbox 或 permission 设置；自定义 command provider 的命令模板是否需要按本机 CLI 版本调整。
-
-执行后报告 run ID、最终状态、失败节点、耗时、attempts、输入/输出字节数，以及需要用户处理的审批节点。
+配置靠 `AGENTFLOW_HUB_URL`、`AGENTFLOW_HUB_TOKEN`（或工作区的 `hub.json`、`~/.agentflow/hub.json`），token 向用户要，不要写进仓库。配好后状态变化会自动上报，Hub 挂了不影响运行。想让 Hub 上看得懂每一步，就在节点结果里写 `summary` 和 `reason`。

@@ -1,0 +1,141 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "AgentFlow executor registrations",
+  "type": "object",
+  "required": [
+    "executors"
+  ],
+  "properties": {
+    "executors": {
+      "type": "object",
+      "propertyNames": {
+        "minLength": 1
+      },
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "command": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "workspace": {
+            "type": "string",
+            "description": "Executor working directory: a path relative to the workflow workspace root or an absolute path. Existing directories and symlinks are supported."
+          },
+          "env": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          },
+          "kind": {
+            "enum": [
+              "command",
+              "codex",
+              "claude-code",
+              "external"
+            ]
+          },
+          "binary": {
+            "type": "string"
+          },
+          "model": {
+            "type": "string"
+          },
+          "sandbox": {
+            "type": "string"
+          },
+          "promptMode": {
+            "enum": [
+              "arg",
+              "stdin"
+            ]
+          },
+          "dangerouslyBypassApprovalsAndSandbox": {
+            "type": "boolean"
+          },
+          "skipGitRepoCheck": {
+            "type": "boolean"
+          },
+          "ephemeral": {
+            "type": "boolean"
+          },
+          "extraArgs": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resumeCommand": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "forkCommand": {
+            "type": "array",
+            "minItems": 1,
+            "items": {
+              "type": "string"
+            }
+          },
+          "environment": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "mode"
+            ],
+            "properties": {
+              "mode": {
+                "enum": [
+                  "inherit",
+                  "allowlist",
+                  "empty"
+                ]
+              },
+              "inherit": {
+                "type": "array",
+                "uniqueItems": true,
+                "items": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^=\\x00\\r\\n]+$",
+                  "not": {
+                    "pattern": "^[Aa][Gg][Ee][Nn][Tt][Ff][Ll][Oo][Ww]_"
+                  }
+                }
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "mode": {
+                      "enum": [
+                        "inherit",
+                        "empty"
+                      ]
+                    }
+                  }
+                },
+                "then": {
+                  "properties": {
+                    "inherit": {
+                      "maxItems": 0
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
+	"time"
 )
 
 func ResolveInputs(definition Definition, event Event) (map[string]string, error) {
@@ -18,7 +19,13 @@ func ResolveInputs(definition Definition, event Event) (map[string]string, error
 		}
 	}
 	for name, binding := range definition.Bindings {
-		value, ok := resolveBinding(binding, payload, event.Headers, event.Attributes)
+		var value any
+		var ok bool
+		if binding.From == "event" {
+			value, ok = eventFact(event, binding.Path)
+		} else {
+			value, ok = resolveBinding(binding, payload, event.Headers, event.Attributes)
+		}
 		if !ok {
 			return nil, fmt.Errorf("binding %s did not resolve", name)
 		}
@@ -28,6 +35,26 @@ func ResolveInputs(definition Definition, event Event) (map[string]string, error
 		inputs[name] = fmt.Sprint(value)
 	}
 	return inputs, nil
+}
+
+func eventFact(event Event, path string) (any, bool) {
+	switch path {
+	case "scheduled_at":
+		if event.ScheduledAt != nil {
+			return event.ScheduledAt.UTC().Format(time.RFC3339Nano), true
+		}
+	case "received_at":
+		return event.ReceivedAt.UTC().Format(time.RFC3339Nano), !event.ReceivedAt.IsZero()
+	case "trigger_id":
+		return event.TriggerID, event.TriggerID != ""
+	case "delivery_id":
+		return event.DeliveryID, event.DeliveryID != ""
+	case "schedule_timezone":
+		return event.Timezone, event.Timezone != ""
+	case "catch_up":
+		return event.CatchUp, true
+	}
+	return nil, false
 }
 
 func resolveBinding(binding Binding, payload any, headers, attributes map[string]string) (any, bool) {

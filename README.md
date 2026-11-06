@@ -1,199 +1,181 @@
 # AgentFlow
 
-AgentFlow is a standalone local workflow runner for Claude Code, Codex, and other command based agent sessions.
+AgentFlow runs local workflows described by `entry`, `nodes`, and explicit `edges`. Each node calls a named executor with JSON input and produces JSON output. Executors can run Codex, Claude Code, an interactive program, or a program you write in any language.
 
-It uses a small JSON workflow definition, persists every run under `.agentflow/`, and supports resumable human approval steps.
+Use a standalone workflow workspace to coordinate your repositories, agents, and programs. Run AgentFlow from that workspace: `workflow.json` defines a graph, `executors.json` registers execution entry points, and `runs/` holds state, snapshots, and logs. The runner validates input/output schemas, evaluates conditions, and advances the graph automatically. Workflow version `3` is the supported format.
 
-The current release is `v0.0.3` (preview). Check the binary metadata with `agentflow version`; release steps are documented in [`docs/releasing.md`](docs/releasing.md).
-
-For an agent-oriented installation and setup walkthrough, see [`INSTALL.md`](INSTALL.md).
-The graph model and Web UI inspection behavior are documented in [`docs/graph-and-visualization.md`](docs/graph-and-visualization.md); the multi-machine Hub in [`docs/hub.md`](docs/hub.md).
-
-## Install
+## Install and try
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/chenhg5/agentflow/main/scripts/install.sh | sh
 ```
 
-Or `go install github.com/chenhg5/agentflow/cmd/agentflow@latest`, or download an archive from [Releases](https://github.com/chenhg5/agentflow/releases). See [`INSTALL.md`](INSTALL.md) for details.
+The current preview is [v0.3.0](https://github.com/chenhg5/agentflow/releases/tag/v0.3.0). It changes the workflow execution schema: use `execution.candidates` for every node, including nodes with a single executor. See the [migration notes and known limitations](changelogs/v0.3.0.md) before upgrading.
 
-## Quick start
-
-```bash
-go run ./cmd/agentflow workflow validate examples/smoke.json --format json
-go run ./cmd/agentflow run start examples/smoke.json --input name=Codex --format json
-```
-
-The command pauses at the `approve` node. Copy the run id and continue it:
+To build and try the source checkout:
 
 ```bash
-go run ./cmd/agentflow run approve <run-id> approval --message "approved" --format json
-go run ./cmd/agentflow run get <run-id> --format json
+make build
+bin/agentflow workflow validate examples/smoke.json --check-executors --format json
+bin/agentflow run start examples/smoke.json --input name=Codex --format json
+bin/agentflow run submit <run-id> approve --output '{"decision":"happy"}' --format json
 ```
 
-## Agent-friendly CLI contract
+See [INSTALL.md](INSTALL.md) for setup and [skills/agentflow/SKILL.md](skills/agentflow/SKILL.md) for agent instructions.
 
-- Commands use a noun-verb tree such as `workflow validate` and `run get`.
-- Piped output defaults to JSON; use `--format table` for humans and `--format ndjson` for event streams.
-- stdout contains data. Diagnostics and errors go to stderr.
-- Errors include a stable machine-readable code, a recovery suggestion, and `retryable`.
-- Exit codes: `0` success, `1` execution failure, `2` invalid arguments, `3` not found, `4` permission denied, `5` conflict, `10` dry-run passed.
-- `agentflow schema --all` exposes the command tree; `agentflow schema run start` returns one command contract; `agentflow schema workflow` returns the workflow JSON Schema.
-- `--dry-run` is available for run start, approval, rejection, resume, cancellation, and provider initialization.
-- `run start --idempotency-key <token>` safely replays an identical request without creating a duplicate run; a different request with the same key exits with code `5`.
-- `run metrics <run-id>` exposes per-node duration, attempts, prompt/result/log byte sizes, workspace, and session; `run stats [workflow-name]` aggregates historical efficiency.
-- `trigger list`, `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher for cron and webhook events.
+## Standalone workspace
 
-## Agent onboarding skill
+Keep orchestration in its own directory or Git repository. It can coordinate several project repositories and worktrees; placing it inside one project is optional. A recommended layout is:
 
-给 Claude Code、Codex 或其他 agent 使用的编排手册位于 [`skills/agentflow/SKILL.md`](skills/agentflow/SKILL.md)。它覆盖和用户澄清需求、生成 workflow、provider/session 绑定、校验、dry-run、人工审批、恢复以及 metrics/stats 观测。
+```text
+my-workflow/
+├── workflow.json
+├── executors.json
+├── triggers.json                 # optional
+├── executors/
+│   ├── agents/                   # owned directories or symlinks to existing agents
+│   └── programs/
+└── runs/                         # generated state, snapshots, and logs
+```
 
-## Agent providers
+Create the v1 layout using the CLI:
 
-Claude Code and Codex have built-in providers. Their binaries and provider-specific runtime options are configured outside workflow definitions in `.agentflow/providers.json` or `~/.agentflow/providers.json`. Start from [`providers.example.json`](providers.example.json). Custom agents can use `kind: "command"` with explicit command templates.
+```sh
+agentflow workspace init my-workflow
+cd my-workflow
+agentflow executor init author --kind codex
+agentflow executor init archive --kind command
+agentflow workspace validate --format json
+```
+
+The starter graph runs immediately; adapt it for your task. Fill in `DESIGN.md` with node contracts, agent responsibilities/context/skills/tools, routing and human feedback. `executor init --kind codex` and `--kind claude-code` create native role resources and a local MCP input tool. `executor add <name> --kind codex --workspace /existing/agent` binds an existing directory without changing its files. `workspace validate --input key=value` resolves representative input-based paths and inventories local agent resources; discovery does not prove actual loading or task completion. See [layout v1](docs/workspace-layout.md) for the full contract and [authoring guidance](skills/agentflow/references/design.md) for design and acceptance.
+
+Run CLI commands from `my-workflow/`. Register external agent or repository paths through `workspace`; reuse existing session history through a candidate's `session`. Repository URLs, refs, and commit IDs are ordinary executor config or result data; repository checkout and version capture are performed by the executor.
+
+Use root `workflow.json` for a single graph. For multiple graphs, group all definitions under `workflows/<name>.json` without a separate root graph. These are layout conventions: CLI commands and trigger targets accept explicit JSON paths, and folder nesting does not connect graphs. See [workspace layout](docs/workspace-layout.md) for both structures and moving from one to several graphs.
+
+## Workflow
 
 ```json
 {
-  "providers": {
-    "claude-code": { "kind": "claude-code", "binary": "claude" },
-    "codex": { "kind": "codex", "binary": "codex", "model": "gpt-5.6-sol", "sandbox": "workspace-write" }
+  "version": "3",
+  "name": "example",
+  "entry": "draft",
+  "nodes": [
+    {"id": "draft", "execution": {"candidates": [{"executor": "codex", "config": {"instruction": "Write a short proposal."}}]}},
+    {"id": "review", "execution": {"candidates": [{"executor": "my-review"}]}}
+  ],
+  "edges": [
+    {"from": "draft", "to": "review"},
+    {"from": "review", "to": "draft", "when": "nodes.review.result.score < 5", "maxIterations": 2},
+    {"from": "review", "to": "$end"}
+  ]
+}
+```
+
+A node has `id`, `execution.candidates`, optional `execution.fallback`, `inputSchema`, `outputSchema`, `timeoutMs`, and `retry.maxAttempts`. Each ordered candidate owns its executor, opaque config, and session policy. The entry node receives the run input; each later node receives the previous node's JSON output by default. An edge may declare `map` to build the next input from source `input`, source `output`, run `inputs`, and prior `nodes`; for example, `"map":{"review":"{{ output.comments }}","original":"{{ input.summary }}"}`. The array position does not determine execution order. The first matching outgoing edge selects the next node. An edge without `when` is the final default. Conditions support comparisons, arithmetic, logical combinations, membership, regex operations, and collection functions. Cycles need a bounded edge by default; `allowUnboundedCycles: true` explicitly permits unlimited loops. See [graph semantics](docs/graph-and-visualization.md).
+
+Set `"dispatch":"all"` on a node to run every matching outgoing branch concurrently. A target with `"join":{"from":["left","right"]}` starts only after both predecessors have delivered input; it receives `{"left": <payload>, "right": <payload>}`. The default dispatch remains first matching edge. See [the runnable parallel example](examples/parallel.json) and [parallel execution semantics](docs/graph-and-visualization.md#parallel-nodes-and-joins).
+
+`prompt`, `score`, `decision`, recipient IDs, and similar values are executor configuration or input/output data. The graph assigns no meaning to them.
+
+## Register your executor
+
+Create `executors.json` at the workflow workspace root. If absent, only built-in executors are available. Start with [executors.example.json](executors.example.json) or `agentflow config init`.
+
+```json
+{
+  "executors": {
+    "my-review": {
+      "command": ["python3", "./executors/review.py"],
+      "workspace": ".",
+      "env": {"REVIEW_PROFILE": "local"}
+    }
   }
 }
 ```
 
-Agent nodes can bind both a workspace and an existing session:
+Executor names are arbitrary. `command` is an argument array, `workspace` is the process working directory, and `env` adds environment variables. Configured commands and environment values can reference `{{ config.field }}` and `{{ input.field }}`. A relative workspace resolves from the AgentFlow invocation directory; relative command paths resolve inside that workspace.
 
-```json
-{
-  "id": "implement",
-  "type": "agent",
-  "provider": "claude-code",
-  "workspace": "/Users/me/code/my-repo",
-  "session": "{{ inputs.session_id }}",
-  "prompt": "Implement the requested change and write the structured result."
-}
+Built-in executors are `codex`, `claude-code`, `process`, and `external`. Codex and Claude Code adapters accept candidate `config.instruction` and optional `config.workspace`. Candidate session behavior belongs in `execution.candidates[].session`: `new` starts fresh on every visit, `fixed` creates and reuses one session for that node/candidate in the run (or uses a supplied ID), `inherit` resumes a compatible upstream session, and `fork` branches from one. Their CLI options belong in executor registration. `process` accepts candidate `config.command` as an argument array. `external` persists `waiting_input` until `run submit` supplies JSON output.
+
+Candidate order is priority order. Retries are per candidate. By default the next candidate is tried only when the OS process could not start; a launched nonzero exit, timeout, missing/invalid result, or output-contract failure stops the node. Set `execution.fallback.when` to an Expr over structured `failure` fields to opt into another policy, for example `failure.kind == 'exit_code' && failure.code == 75`. See the [runnable fallback example](examples/executor-fallback.json).
+
+Executor registrations can set `"environment":{"mode":"allowlist","inherit":["PATH","LANG"]}` to select host variables, or `"environment":{"mode":"empty"}` to omit them. The default is `inherit`. Explicit `env` entries and fresh engine file/session channels are added afterward. See [environment and creation guarantees](docs/execution-semantics.md#executor-environment) for boundaries and recovery behavior.
+
+## Program contract
+
+The runner starts the configured program whenever the graph reaches its node. The program reads incoming JSON from `AGENTFLOW_INPUT_FILE`, optional executor configuration from `AGENTFLOW_CONFIG_FILE`, writes one JSON object to `AGENTFLOW_RESULT_FILE`, and exits successfully. It may write a newly created session ID to `AGENTFLOW_SESSION_FILE`. stdout and stderr are logs. The runner validates output and selects the next edge.
+
+`AGENTFLOW_ROOT` points to the workflow workspace; `AGENTFLOW_WORKSPACE` points to this executor's working directory. An executor workspace may be a local directory, a symlink, or an external project path. A directory binding does not select a session: use the selected candidate's `session` to start, resume, or fork one. Existing agent directories keep their own instructions and tools. See [the standalone workspace demo](examples/local-workspace-demo/README.md).
+
+```python
+import json, os
+from pathlib import Path
+request = json.loads(Path(os.environ["AGENTFLOW_INPUT_FILE"]).read_text())
+Path(os.environ["AGENTFLOW_RESULT_FILE"]).write_text(json.dumps({"score": 8}))
 ```
 
-`session` can be a literal ID or a template such as `{{ inputs.session_id }}` / `{{ nodes.previous.result.session_id }}`. The Runner executes with `cmd.Dir=workspace`, sets `AGENTFLOW_WORKSPACE` and `AGENTFLOW_SESSION_ID`, and persists the effective workspace/session under the node state. Command templates support `{{ prompt }}`, `{{ workspace }}`, `{{ session_id }}`, `{{ result_file }}`, `{{ run_id }}`, and `{{ node_id }}`. `promptMode: "stdin"` sends the prompt through stdin.
+The language and communication channel are unrestricted. An interaction program can send a card or display a terminal prompt, wait for a response, then write output. A person clicking a button does not select graph edges; the returned JSON is evaluated by the graph's conditions. Programs do not edit run state.
 
-## Structured node results
+Input and output contracts use JSON Schema draft 2020-12. Exact templates in candidate `config`, such as `{{ nodes.draft.result.count }}`, preserve JSON types. Every candidate attempt has separate input, config, result, session, stdout, and stderr paths. Run state records the selected executor, structured failure, and complete attempt sequence. See [execution semantics](docs/execution-semantics.md).
 
-Agent nodes must write a JSON object to the `AGENTFLOW_RESULT_FILE` environment variable before they exit successfully. The runner also includes the exact absolute result path and workspace in the execution contract appended to the prompt, which helps non-interactive sessions that cannot inspect process environment variables. The Runner stores that JSON under `node.result` and remains the only component that advances the workflow. stdout and stderr are retained only as log artifacts under `artifacts/logs/`.
-
-For example, a command can write:
-
-```json
-{"decision":"pass","summary":"tests passed"}
-```
-
-Downstream nodes reference structured data with expressions such as `{{ nodes.review.result.decision }}`.
-
-Nodes can make this boundary explicit with `input`, `inputSchema`, and `outputSchema`. Exact placeholders preserve JSON types, and contract failures stop the node before the command starts or after the structured result is read:
-
-```json
-{
-  "input": { "count": "{{ nodes.inspect.result.line_count }}" },
-  "inputSchema": { "type": "object", "required": ["count"], "properties": { "count": { "type": "integer" } } },
-  "outputSchema": { "type": "object", "required": ["verified"], "properties": { "verified": { "type": "boolean" } } }
-}
-```
-
-Contracts use JSON Schema draft 2020-12, so constraints such as `pattern`, `oneOf`, `const`, nested arrays, and strict `additionalProperties` are enforced both when loading a workflow and when a node runs. For field-oriented handoff, add `inputFields` and `outputFields`; `outputFields` derive a strict object schema when `outputSchema` is omitted. Downstream input is built by explicit `inputMapping` first, then by matching field names from direct dependencies, with an explicit `input` template taking precedence. The rendered input is saved as `artifacts/<node>.input.json`. stdout and stderr remain logs; only `AGENTFLOW_RESULT_FILE` is business output.
-
-## Cron and webhook triggers
-
-Store trigger definitions in `.agentflow/triggers.json` and start the long-lived runtime:
+## Operate and inspect
 
 ```bash
-agentflow trigger validate --format json
-agentflow trigger serve --host 127.0.0.1 --port 7071
-```
-
-The service runs cron scheduling, webhook HTTP intake, durable delivery receipts, a dispatch queue, and workers. A webhook is acknowledged with `202` after the delivery and queued run are persisted. For an external scheduler, use `agentflow trigger fire <trigger-id> --scheduled-at ... --delivery-id ...`; repeated delivery IDs are idempotent. See [`examples/triggers.json`](examples/triggers.json) and [`docs/trigger-architecture.md`](docs/trigger-architecture.md).
-
-## Observability
-
-Inspect one run with:
-
-```bash
-agentflow run metrics <run-id> --format json
+agentflow doctor --format json
+agentflow schema --all --format json
+agentflow run get <run-id> --format json
 agentflow run logs <run-id> --format ndjson
+agentflow run metrics <run-id> --format json
+agentflow run stats <workflow-name> --by-version --format json
+agentflow run evaluate <run-id> --evaluation '{"measurements":{"quality":{"value":0.9,"direction":"higher"}}}' --format json
+agentflow run compare <run-id> --format json
+agentflow run retry <run-id> --format json
+agentflow run resume <run-id> --format json
+agentflow run cancel <run-id> --format json
+agentflow web --host 127.0.0.1 --port 7070
 ```
 
-`run metrics` reports run and node status, trigger metadata, duration, retry attempts, human waiting time, workspace/session binding, and byte counts. `input_bytes` is the rendered prompt plus structured node input, `output_bytes` is the structured result file, and `stdout_bytes`/`stderr_bytes` are log sizes. Structured results and logs stay separate.
+Serial graphs run one active node at a time; `dispatch: "all"` can run siblings concurrently. Retry restarts failed active nodes while preserving successful siblings. Each run saves its workflow snapshot; executor registrations are resolved from the current environment. Changing executor configuration therefore affects a later resume or retry. Old workflow formats and removed node fields are rejected.
 
-Aggregate historical runs to find slow or failure-prone steps:
+Cron and webhook configuration lives in `triggers.json`. `trigger validate`, `trigger fire`, and `trigger serve` use the same dispatcher; the persistent scheduler requires `trigger serve` to stay running. See [trigger architecture](docs/trigger-architecture.md) and [stable occurrences / catch-up](docs/cron-occurrences.md). `event` bindings expose the original planned time separately from receipt time; opt into `misfire: "fire-once"` for latest-only catch-up. `trigger status` shows baselines, missed ranges and delivery decisions.
 
-```bash
-agentflow run stats --format json
-agentflow run stats release-review --format json
-agentflow run stats release-review --by-version --format json
-```
+Each workspace runs its own trigger service. One service can schedule several graph files from its `triggers.json`; its shared run worker defaults to one active run. Set `run worker --concurrency N` or `trigger serve --concurrency N` to change admission; an existing worker owns the budget. Services in different workspaces have separate receipts and run stores. Cron-only services do not bind HTTP ports. Webhooks share one listener per workspace: use distinct explicit ports across workspaces, or port `0` for an automatically assigned port (reported on stderr). A second service for the same workspace is rejected. Delivery deduplication and the default `forbid` overlap policy are scoped to each trigger, not to the repositories or sessions its executors use.
 
-Every run records a `workflow_digest`, a content hash of its workflow definition, so `--by-version` (or `--digest <hash>`) compares a workflow before and after a change. Run-level durations cover finished runs only and are split into `active_ms` and human `waiting_ms`.
+CLI stdout contains data; diagnostics go to stderr. Piped output defaults to JSON. Exit codes are `0` success, `1` execution failure, `2` invalid input, `3` not found, `4` permission denied, `5` conflict, and `10` successful dry run. Start requests support idempotency keys. Controls are queued when another process owns the run lock.
 
-Callers such as schedulers, watchdogs, or an agent that woke itself up query results through stable commands instead of reading `.agentflow/runs/`:
+Runtime metrics and user-defined evaluations can be compared across runs. See [observability and evaluation](docs/observability-and-evaluation.md) for the JSON contract, cohort statistics, and a reporting method that keeps efficiency evidence separate from outcome quality.
 
-```bash
-agentflow run latest release-review --status succeeded,failed --format json
-agentflow run list --workflow release-review --status waiting_human --format json
-```
-
-The aggregate includes run counts, average/P50/P95/max durations, human waiting time, retry totals, and input/output/log byte totals. Run data is persisted under `.agentflow/runs/<run-id>/` so it can be inspected or exported by another tool.
+Run `make check` and `make test-e2e` for deterministic verification. Real model testing is opt-in: [testing](docs/testing.md). Release instructions: [releasing](docs/releasing.md).
 
 ## Hub: runs from every machine in one place
 
-Runs stay local, but a Hub collects them into one web console (overview, runs, run detail, workflows, machines) and a read API:
+Runs stay local, but a Hub collects them into one web console (overview, runs, run detail with a step timeline, workflows, machines) and a read API:
 
 ```bash
 # on the Hub machine
-AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0 --port 8787
+AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0 --port 7075
 
-# on every machine that runs workflows
-export AGENTFLOW_HUB_URL=http://hub.example:8787 AGENTFLOW_HUB_TOKEN=...
+# on every machine that runs workflows, from the workflow workspace
+export AGENTFLOW_HUB_URL=http://hub.example:7075 AGENTFLOW_HUB_TOKEN=...
 agentflow hub push --all     # backfill existing runs once
 ```
 
-From then on, commands that change run state report each state change. Reports go to `.agentflow/outbox/` first and are delivered in the background, so a Hub that is slow or down never slows or fails a run. Secrets in errors, inputs, and the reserved `summary`/`reason` result fields are masked before they leave the machine. The protocol carries an `orchestration` field (`json` today), so code-orchestrated runners can report to the same Hub. See [`docs/hub.md`](docs/hub.md).
+From then on, commands that change runs report each state change. Reports go to `hub-outbox/` in the workspace first and are delivered in the background, so a Hub that is slow or down never slows or fails a run. Secrets in errors, inputs and the `summary`/`reason` result fields are masked before they leave the machine. See [`docs/hub.md`](docs/hub.md).
 
-## Workflow visualization
+## Workflow authoring benchmark
 
-Open a workflow definition in a local React Flow based UI:
+[Cold-context authoring benchmark](benchmarks/workflow-authoring/README.md) includes business tasks, private golden workflows, deterministic execution checks, arbitrary agent-command runners, and retained authoring artifacts. `make test-benchmark` verifies the goldens and detects deliberately broken routes, bindings, type handoffs, feedback and loop limits without calling a model. Live authoring runs are opt-in. The [initial report](benchmarks/workflow-authoring/reports/2026-10-23/REPORT.md) distinguishes final task success from errors repaired during authoring.
 
-```bash
-agentflow web workflow.json
-```
+## Feishu human review example
 
-Open the graph for an existing run, including live node status and metrics:
+Follow the [five-step Lark adapter setup guide](examples/lark-review/SETUP.md) for configurable content, buttons, bots and reviewers. It includes a complete workflow, registry, config schema and local checker. The graph uses the generic external executor contract.
 
-```bash
-agentflow web --run <run-id>
-```
+### Durable batch dispatch
 
-The server prints a local URL and refreshes run data every two seconds. Use `--port 0` to let the operating system choose an available port, or `--host 0.0.0.0` when the UI needs to be reached from another machine on a trusted network.
+Use `run enqueue` to persist requests and `run worker --concurrency N` to execute them. Managed start/submit/retry/resume/cancel requests share admission. Parent/child links and opaque labels are creation metadata; CLI and Web expose child status counts and navigation. See [queue usage and recovery boundaries](docs/durable-queue.md).
 
-The UI distinguishes control, structured-data, and conditional edges. Select a node to inspect its contracts, resolved input, structured result, artifacts, and runtime state.
+### Resource quotas
 
-The Runner owns all state transitions. Agent processes receive `AGENTFLOW_RUN_ID`, `AGENTFLOW_NODE_ID`, `AGENTFLOW_NODE_TOKEN`, and `AGENTFLOW_RESULT_FILE`; they write the result file and exit, while the Runner validates the file and advances dependent nodes. An Agent never writes `state.json` or starts the next node directly.
-
-Provider adapters keep vendor-specific CLI and session behavior out of the workflow engine while preserving a generic command escape hatch. Session discovery and history are separate capabilities that can be added without changing workflow definitions.
-
-For reproducible validation, [`docs/testing.md`](docs/testing.md) describes the deterministic test suite and an opt-in smoke workflow that invokes real Claude Code and Codex sessions.
-
-Build a standalone binary with:
-
-```bash
-go build -o agentflow ./cmd/agentflow
-```
-
-## MVP scope
-
-- JSON workflow validation
-- shell, agent, and human nodes
-- dependency ordering and conditional `when` expressions
-- retries, timeouts, and persisted run state
-- structured JSON node results with separate stdout/stderr log artifacts
-- explicit node input/output schemas with runtime validation
-- human approve/reject/resume
-- built-in Claude Code and Codex providers, including workspace and existing-session resume
-- cron/webhook triggers with durable dispatch and idempotent deliveries
+Declare workspace capacities in `resources.json` and per-node `resources` requests to limit actual executor attempts across runs and parallel branches. Resource waits release run admission; abandoned claims remain quarantined until verified cleanup. See [resource contracts](docs/resources.md).

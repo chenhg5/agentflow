@@ -1,0 +1,153 @@
+{
+  "version": "3",
+  "name": "scheduled-review",
+  "entry": "draft",
+  "inputs": {
+    "topic": {
+      "type": "string",
+      "required": true
+    },
+    "reviewer": {
+      "type": "string",
+      "required": true
+    }
+  },
+  "nodes": [
+    {
+      "id": "draft",
+      "execution": {"candidates": [{"executor": "codex", "config": {"instruction": "Topic={{ inputs.topic }}. Previous feedback: {{ nodes.review.result.note }}"}}]},
+      "inputSchema": {
+        "type": "object"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "check"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "review",
+      "execution": {"candidates": [{"executor": "channel", "config": {
+        "recipient": "{{ inputs.reviewer }}",
+        "actions": [
+          {
+            "label": "happy",
+            "output": {
+              "signal": "happy",
+              "note": "happy"
+            }
+          },
+          {
+            "label": "again",
+            "output": {
+              "signal": "again",
+              "note": "again"
+            }
+          },
+          {
+            "label": "sad",
+            "output": {
+              "signal": "sad",
+              "note": "sad"
+            }
+          }
+        ]
+      }}]},
+      "inputSchema": {
+        "type": "object",
+        "properties": {
+          "summary": {
+            "type": "string"
+          },
+          "check": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "summary",
+          "check"
+        ],
+        "additionalProperties": false
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "signal": {
+            "enum": [
+              "happy",
+              "again",
+              "sad"
+            ]
+          },
+          "note": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "signal",
+          "note"
+        ],
+        "additionalProperties": false
+      }
+    },
+    {
+      "id": "finalize",
+      "execution": {"candidates": [{"executor": "codex", "config": {"instruction": "Latest proposal={{ nodes.draft.result.summary }}; feedback={{ nodes.review.result.note }}"}}]},
+      "inputSchema": {
+        "type": "object"
+      },
+      "outputSchema": {
+        "type": "object",
+        "properties": {
+          "next_step": {
+            "type": "string"
+          },
+          "verification": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "next_step",
+          "verification"
+        ],
+        "additionalProperties": false
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "draft",
+      "to": "review"
+    },
+    {
+      "from": "review",
+      "to": "finalize",
+      "when": "nodes.review.result.signal == 'happy'"
+    },
+    {
+      "from": "review",
+      "to": "draft",
+      "when": "nodes.review.result.signal == 'again'",
+      "maxIterations": 2
+    },
+    {
+      "from": "review",
+      "to": "$end"
+    },
+    {
+      "from": "finalize",
+      "to": "$end"
+    }
+  ]
+}

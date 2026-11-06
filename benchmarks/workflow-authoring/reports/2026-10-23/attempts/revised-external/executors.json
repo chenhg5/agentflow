@@ -1,0 +1,20 @@
+{
+  "executors": {
+    "local-draft": {
+      "command": [
+        "python3",
+        "./tests/model_stub.py",
+        "draft"
+      ],
+      "workspace": "."
+    },
+    "local-finalize": {
+      "command": [
+        "python3",
+        "./tests/model_stub.py",
+        "finalize"
+      ],
+      "workspace": "."
+    }
+  }
+}

@@ -61,7 +61,7 @@ func sampleRun() *model.Run {
 	return &model.Run{
 		RunID: "run_1",
 		Workflow: model.Workflow{Name: "nightly", Nodes: []model.Node{
-			{ID: "fetch", Type: "shell"}, {ID: "review", Type: "agent", Provider: "claude"}, {ID: "post", Type: "shell"},
+			{ID: "fetch", Execution: candidates("process")}, {ID: "review", Execution: candidates("codex", "claude-code")}, {ID: "post", Execution: candidates("process")},
 		}},
 		State: model.RunState{
 			RunID: "run_1", WorkflowName: "nightly", WorkflowDigest: "abc", Status: "failed",
@@ -71,7 +71,7 @@ func sampleRun() *model.Run {
 			Nodes: map[string]*model.NodeState{
 				"post":   {Status: "skipped", Reason: "upstream failed"},
 				"fetch":  {Status: "succeeded", Attempts: 1, StartedAt: at(0), FinishedAt: at(10), Result: map[string]any{"summary": "42 issues", "reason": "since yesterday"}},
-				"review": {Status: "failed", Attempts: 2, StartedAt: at(10), FinishedAt: at(30), Error: "401 for token=abcdefghijkl", StdoutBytes: 10, StderrBytes: 5},
+				"review": {Status: "failed", Attempts: 2, SelectedExecutor: "claude-code", StartedAt: at(10), FinishedAt: at(30), Error: "401 for token=abcdefghijkl", StdoutBytes: 10, StderrBytes: 5},
 			},
 		},
 	}
@@ -93,11 +93,14 @@ func TestFromRun(t *testing.T) {
 	if len(report.Steps) != 3 || report.Steps[0].ID != "fetch" || report.Steps[1].ID != "review" || report.Steps[2].ID != "post" {
 		t.Fatalf("steps must follow workflow order: %+v", report.Steps)
 	}
+	if report.Steps[0].Type != "process" {
+		t.Fatalf("a node not started yet reports its first candidate: %+v", report.Steps[0])
+	}
 	if report.Steps[0].Summary != "42 issues" || report.Steps[0].Reason != "since yesterday" || report.Steps[0].DurationMs != 10000 {
 		t.Fatalf("fetch = %+v", report.Steps[0])
 	}
 	review := report.Steps[1]
-	if strings.Contains(review.Error, "abcdefghijkl") || review.Attempts != 2 || review.Provider != "claude" || review.LogBytes != 15 {
+	if strings.Contains(review.Error, "abcdefghijkl") || review.Attempts != 2 || review.Type != "claude-code" || review.LogBytes != 15 {
 		t.Fatalf("review = %+v", review)
 	}
 	if report.Steps[2].SkipReason != "upstream failed" {
@@ -275,4 +278,12 @@ func TestOutboxConcurrentPutsKeepTheHighestSeq(t *testing.T) {
 	if len(pending) != 1 || pending[0].Seq != 200 {
 		t.Fatalf("pending = %+v", pending)
 	}
+}
+
+func candidates(executors ...string) model.Execution {
+	var execution model.Execution
+	for _, executor := range executors {
+		execution.Candidates = append(execution.Candidates, model.ExecutorCandidate{Executor: executor})
+	}
+	return execution
 }

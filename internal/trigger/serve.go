@@ -6,14 +6,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
-	"github.com/robfig/cron/v3"
+	"github.com/chenhg5/agentflow/internal/queue"
+	"github.com/chenhg5/agentflow/internal/store"
 )
 
 type ServeOptions struct {
@@ -26,91 +30,145 @@ func (source WebhookSource) Handler(dispatcher *Dispatcher) http.Handler {
 	return webhookHandler(dispatcher, Config{Triggers: []Definition{source.Definition}})
 }
 
-func Serve(ctx context.Context, root, cwd string, options ServeOptions) error {
+func Serve(ctx context.Context, root, cwd string, options ServeOptions) (serveErr error) {
 	config, err := LoadConfig(root)
 	if err != nil {
 		return err
 	}
+	release, err := acquireWorkspaceLock(ctx, root, "scheduler.lock", false)
+	if errors.Is(err, errWorkspaceBusy) {
+		return fmt.Errorf("%w: %s", ErrServiceBusy, root)
+	}
+	if err != nil {
+		return err
+	}
+	defer release()
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	runtime, err := NewRuntime(root, cwd, options.Workers)
 	if err != nil {
 		return err
 	}
-	runtime.StartWorkers(ctx)
 	dispatcher := &Dispatcher{Root: root, Config: config, Starter: runtime}
-	cronStop, err := startCron(ctx, config, dispatcher)
+	var listener net.Listener
+	for _, definition := range config.Triggers {
+		if definition.Enabled && definition.Source.Kind == "webhook" {
+			host := options.Host
+			if host == "" {
+				host = "127.0.0.1"
+			}
+			listener, err = net.Listen("tcp", net.JoinHostPort(host, strconv.Itoa(options.Port)))
+			if err != nil {
+				return err
+			}
+			defer listener.Close()
+			break
+		}
+	}
+	// Reserve the listener before recovering queued jobs or starting timers.
+	// A port conflict must not launch work from a service that failed to start.
+	if options.Workers < 1 {
+		options.Workers = 1
+	}
+	worker, err := queue.Start(ctx, root, cwd, options.Workers, true)
+	if err != nil && !errors.Is(err, queue.ErrWorkerBusy) {
+		if ctx.Err() != nil {
+			return nil
+		}
+		return err
+	}
+	// An existing worker owns admission. This scheduler only publishes requests.
+	if worker != nil {
+		defer func() {
+			cancel()
+			if err := worker.Wait(); serveErr == nil {
+				serveErr = err
+			}
+		}()
+		// An owned worker's fatal persistence error must stop the service and
+		// reach stderr, rather than leaving a scheduler with no admission owner.
+		go func() { _ = worker.Wait(); cancel() }()
+	}
+	cronStop, err := startCron(ctx, dispatcher)
 	if err != nil {
 		return err
 	}
-	defer cronStop()
+	defer func() {
+		cancel()
+		cronStop()
+	}()
 
-	host := options.Host
-	if host == "" {
-		host = "127.0.0.1"
+	if listener == nil {
+		<-ctx.Done()
+		return nil
 	}
-	server := &http.Server{Addr: fmt.Sprintf("%s:%d", host, options.Port), Handler: webhookHandler(dispatcher, config)}
+	server := &http.Server{Handler: webhookHandler(dispatcher, config)}
+	fmt.Fprintf(os.Stderr, "trigger webhook listener: http://%s\n", listener.Addr())
 	go func() {
 		<-ctx.Done()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = server.Shutdown(shutdownCtx)
 	}()
-	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	if err := server.Serve(listener); err != nil && err != http.ErrServerClosed {
 		return err
 	}
 	return nil
 }
 
-func startCron(ctx context.Context, config Config, dispatcher *Dispatcher) (func(), error) {
-	schedulers := []*cron.Cron{}
-	for _, definition := range config.Triggers {
-		if !definition.Enabled || definition.Source.Kind != "cron" {
-			continue
-		}
-		source := CronSource{Definition: definition}
-		scheduler, err := source.scheduler(func(event Event) { _, _ = dispatcher.Dispatch(context.Background(), event) })
-		if err != nil {
-			return nil, err
-		}
-		scheduler.Start()
-		schedulers = append(schedulers, scheduler)
+func startCron(ctx context.Context, dispatcher *Dispatcher) (func(), error) {
+	cronCtx, cancel := context.WithCancel(ctx)
+	runner := &CronRunner{Dispatcher: dispatcher}
+	if err := runner.Tick(cronCtx, true); err != nil {
+		cancel()
+		return nil, err
 	}
-	stop := func() {
-		for _, scheduler := range schedulers {
-			<-scheduler.Stop().Done()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		ticker := time.NewTicker(500 * time.Millisecond)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-cronCtx.Done():
+				return
+			case <-ticker.C:
+				if err := runner.Tick(cronCtx, false); err != nil && cronCtx.Err() == nil {
+					fmt.Fprintf(os.Stderr, "cron dispatch failed: %v\n", err)
+				}
+			}
 		}
-	}
-	return stop, nil
+	}()
+	return func() { cancel(); <-done }, nil
 }
 
-func (source CronSource) scheduler(emit func(Event)) (*cron.Cron, error) {
-	location := time.UTC
-	if source.Definition.Source.Timezone != "" {
-		loaded, err := time.LoadLocation(source.Definition.Source.Timezone)
-		if err != nil {
-			return nil, fmt.Errorf("trigger %s timezone: %w", source.ID(), err)
-		}
-		location = loaded
-	}
-	parser := cron.NewParser(cron.Minute | cron.Hour | cron.Dom | cron.Month | cron.Dow)
-	scheduler := cron.New(cron.WithLocation(location), cron.WithParser(parser))
-	if _, err := scheduler.AddFunc(source.Definition.Source.Expression, func() {
-		now := time.Now().UTC()
-		emit(Event{TriggerID: source.ID(), SourceKind: source.Kind(), DeliveryID: source.ID() + ":" + now.Format(time.RFC3339), ReceivedAt: now, ScheduledAt: &now, Attributes: map[string]string{}})
-	}); err != nil {
-		return nil, fmt.Errorf("trigger %s cron expression: %w", source.ID(), err)
-	}
-	return scheduler, nil
-}
-
+// Serve is an ephemeral source port. The CLI uses CronRunner's durable cursor.
 func (source CronSource) Serve(ctx context.Context, sink EventSink) error {
-	scheduler, err := source.scheduler(func(event Event) { _ = sink(context.Background(), event) })
+	schedule, err := cronSchedule(source.Definition)
 	if err != nil {
 		return err
 	}
-	scheduler.Start()
-	<-ctx.Done()
-	<-scheduler.Stop().Done()
-	return nil
+	for {
+		planned := schedule.Next(time.Now())
+		if planned.IsZero() {
+			return fmt.Errorf("cron expression has no next occurrence")
+		}
+		timer := time.NewTimer(time.Until(planned))
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return nil
+		case <-timer.C:
+			zone := source.Definition.Source.Timezone
+			if zone == "" {
+				zone = "UTC"
+			}
+			event := Event{TriggerID: source.ID(), SourceKind: "cron", ScheduledAt: &planned, ReceivedAt: time.Now().UTC(), DeliveryID: OccurrenceID(source.ID(), planned), Timezone: zone}
+			if err := sink(ctx, event); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func webhookHandler(dispatcher *Dispatcher, config Config) http.Handler {
@@ -171,6 +229,9 @@ func webhookHandler(dispatcher *Dispatcher, config Config) http.Handler {
 		result, err := dispatcher.Dispatch(request.Context(), event)
 		if err != nil {
 			status := http.StatusUnprocessableEntity
+			if errors.Is(err, store.ErrIdempotencyConflict) {
+				status = http.StatusConflict
+			}
 			if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "disabled") {
 				status = http.StatusNotFound
 			}

@@ -1,0 +1,55 @@
+{
+  "active_node": "measure",
+  "created_at": "2026-10-23T08:57:30.134925Z",
+  "duration_ms": 16,
+  "finished_at": "2026-10-23T08:57:30.151973Z",
+  "history": null,
+  "inputs": {
+    "sample": "invalid-contract-test"
+  },
+  "nodes": {
+    "accept": {
+      "status": "pending"
+    },
+    "measure": {
+      "status": "failed",
+      "workspace": "/private/tmp/agentflow-bench-revised-numeric",
+      "attempts": 1,
+      "durationMs": 16,
+      "inputBytes": 34,
+      "outputBytes": 47,
+      "error": "output schema validation failed: /urgent: at '/urgent': got string, want boolean",
+      "startedAt": "2026-10-23T08:57:30.135529Z",
+      "finishedAt": "2026-10-23T08:57:30.151751Z",
+      "result": {
+        "defects": [],
+        "score": 81,
+        "urgent": "false"
+      },
+      "input": {
+        "sample": "invalid-contract-test"
+      },
+      "artifacts": {
+        "input": "artifacts/measure.1.input.json",
+        "result": "artifacts/measure.1.result.json",
+        "stderrLog": "artifacts/logs/measure.1.stderr.log",
+        "stdoutLog": "artifacts/logs/measure.1.stdout.log"
+      },
+      "leaseToken": "62b5216758e9a77a4e33a7eb3d94703d"
+    },
+    "recheck": {
+      "status": "pending"
+    }
+  },
+  "ok": false,
+  "outcome": "error",
+  "run_id": "run_20261023085730_52a78767a5475312",
+  "started_at": "2026-10-23T08:57:30.135408Z",
+  "status": "failed",
+  "updated_at": "2026-10-23T08:57:30.151973Z",
+  "visits": {
+    "measure": 1
+  },
+  "workflow": "plant-7-quality-inspection",
+  "workflow_digest": "9fb5ae782508"
+}

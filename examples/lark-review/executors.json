@@ -1,0 +1,13 @@
+{
+  "executors": {
+    "codex": {
+      "kind": "codex",
+      "binary": "codex",
+      "sandbox": "workspace-write",
+      "skipGitRepoCheck": true
+    },
+    "lark-review": {
+      "kind": "external"
+    }
+  }
+}

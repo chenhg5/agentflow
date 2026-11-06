@@ -43,7 +43,7 @@ func (c *Counts) add(status domain.Status) {
 		c.Failed++
 	case domain.StatusCancelled:
 		c.Cancelled++
-	case domain.StatusWaiting:
+	case domain.StatusWaiting, domain.StatusWaitingInput:
 		c.Waiting++
 	default:
 		c.Active++
@@ -110,7 +110,7 @@ func (q Query) Overview(ctx context.Context, days int) (Overview, error) {
 		switch {
 		case run.Status == domain.StatusFailed && len(overview.Failures) < 8:
 			overview.Failures = append(overview.Failures, run)
-		case run.Status == domain.StatusWaiting:
+		case run.Status.NeedsInput():
 			overview.Waiting = append(overview.Waiting, run)
 		case run.Status.Active() && len(overview.Running) < 8:
 			overview.Running = append(overview.Running, run)

@@ -14,33 +14,33 @@ CI:     agentflow run start ────────────┘   (Bearer to
 
 ```bash
 export AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24)
-agentflow hub serve --host 0.0.0.0 --port 8787          # 数据默认在 ~/.agentflow/hub/hub.db
+agentflow hub serve --host 0.0.0.0 --port 7075          # 数据默认在 ~/.agentflow/hub/hub.db
 ```
 
-在每台跑 workflow 的机器上（或写进 `~/.agentflow/hub.json`、项目的 `.agentflow/hub.json`）：
+在每台跑 workflow 的机器上（或写进 `~/.agentflow/hub.json`、workflow 工作区里的 `hub.json`）：
 
 ```bash
-export AGENTFLOW_HUB_URL=http://hub.example:8787
+export AGENTFLOW_HUB_URL=http://hub.example:7075
 export AGENTFLOW_HUB_TOKEN=<同一个 token>
 export AGENTFLOW_MACHINE=glenn-mbp                      # 可选，默认主机名
 agentflow hub push --all                                # 一次性补报已有的运行
 agentflow hub status --format json                      # 看配置、待发数量、上次发送结果
 ```
 
-之后 `run start / approve / reject / resume / cancel` 和 `trigger fire / serve` 会自动上报，不需要改 workflow。
+之后会改动运行的命令（`run start / enqueue / worker / submit / resume / retry / cancel / evaluate`、`trigger fire / serve`）会自动上报，运行刚创建（包括排队）时也会报一次，不需要改 workflow。
 
-配置按字段覆盖，后面的赢：`~/.agentflow/hub.json` → `<项目>/.agentflow/hub.json` → 环境变量 `AGENTFLOW_HUB_URL` / `AGENTFLOW_HUB_TOKEN` / `AGENTFLOW_MACHINE`。
+配置按字段覆盖，后面的赢：`~/.agentflow/hub.json` → `<工作区>/hub.json` → 环境变量 `AGENTFLOW_HUB_URL` / `AGENTFLOW_HUB_TOKEN` / `AGENTFLOW_MACHINE`。
 
 项目里的 `hub.json` 跟着仓库走，不可信：**当 Hub 地址来自项目文件时，只会带上同一个文件里的 token**，你在 `~/.agentflow/hub.json` 或环境变量里的 token 不会发给它。这样克隆一个仓库不会把你的 token 引到别人的地址上。
 
 ```json
-{ "url": "http://hub.example:8787", "token": "…", "machine": "build-01" }
+{ "url": "http://hub.example:7075", "token": "…", "machine": "build-01" }
 ```
 
 ## 2. 上报怎么做到「不拖累运行」
 
 - **在引擎外面挂钩子。** `store.SaveState` 每次落盘后通知订阅者，telemetry 订阅它。引擎、审批、取消、trigger worker 不知道 Hub 的存在，以后换引擎（比如代码编排）只要还落状态就会被报上去。
-- **先写本地发件箱，再发。** 每次保存把这次运行的快照写进 `.agentflow/outbox/<run-id>.<seq>.json`（先写临时文件再改名，同一运行的旧快照随即删掉），不碰网络。发完只删 seq 不大于已发那份的文件，所以引擎在发送途中写下的新快照（比如最后的 succeeded）不会被误删；多个 agentflow 进程同时动同一个运行也一样。后台每 10 秒发一次，命令结束时再给 2 秒发一次。发不出去就留着，下次命令或 `hub push` 再发；Hub 宕机期间的运行一条不丢。
+- **先写本地发件箱，再发。** 每次保存把这次运行的快照写进 `<工作区>/hub-outbox/<run-id>.<seq>.json`（先写临时文件再改名，同一运行的旧快照随即删掉），不碰网络。发完只删 seq 不大于已发那份的文件，所以引擎在发送途中写下的新快照（比如最后的 succeeded）不会被误删；多个 agentflow 进程同时动同一个运行也一样。后台每 10 秒发一次，命令结束时再给 2 秒发一次。发不出去就留着，下次命令或 `hub push` 再发；Hub 宕机期间的运行一条不丢。
 - **快照幂等。** 每份快照带 `seq`（`updatedAt` 的纳秒），Hub 只留 seq 最大的那份；重发、乱序、补报都安全。
 - **只读命令不联网。** `run list / get / stats`、`web` 等不装钩子，不会因为 Hub 慢而变慢。
 - **离开机器前脱敏。** 错误、`summary`、`reason`、输入里像令牌的串（`sk-…`、`ghp_…`、`glpat-…`、`sk_live_…`、`npm_…`、`AIza…`、AWS key、JWT、私钥、`Bearer …` / `Basic …`、`token=…`、URL 里的 `user:password@` 等）先打码；名字像密钥的输入整值打码；错误截 2000 字，summary/reason 截 500 字，输入最多 30 个、每个 300 字。stdout/stderr、结果文件全文、产物不上报，只报字节数。
@@ -73,7 +73,9 @@ agentflow hub status --format json                      # 看配置、待发数�
 
 **保留字段 `summary` / `reason`：** 节点结果 JSON 里的 `summary`（做了什么）和 `reason`（为什么这样判断）会原样（脱敏、截断后）显示在运行详情的步骤下面。想让 Hub 上一眼看懂一步做了什么，就在结果里写这两个字段。
 
-**状态：** `pending`、`queued`、`running`、`waiting_human`、`succeeded`、`failed`、`cancelled`、`skipped`（步骤）。
+**状态：** `pending`、`queued`、`running`、`waiting_input`（等人提交表单或外部输入；旧版本的 `waiting_human` 同样处理）、`waiting_resource`（等共享资源）、`succeeded`、`failed`、`cancelled`、`skipped`（步骤）。
+
+**步骤的 `type`** 是这一步用的执行器（`codex`、`claude-code`、`process` 或 `executors.json` 里注册的名字）：选中候选后报选中的那个，还没开始时报第一个候选。
 
 ## 4. 兼容以后的代码编排
 
