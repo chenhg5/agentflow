@@ -197,6 +197,12 @@ func ReadEvents(runDir string) ([]byte, error) {
 
 func NewToken() string { return randomSuffix() + randomSuffix() }
 
+// WriteRunWorkflow replaces a run's workflow.json. Code runs grow their
+// workflow as the script reaches new steps.
+func WriteRunWorkflow(runDir string, workflow model.Workflow) error {
+	return writeJSON(filepath.Join(runDir, "workflow.json"), workflow)
+}
+
 func writeJSON(file string, value any) error {
 	if err := EnsureDir(filepath.Dir(file)); err != nil {
 		return err

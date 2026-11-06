@@ -79,14 +79,33 @@ agentflow hub status --format json                      # 看配置、待发数�
 
 **步骤的 `type`** 是这一步用的执行器（`codex`、`claude-code`、`process` 或 `executors.json` 里注册的名字）：选中候选后报选中的那个，还没开始时报第一个候选。
 
-## 4. 兼容以后的代码编排
+## 4. 代码编排
 
-协议和 Hub 都不认识 JSON workflow 本身，只认「一次运行 + 有序的步骤」：
+除了 JSON 工作流，也可以让脚本自己决定步骤：`agentflow code`。脚本用什么语言都行，调 CLI 就是 SDK。
 
-- `orchestration` 现在是 `json`，代码编排的 runner 报 `code`；页面上会标出来，其余完全一样。
-- 步骤是一个有序列表，`id` 是步骤名。JSON 编排按 workflow 里的节点顺序报；代码编排按步骤第一次出现的顺序报，循环、foreach、子流程里的步骤用带下标的 id（如 `review[2]`、`deploy/notify`）。
-- `workflowDigest` 对 JSON 是定义的哈希，对代码可以是源码或构建的哈希，用来按版本比较。
-- 代码编排的 runner 只要实现「状态变化时产出一份 RunReport」，复用同一个发件箱和发送器（`internal/telemetry` 里与引擎有关的只有 `adapter.go`）。
+```bash
+agentflow code run nightly-triage --input repo=agentflow -- ./nightly.sh
+```
+
+`nightly.sh` 里：
+
+```bash
+count=$(agentflow code step fetch -- ./fetch.sh | jq .count)        # 跑一个命令当一步
+for i in $(seq 1 "$count"); do
+  agentflow code step triage --summary "第 $i 条" -- ./triage.sh "$i"  # 同一步再跑是新的一次
+done
+agentflow code step lint -- make lint &                              # 并行的步骤
+agentflow code step test -- make test &
+wait
+agentflow code step decide --output '{"ship":true}' --summary "发布"  # 脚本自己算完的一步，直接记结果
+```
+
+- `code run` 开一次运行，把 `AGENTFLOW_RUN_ID` 交给脚本，脚本退出码决定运行成败（脚本自己调了 `code end` 就以它为准）。脚本中途退出时还在跑的步骤记为失败。
+- `code step <id> -- <命令>` 和执行器的约定一样：命令可以往 `$AGENTFLOW_RESULT_FILE` 写一个 JSON 对象；stdout / stderr 记进日志，同时显示在脚本的 stderr；非零退出就记为失败并原样返回退出码；结果 JSON 打印到 stdout，方便 `$(...)` 拿。`--summary` / `--reason` 是 Hub 上显示的说明。
+- 不带命令的 `code step <id> --output JSON [--status failed|skipped]` 记录脚本自己做完的一步。
+- 不在 `code run` 里时，用 `code start <name>` 拿运行 ID，传 `--run` 或设 `AGENTFLOW_RUN_ID`，最后 `code end`。
+
+运行和 JSON 工作流存在同一个地方（`runs/<id>/`，workflow 版本是 `code`），`run list / get / metrics` 和 Hub 都认。上报时 `orchestration` 是 `code`，页面上标「代码编排」。流程图按脚本实际走到的顺序长出来：一步接上「上次有步骤开始之后完成的那些步骤」，所以先后执行的是一条链，一起开始的共享前驱，之后的一步把它们汇合。每次改动都在运行目录的系统文件锁里做，脚本并行跑的步骤不会互相覆盖。`run resume / retry` 不会去执行代码运行。
 
 ## 5. Hub 内部结构
 

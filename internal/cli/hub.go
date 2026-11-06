@@ -28,6 +28,8 @@ func reportsRuns(args []string) bool {
 		}
 	case "trigger":
 		return args[1] == "fire" || args[1] == "serve"
+	case "code":
+		return true
 	}
 	return false
 }

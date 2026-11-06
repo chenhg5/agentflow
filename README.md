@@ -164,6 +164,19 @@ agentflow hub push --all     # backfill existing runs once
 
 From then on, commands that change runs report each state change. Reports go to `hub-outbox/` in the workspace first and are delivered in the background, so a Hub that is slow or down never slows or fails a run. Secrets in errors, inputs and the `summary`/`reason` result fields are masked before they leave the machine. See [`docs/hub.md`](docs/hub.md).
 
+## Code orchestration
+
+When a script should decide the steps, record it as a run with `agentflow code`:
+
+```bash
+agentflow code run nightly -- ./nightly.sh
+# inside nightly.sh
+count=$(agentflow code step fetch -- ./fetch.sh | jq .count)
+agentflow code step decide --output '{"ship":true}' --summary "ship it"
+```
+
+Each `code step` runs a command like an executor (result file, logs, exit code) or records work the script did. The run is stored like any other (`run list/get`, metrics) and reports to the Hub as `orchestration: code`. See [`docs/hub.md`](docs/hub.md#4-代码编排).
+
 ## Workflow authoring benchmark
 
 [Cold-context authoring benchmark](benchmarks/workflow-authoring/README.md) includes business tasks, private golden workflows, deterministic execution checks, arbitrary agent-command runners, and retained authoring artifacts. `make test-benchmark` verifies the goldens and detects deliberately broken routes, bindings, type handoffs, feedback and loop limits without calling a model. Live authoring runs are opt-in. The [initial report](benchmarks/workflow-authoring/reports/2026-10-23/REPORT.md) distinguishes final task success from errors repaired during authoring.

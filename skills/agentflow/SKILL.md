@@ -190,3 +190,16 @@ agentflow hub push --all --format json  # 配好后补报这个工作区已有�
 ```
 
 配置靠 `AGENTFLOW_HUB_URL`、`AGENTFLOW_HUB_TOKEN`（或工作区的 `hub.json`、`~/.agentflow/hub.json`），token 向用户要，不要写进仓库。配好后状态变化会自动上报，Hub 挂了不影响运行。想让 Hub 上看得懂每一步，就在节点结果里写 `summary` 和 `reason`。
+
+## 代码编排：脚本自己决定步骤
+
+步骤由代码决定（循环次数看数据、分支多、要调别的程序）时，不必写成 JSON：
+
+```bash
+agentflow code run <name> -- <脚本>          # 整个脚本是一次运行，退出码决定成败
+agentflow code step <id> -- <命令>           # 脚本里：跑一个命令当一步，结果 JSON 打到 stdout
+agentflow code step <id> --output '{...}' --summary "..."   # 记录脚本自己做完的一步
+```
+
+运行记在 `runs/` 里，`run list / get` 和 Hub 都能看，Hub 上标「代码编排」。
+
