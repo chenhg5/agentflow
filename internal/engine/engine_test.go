@@ -84,7 +84,7 @@ func TestAgentResumesSessionInWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	provider := driver.Provider{Command: []string{"sh", "-c", "exit 9"}, ResumeCommand: []string{"sh", "-c", `printf '{"session_id":"%s","workspace":"%s"}' "$AGENTFLOW_SESSION_ID" "$AGENTFLOW_WORKSPACE" > "$AGENTFLOW_RESULT_FILE"`}}
+	provider := driver.Provider{Command: []string{"sh", "-c", "exit 9"}, ResumeCommand: []string{"sh", "-c", `ws=$(printf '%s' "$AGENTFLOW_WORKSPACE" | sed 's/\\/\\\\/g'); printf '{"session_id":"%s","workspace":"%s"}' "$AGENTFLOW_SESSION_ID" "$ws" > "$AGENTFLOW_RESULT_FILE"`}}
 	if err := Execute(run, map[string]driver.Provider{"fake": provider}); err != nil {
 		t.Fatal(err)
 	}
@@ -96,7 +96,7 @@ func TestAgentResumesSessionInWorkspace(t *testing.T) {
 		t.Fatalf("binding = session %q workspace %q", state.SessionID, state.Workspace)
 	}
 	result, ok := state.Result.(map[string]any)
-	if !ok || result["session_id"] != "session-123" {
+	if !ok || result["session_id"] != "session-123" || result["workspace"] != workspace {
 		t.Fatalf("unexpected result: %#v", state.Result)
 	}
 }
