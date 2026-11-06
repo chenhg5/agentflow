@@ -1,13 +1,28 @@
 name: Release
 
-# Pushing a v* tag builds every platform archive with `make release-all` and
-# publishes them as a GitHub prerelease, with changelogs/<tag>.md as the notes.
+# Builds every platform archive with `make release-all` and publishes them as a
+# GitHub prerelease, with changelogs/<tag>.md as the notes. Two ways to start it:
+#
+# - push a v* tag (the tag must match Makefile VERSION), or
+# - run this workflow by hand on main with the version (Actions → Release →
+#   Run workflow, or the API). It checks the same things, builds, and only then
+#   tags the head of main and publishes, so a failed build leaves no tag.
 on:
   push:
     tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to release, e.g. v0.6.1. Must equal Makefile VERSION on main and have changelogs/<version>.md.'
+        required: true
+        type: string
 
 permissions:
   contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -22,23 +37,43 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
+      - name: Decide the tag
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "workflow_dispatch" ]; then
+            tag="$INPUT_VERSION"
+            echo "$tag" | grep -Eq '^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.]+)?$' || { echo "version $tag is not vX.Y.Z" >&2; exit 1; }
+            test "$GITHUB_REF" = "refs/heads/main" || { echo "manual releases run on main, not $GITHUB_REF" >&2; exit 1; }
+            if git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null; then
+              echo "tag $tag already exists; push the tag or pick a new version" >&2; exit 1
+            fi
+          else
+            tag="$GITHUB_REF_NAME"
+          fi
+          echo "TAG=$tag" >> "$GITHUB_ENV"
       - name: Check the tag matches the Makefile and has notes
         run: |
-          tag="${GITHUB_REF_NAME}"
           version="$(sed -n 's/^VERSION *:= *//p' Makefile)"
-          test "$tag" = "$version" || { echo "tag $tag does not match Makefile VERSION $version" >&2; exit 1; }
-          test -f "changelogs/$tag.md" || { echo "missing changelogs/$tag.md" >&2; exit 1; }
+          test "$TAG" = "$version" || { echo "tag $TAG does not match Makefile VERSION $version" >&2; exit 1; }
+          test -f "changelogs/$TAG.md" || { echo "missing changelogs/$TAG.md" >&2; exit 1; }
       - name: Build archives
         run: make release-all
+      - name: Tag main (manual release)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          tag="${GITHUB_REF_NAME}"
-          if gh release view "$tag" >/dev/null 2>&1; then
-            echo "release $tag already exists; uploading missing assets only"
-            gh release upload "$tag" dist/*.tar.gz dist/*.zip dist/checksums.txt
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "release $TAG already exists; uploading missing assets only"
+            gh release upload "$TAG" dist/*.tar.gz dist/*.zip dist/checksums.txt
           else
-            gh release create "$tag" dist/*.tar.gz dist/*.zip dist/checksums.txt \
-              --title "$tag" --notes-file "changelogs/$tag.md" --prerelease --verify-tag
+            gh release create "$TAG" dist/*.tar.gz dist/*.zip dist/checksums.txt \
+              --title "$TAG" --notes-file "changelogs/$TAG.md" --prerelease --verify-tag
           fi
