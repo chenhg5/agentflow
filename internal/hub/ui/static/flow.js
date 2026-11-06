@@ -107,3 +107,6 @@ function mountAll() {
 
 mountAll();
 document.addEventListener("hub:refresh", mountAll);
+// Mount any canvas that appears later, whatever replaced the page content:
+// the live refresh, or an older cached hub.js that does not send hub:refresh.
+new MutationObserver(mountAll).observe(document.body, { childList: true, subtree: true });
