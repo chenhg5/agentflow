@@ -82,6 +82,8 @@ type Run struct {
 	Inputs        map[string]string
 	Error         string
 	Steps         []Step
+	// Graph is stored once per workflow version (see GraphKey), not per run.
+	Graph *Graph
 }
 
 // Step is one node of a JSON workflow or one step of a code workflow.

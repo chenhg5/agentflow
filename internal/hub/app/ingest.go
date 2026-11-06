@@ -37,6 +37,13 @@ func (s Ingest) Accept(ctx context.Context, runs []domain.Run) (IngestResult, er
 		if err != nil {
 			return result, err
 		}
+		// The graph is saved even from a stale snapshot, so backfilling runs
+		// the Hub already has (from an older runner) adds their canvas.
+		if run.Graph != nil {
+			if err := s.Store.SaveGraph(ctx, domain.GraphKey(run), *run.Graph); err != nil {
+				return result, err
+			}
+		}
 		if !saved {
 			result.Stale++
 			continue

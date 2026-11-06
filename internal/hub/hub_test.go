@@ -63,7 +63,9 @@ func sample() hubapi.Batch {
 	return hubapi.Batch{Reports: []hubapi.RunReport{{
 		Protocol: 1, Source: hubapi.Source{Machine: "laptop", Version: "v1"}, RunID: "run_1", Workflow: "nightly",
 		Status: "failed", Seq: 1, StartedAt: started.Format(time.RFC3339Nano), FinishedAt: started.Add(30 * time.Second).Format(time.RFC3339Nano),
-		DurationMs: 30000, Error: "probe: exit 3", Inputs: map[string]string{"issue": "ABC-1"},
+		DurationMs: 30000, Error: "probe: exit 3", Inputs: map[string]string{"issue": "ABC-1"}, WorkflowDigest: "d1",
+		Graph: &hubapi.Graph{Entry: "fetch", Nodes: []hubapi.GraphNode{{ID: "fetch", Executors: []string{"process"}}, {ID: "probe", Executors: []string{"claude-code"}}},
+			Edges: []hubapi.GraphEdge{{Source: "fetch", Target: "probe", Condition: "x < 1 && y > \"<b>\""}, {Source: "probe", Target: "$end"}}},
 		Steps: []hubapi.StepReport{
 			{ID: "fetch", Type: "shell", Status: "succeeded", Attempts: 1, StartedAt: started.Format(time.RFC3339Nano), FinishedAt: started.Add(10 * time.Second).Format(time.RFC3339Nano), DurationMs: 10000, Summary: "拉到 42 条"},
 			{ID: "probe", Type: "agent", Provider: "claude", Status: "failed", Attempts: 2, StartedAt: started.Add(10 * time.Second).Format(time.RFC3339Nano), FinishedAt: started.Add(30 * time.Second).Format(time.RFC3339Nano), DurationMs: 20000, Error: "exit 3", Reason: "<script>alert(1)</script>"},
@@ -137,7 +139,7 @@ func TestPagesAndReadAPI(t *testing.T) {
 		"/runs":                         {"run_1", "probe: exit 3"},
 		"/runs?status=failed":           {"run_1"},
 		"/runs?status=succeeded":        {"没有符合条件的运行"},
-		"/runs/laptop/run_1":            {"失败在 <span class=\"mono\">probe</span>", "拉到 42 条", "ABC-1", "&lt;script&gt;alert(1)&lt;/script&gt;", "×2"},
+		"/runs/laptop/run_1":            {"失败在 <span class=\"mono\">probe</span>", "拉到 42 条", "ABC-1", "&lt;script&gt;alert(1)&lt;/script&gt;", "×2", "流程图", "data-flow=", "/static/flow.js"},
 		"/workflows":                    {"nightly"},
 		"/machines":                     {"laptop"},
 		"/api/v1/overview?days=7":       {`"days":7`, `"failed":1`},
@@ -161,6 +163,9 @@ func TestPagesAndReadAPI(t *testing.T) {
 		if strings.Contains(body, "<script>alert(1)") {
 			t.Errorf("%s: step text was not escaped", path)
 		}
+	}
+	if _, body := get(t, srv.URL+"/runs/laptop/run_1", nil); strings.Contains(body, `"<b>`) || !strings.Contains(body, `\u003cb\u003e`) {
+		t.Error("graph data in the page must stay HTML-escaped")
 	}
 	if status, _ := get(t, srv.URL+"/runs/laptop/missing", nil); status != http.StatusNotFound {
 		t.Errorf("missing run page: %d", status)
@@ -213,5 +218,16 @@ func TestOpenStore(t *testing.T) {
 	}
 	if _, err := hub.OpenStore(context.Background(), "postgres://x"); err == nil {
 		t.Fatal("unknown store kinds must be refused")
+	}
+}
+
+func TestRunPageWithoutGraphHasNoCanvas(t *testing.T) {
+	srv := server(t, hub.Options{}, true)
+	batch := sample()
+	batch.Reports[0].Graph = nil
+	post(t, srv.URL, "", batch)
+	_, body := get(t, srv.URL+"/runs/laptop/run_1", nil)
+	if strings.Contains(body, "data-flow") {
+		t.Fatal("a run reported without a graph shows no canvas")
 	}
 }

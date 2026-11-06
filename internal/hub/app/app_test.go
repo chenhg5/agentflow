@@ -108,3 +108,26 @@ func TestRunsClampsLimit(t *testing.T) {
 		t.Fatalf("got %d of %d", len(runs), total)
 	}
 }
+
+func TestGraphsAreStoredPerWorkflowVersion(t *testing.T) {
+	ctx := context.Background()
+	store := memory.New()
+	first := report("m1", "r1", "wf", "succeeded", now, 1)
+	first.Digest = "v1"
+	first.Graph = &domain.Graph{Entry: "a", Nodes: []domain.GraphNode{{ID: "a"}}}
+	second := report("m1", "r2", "wf", "running", now, 1)
+	second.Digest = "v1" // same version, no graph sent again
+	other := report("m1", "r3", "wf", "running", now, 1)
+	other.Digest = "v2"
+	withoutGraph := first
+	withoutGraph.Graph = nil
+	app.Ingest{Store: store}.Accept(ctx, []domain.Run{withoutGraph})         // an older runner reported r1 first
+	app.Ingest{Store: store}.Accept(ctx, []domain.Run{first, second, other}) // backfill: r1 is stale, its graph still lands
+	query := app.Query{Store: store}
+	for id, want := range map[string]bool{"r1": true, "r2": true, "r3": false} {
+		run, err := query.Run(ctx, domain.RunKey{Machine: "m1", RunID: id})
+		if err != nil || (run.Graph != nil) != want {
+			t.Fatalf("%s: graph %v, want %v (%v)", id, run.Graph != nil, want, err)
+		}
+	}
+}

@@ -158,7 +158,7 @@ func securityHeaders(next http.Handler) http.Handler {
 		header.Set("X-Content-Type-Options", "nosniff")
 		header.Set("X-Frame-Options", "DENY")
 		header.Set("Referrer-Policy", "same-origin")
-		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'none'")
+		header.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' https://esm.sh; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com; font-src https://fonts.gstatic.com; img-src 'self' data:; frame-ancestors 'none'")
 		next.ServeHTTP(w, r)
 	})
 }

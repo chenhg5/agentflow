@@ -152,9 +152,20 @@ func (q Query) Runs(ctx context.Context, filter RunFilter) ([]domain.Run, int, e
 	return q.Store.List(ctx, filter)
 }
 
-// Run returns one run with its steps.
+// Run returns one run with its steps and, when known, its workflow graph.
 func (q Query) Run(ctx context.Context, key domain.RunKey) (domain.Run, error) {
-	return q.Store.Get(ctx, key)
+	run, err := q.Store.Get(ctx, key)
+	if err != nil {
+		return run, err
+	}
+	graph, found, err := q.Store.Graph(ctx, domain.GraphKey(run))
+	if err != nil {
+		return run, err
+	}
+	if found {
+		run.Graph = &graph
+	}
+	return run, nil
 }
 
 // Machines lists machines, most recently seen first.

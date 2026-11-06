@@ -15,13 +15,14 @@ type Store struct {
 	mu       sync.RWMutex
 	runs     map[domain.RunKey]domain.Run
 	machines map[string]domain.Machine
+	graphs   map[string]domain.Graph
 }
 
 var _ app.Store = (*Store)(nil)
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{runs: map[domain.RunKey]domain.Run{}, machines: map[string]domain.Machine{}}
+	return &Store{runs: map[domain.RunKey]domain.Run{}, machines: map[string]domain.Machine{}, graphs: map[string]domain.Graph{}}
 }
 
 func (s *Store) Save(_ context.Context, run domain.Run) (bool, error) {
@@ -91,6 +92,20 @@ func (s *Store) Machines(_ context.Context) ([]domain.Machine, error) {
 	return out, nil
 }
 
+func (s *Store) SaveGraph(_ context.Context, key string, graph domain.Graph) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.graphs[key] = graph
+	return nil
+}
+
+func (s *Store) Graph(_ context.Context, key string) (domain.Graph, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	graph, ok := s.graphs[key]
+	return graph, ok, nil
+}
+
 func (s *Store) Close() error { return nil }
 
 // Matches reports whether run passes filter.
@@ -151,5 +166,6 @@ func clone(run domain.Run) domain.Run {
 		run.Inputs = inputs
 	}
 	run.Steps = append([]domain.Step(nil), run.Steps...)
+	run.Graph = nil // graphs live in their own map
 	return run
 }

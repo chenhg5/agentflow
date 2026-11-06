@@ -40,6 +40,17 @@ func runFromReport(report hubapi.RunReport) (domain.Run, error) {
 		Error:         report.Error,
 		Steps:         make([]domain.Step, 0, len(report.Steps)),
 	}
+	if report.Graph != nil {
+		graph := domain.Graph{Entry: report.Graph.Entry}
+		for _, node := range report.Graph.Nodes {
+			graph.Nodes = append(graph.Nodes, domain.GraphNode{ID: node.ID, Executors: node.Executors, Parallel: node.Parallel, Join: node.Join})
+		}
+		for _, edge := range report.Graph.Edges {
+			graph.Edges = append(graph.Edges, domain.GraphEdge{Source: edge.Source, Target: edge.Target, Condition: edge.Condition,
+				MaxIterations: edge.MaxIterations, Parallel: edge.Parallel})
+		}
+		run.Graph = &graph
+	}
 	if report.Trigger != nil {
 		run.TriggerKind, run.TriggerID = report.Trigger.Kind, report.Trigger.ID
 	}

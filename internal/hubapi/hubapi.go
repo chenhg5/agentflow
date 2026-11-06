@@ -73,6 +73,9 @@ type RunReport struct {
 	Inputs         map[string]string `json:"inputs,omitempty"`
 	Error          string            `json:"error,omitempty"`
 	Steps          []StepReport      `json:"steps"`
+	// Graph is the workflow's shape, for the Hub's canvas. It is the same for
+	// every run of one workflow version, so the Hub keeps one per digest.
+	Graph *Graph `json:"graph,omitempty"`
 }
 
 // StepReport is one node of a JSON workflow, or one step of a code workflow.
@@ -95,4 +98,29 @@ type StepReport struct {
 	Reason      string `json:"reason,omitempty"`
 	OutputBytes int64  `json:"outputBytes,omitempty"`
 	LogBytes    int64  `json:"logBytes,omitempty"`
+}
+
+// Graph describes a workflow as nodes and edges. A code-orchestrated runner
+// may omit it, or send the steps it discovered as nodes with no edges.
+type Graph struct {
+	Entry string      `json:"entry,omitempty"`
+	Nodes []GraphNode `json:"nodes"`
+	Edges []GraphEdge `json:"edges"`
+}
+
+// GraphNode is one node; Executors are its candidates in priority order.
+type GraphNode struct {
+	ID        string   `json:"id"`
+	Executors []string `json:"executors,omitempty"`
+	Parallel  bool     `json:"parallel,omitempty"` // dispatches to every matching edge
+	Join      []string `json:"join,omitempty"`     // waits for these predecessors
+}
+
+// GraphEdge is one transition. Target "$end" ends the run.
+type GraphEdge struct {
+	Source        string `json:"source"`
+	Target        string `json:"target"`
+	Condition     string `json:"condition,omitempty"`
+	MaxIterations int    `json:"maxIterations,omitempty"`
+	Parallel      bool   `json:"parallel,omitempty"`
 }

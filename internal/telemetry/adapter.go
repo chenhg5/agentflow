@@ -60,6 +60,7 @@ func FromRun(run *model.Run, source hubapi.Source, asOf time.Time) hubapi.RunRep
 	if report.Workflow == "" {
 		report.Workflow = run.Workflow.Name
 	}
+	report.Graph = graphOf(run.Workflow)
 	if trigger := run.State.Trigger; trigger != nil {
 		report.Trigger = &hubapi.Trigger{ID: trigger.ID, Kind: trigger.Kind, DeliveryID: trigger.DeliveryID, ScheduledAt: trigger.ScheduledAt}
 	}
@@ -143,4 +144,31 @@ func executorOf(node model.Node, state *model.NodeState) string {
 		return node.Execution.Candidates[0].Executor
 	}
 	return ""
+}
+
+// graphOf describes the workflow for the Hub's canvas. Conditions are
+// expressions from the workflow file, not run data, but they are clipped and
+// masked like any other text that leaves the machine.
+func graphOf(workflow model.Workflow) *hubapi.Graph {
+	if len(workflow.Nodes) == 0 {
+		return nil
+	}
+	out := &hubapi.Graph{Entry: workflow.Entry, Nodes: make([]hubapi.GraphNode, 0, len(workflow.Nodes)), Edges: make([]hubapi.GraphEdge, 0, len(workflow.Edges))}
+	parallel := map[string]bool{}
+	for _, node := range workflow.Nodes {
+		item := hubapi.GraphNode{ID: node.ID, Parallel: node.Dispatch == "all"}
+		for _, candidate := range node.Execution.Candidates {
+			item.Executors = append(item.Executors, candidate.Executor)
+		}
+		if node.Join != nil {
+			item.Join = append([]string(nil), node.Join.From...)
+		}
+		parallel[node.ID] = item.Parallel
+		out.Nodes = append(out.Nodes, item)
+	}
+	for _, edge := range workflow.Edges {
+		out.Edges = append(out.Edges, hubapi.GraphEdge{Source: edge.From, Target: edge.To, Condition: clip(Redact(edge.When), maxSummaryRunes),
+			MaxIterations: edge.MaxIterations, Parallel: parallel[edge.From]})
+	}
+	return out
 }

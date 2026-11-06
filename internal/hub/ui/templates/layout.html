@@ -4,17 +4,17 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}} · agentflow Hub</title>
-<link rel="icon" href="/static/logo.svg" type="image/svg+xml">
+<link rel="icon" href="{{asset "logo.svg"}}" type="image/svg+xml">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap">
-<link rel="stylesheet" href="/static/hub.css">
-<script src="/static/theme.js"></script>
+<link rel="stylesheet" href="{{asset "hub.css"}}">
+<script src="{{asset "theme.js"}}"></script>
 </head>
 <body>
 <div class="shell">
   <aside class="sidebar">
     <a class="brand" href="/">
-      <span class="brand-mark"><img src="/static/logo.svg" alt="" width="20" height="20"></span>
+      <span class="brand-mark"><img src="{{asset "logo.svg"}}" alt="" width="20" height="20"></span>
       <span class="brand-text"><span class="brand-name">agentflow</span><span class="brand-sub">Hub</span></span>
     </a>
     <nav class="nav" aria-label="页面">
@@ -38,6 +38,6 @@
     </main>
   </div>
 </div>
-<script src="/static/hub.js" defer></script>
+<script src="{{asset "hub.js"}}" defer></script>
 </body>
 </html>{{end}}

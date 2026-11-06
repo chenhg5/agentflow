@@ -109,6 +109,9 @@ func TestFromRun(t *testing.T) {
 	if !strings.HasPrefix(report.Error, "review: 401") || strings.Contains(report.Error, "abcdefghijkl") {
 		t.Fatalf("run error = %q", report.Error)
 	}
+	if report.Graph == nil || len(report.Graph.Nodes) != 3 || report.Graph.Nodes[1].Executors[1] != "claude-code" {
+		t.Fatalf("graph = %+v", report.Graph)
+	}
 	if report.Inputs["issue"] != "ABC-1" || report.Inputs["api_key"] != "***" {
 		t.Fatalf("inputs = %+v", report.Inputs)
 	}

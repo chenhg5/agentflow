@@ -5,7 +5,9 @@ package ui
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"embed"
+	"encoding/hex"
 	"errors"
 	"html/template"
 	"io/fs"
@@ -13,6 +15,7 @@ import (
 	"net/http"
 	"net/url"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/hub/api"
@@ -33,9 +36,38 @@ type Pages struct {
 	pages   map[string]*template.Template
 }
 
+// assetURLs maps each static file to /static/<name>?v=<content hash>, so a
+// browser never pairs a new page with a stylesheet or script it cached
+// before the Hub was upgraded.
+func assetURLs() map[string]string {
+	urls := map[string]string{}
+	fs.WalkDir(staticFS, "static", func(path string, entry fs.DirEntry, err error) error {
+		if err != nil || entry.IsDir() {
+			return err
+		}
+		data, err := staticFS.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		sum := sha256.Sum256(data)
+		name := strings.TrimPrefix(path, "static/")
+		urls[name] = "/static/" + name + "?v=" + hex.EncodeToString(sum[:6])
+		return nil
+	})
+	return urls
+}
+
 // New parses the templates once.
 func New(query app.Query, version string) (*Pages, error) {
-	base, err := template.New("").Funcs(funcs()).ParseFS(templateFS, "templates/layout.html", "templates/parts.html")
+	assets := assetURLs()
+	helpers := funcs()
+	helpers["asset"] = func(name string) string {
+		if url, ok := assets[name]; ok {
+			return url
+		}
+		return "/static/" + name
+	}
+	base, err := template.New("").Funcs(helpers).ParseFS(templateFS, "templates/layout.html", "templates/parts.html")
 	if err != nil {
 		return nil, err
 	}
@@ -53,7 +85,7 @@ func New(query app.Query, version string) (*Pages, error) {
 // Register mounts the pages and static files behind view.
 func (p *Pages) Register(mux *http.ServeMux, view api.Guard) {
 	static, _ := fs.Sub(staticFS, "static")
-	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheFor(time.Hour, http.FileServer(http.FS(static)))))
+	mux.Handle("GET /static/", http.StripPrefix("/static/", cacheStatic(http.FileServer(http.FS(static)))))
 	mux.Handle("GET /{$}", view(http.HandlerFunc(p.overview)))
 	mux.Handle("GET /runs", view(http.HandlerFunc(p.runs)))
 	mux.Handle("GET /runs/{machine}/{run}", view(http.HandlerFunc(p.run)))
@@ -201,6 +233,7 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 
 type runData struct {
 	Run      domain.Run
+	Flow     string
 	Timeline []timelineRow
 	Done     int
 	Failed   *domain.Step
@@ -218,7 +251,7 @@ func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, err)
 		return
 	}
-	data := runData{Run: run, Timeline: timeline(run, clock())}
+	data := runData{Run: run, Flow: flowJSON(run), Timeline: timeline(run, clock())}
 	for index, step := range run.Steps {
 		if step.Status == domain.StatusSucceeded || step.Status == domain.StatusSkipped {
 			data.Done++
@@ -289,9 +322,15 @@ func (p *Pages) fail(w http.ResponseWriter, err error) {
 	http.Error(w, "hub error: "+err.Error(), http.StatusInternalServerError)
 }
 
-func cacheFor(age time.Duration, next http.Handler) http.Handler {
+// cacheStatic lets browsers keep fingerprinted URLs (?v=) for a year and
+// makes them revalidate anything else.
+func cacheStatic(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Cache-Control", "public, max-age="+itoa(int(age.Seconds())))
+		if r.URL.Query().Get("v") != "" {
+			w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		} else {
+			w.Header().Set("Cache-Control", "no-cache")
+		}
 		next.ServeHTTP(w, r)
 	})
 }

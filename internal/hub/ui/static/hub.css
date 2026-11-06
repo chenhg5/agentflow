@@ -1,46 +1,30 @@
-/* agentflow Hub: the Loops console's look (TapNow tokens), cut down to what
-   the Hub shows. Dark by default, light given the same care. Status is always
-   icon + text + colour, never colour alone. */
+/* agentflow Hub: the Loops console's "control room" theme, cut down to what
+   the Hub shows. Dark by default, light given the same care. Agent = cool
+   cyan, person = warm rose; status colours (good / warn / bad) are a separate
+   set used only for status, always with an icon and text. */
 :root {
   --radius: 0.625rem;
-  --white: #ffffff;
-  --black: #000000;
-  --neutral-025: #fafafa;
-  --neutral-050: #f2f2f2;
-  --neutral-100: #eaeaea;
-  --neutral-150: #e2e2e2;
-  --neutral-250: #d0d0d0;
-  --neutral-450: #9c9c9c;
-  --neutral-500: #8e8e8e;
-  --neutral-650: #606060;
-  --neutral-700: #525252;
-  --neutral-800: #363636;
-  --neutral-850: #2e2e2e;
-  --neutral-900: #262626;
-  --neutral-950: #1e1e1e;
-  --neutral-975: #171717;
-  --tap-pink: #e896c9;
-
-  /* dark (default) */
-  --background: var(--neutral-975);
-  --foreground: var(--neutral-050);
-  --card: var(--neutral-950);
-  --muted: var(--neutral-900);
-  --muted-foreground: var(--neutral-500);
-  --accent: var(--neutral-850);
-  --border: var(--neutral-850);
-  --axis: var(--neutral-800);
-  --primary: rgb(31, 162, 220);
-  --agent: var(--primary);
-  --agent-soft: color-mix(in srgb, var(--primary) 16%, transparent);
-  --human: var(--tap-pink);
-  --human-soft: color-mix(in srgb, var(--tap-pink) 14%, transparent);
-  --good: #4caf50;
-  --good-soft: color-mix(in srgb, var(--good) 14%, transparent);
-  --warn: #ff9800;
-  --warn-soft: color-mix(in srgb, var(--warn) 14%, transparent);
-  --bad: rgb(255, 97, 99);
-  --bad-soft: color-mix(in srgb, var(--bad) 14%, transparent);
+  --background: #090c12;
+  --foreground: #e8eef8;
+  --card: #10151f;
+  --muted: #141a27;
+  --muted-foreground: #7f8ca4;
+  --accent: #19212f;
+  --border: rgb(148 170 210 / 0.12);
+  --axis: #33405a;
+  --sidebar: #0c1018;
+  --ring: #4fd6e8;
+  --primary: #4fd6e8;
+  --agent: #4fd6e8;
+  --agent-soft: rgb(79 214 232 / 0.12);
+  --human: #ff6fa8;
+  --human-soft: rgb(255 111 168 / 0.12);
+  --good: #3ddc84;
+  --good-soft: rgb(61 220 132 / 0.12);
+  --warn: #ffc94d;
+  --warn-soft: rgb(255 201 77 / 0.12);
+  --bad: #ff7a7a;
+  --bad-soft: rgb(255 122 122 / 0.12);
   --glow: 1;
   color-scheme: dark;
 
@@ -51,49 +35,53 @@
 
 @media (prefers-color-scheme: light) {
   :root:not([data-theme="dark"]) {
-    --background: var(--neutral-050);
-    --foreground: var(--neutral-975);
-    --card: var(--white);
-    --muted: var(--neutral-025);
-    --muted-foreground: var(--neutral-650);
-    --accent: var(--neutral-150);
-    --border: var(--neutral-100);
-    --axis: var(--neutral-250);
-    --primary: rgb(31, 153, 211);
-    --agent: #1f78b4;
-    --agent-soft: color-mix(in srgb, var(--primary) 12%, transparent);
-    --human: color-mix(in srgb, var(--tap-pink) 65%, var(--black));
-    --human-soft: color-mix(in srgb, var(--tap-pink) 22%, transparent);
-    --good: #166534;
-    --good-soft: color-mix(in srgb, var(--good) 10%, transparent);
-    --warn: #854d0e;
-    --warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
-    --bad: #b91c1c;
-    --bad-soft: color-mix(in srgb, var(--bad) 9%, transparent);
+    --background: #f4f6fa;
+    --foreground: #0c1424;
+    --card: #ffffff;
+    --muted: #eef1f6;
+    --muted-foreground: #66728a;
+    --accent: #e9edf3;
+    --border: rgb(20 36 64 / 0.11);
+    --axis: #c3cad8;
+    --sidebar: #eef1f6;
+    --ring: #0a8ea3;
+    --primary: #0a8ea3;
+    --agent: #0a8ea3;
+    --agent-soft: rgb(10 142 163 / 0.1);
+    --human: #d6306f;
+    --human-soft: rgb(214 48 111 / 0.09);
+    --good: #13883f;
+    --good-soft: rgb(19 136 63 / 0.1);
+    --warn: #9a5b00;
+    --warn-soft: rgb(250 178 25 / 0.16);
+    --bad: #c62828;
+    --bad-soft: rgb(198 40 40 / 0.09);
     --glow: 0;
     color-scheme: light;
   }
 }
 :root[data-theme="light"] {
-  --background: var(--neutral-050);
-  --foreground: var(--neutral-975);
-  --card: var(--white);
-  --muted: var(--neutral-025);
-  --muted-foreground: var(--neutral-650);
-  --accent: var(--neutral-150);
-  --border: var(--neutral-100);
-  --axis: var(--neutral-250);
-  --primary: rgb(31, 153, 211);
-  --agent: #1f78b4;
-  --agent-soft: color-mix(in srgb, var(--primary) 12%, transparent);
-  --human: color-mix(in srgb, var(--tap-pink) 65%, var(--black));
-  --human-soft: color-mix(in srgb, var(--tap-pink) 22%, transparent);
-  --good: #166534;
-  --good-soft: color-mix(in srgb, var(--good) 10%, transparent);
-  --warn: #854d0e;
-  --warn-soft: color-mix(in srgb, var(--warn) 12%, transparent);
-  --bad: #b91c1c;
-  --bad-soft: color-mix(in srgb, var(--bad) 9%, transparent);
+  --background: #f4f6fa;
+  --foreground: #0c1424;
+  --card: #ffffff;
+  --muted: #eef1f6;
+  --muted-foreground: #66728a;
+  --accent: #e9edf3;
+  --border: rgb(20 36 64 / 0.11);
+  --axis: #c3cad8;
+  --sidebar: #eef1f6;
+  --ring: #0a8ea3;
+  --primary: #0a8ea3;
+  --agent: #0a8ea3;
+  --agent-soft: rgb(10 142 163 / 0.1);
+  --human: #d6306f;
+  --human-soft: rgb(214 48 111 / 0.09);
+  --good: #13883f;
+  --good-soft: rgb(19 136 63 / 0.1);
+  --warn: #9a5b00;
+  --warn-soft: rgb(250 178 25 / 0.16);
+  --bad: #c62828;
+  --bad-soft: rgb(198 40 40 / 0.09);
   --glow: 0;
   color-scheme: light;
 }
@@ -134,7 +122,7 @@ code { background: var(--muted); border-radius: 4px; padding: 1px 5px; }
 
 /* shell */
 .shell { display: grid; grid-template-columns: 224px minmax(0, 1fr); min-height: 100vh; }
-.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; padding: 16px 12px; border-right: 1px solid var(--border); }
+.sidebar { position: sticky; top: 0; height: 100vh; display: flex; flex-direction: column; gap: 18px; padding: 16px 12px; border-right: 1px solid var(--border); background: var(--sidebar); }
 .brand { display: flex; align-items: center; gap: 10px; padding: 0 4px; }
 .brand-mark { display: grid; place-items: center; width: 32px; height: 32px; border: 1px solid var(--border); border-radius: 8px; background: var(--card); }
 .brand-text { display: flex; flex-direction: column; line-height: 1.2; }
@@ -289,6 +277,29 @@ a.pill:hover { background: var(--accent); }
 .kv dd { margin: 0; overflow-wrap: anywhere; }
 .empty-hub { align-items: flex-start; gap: 10px; padding: 24px; }
 .empty-hub .code { width: 100%; }
+
+
+/* canvas */
+.flow { height: 520px; border: 1px solid var(--border); border-radius: 10px; background: var(--background); margin: 0 -4px; display: grid; place-items: center; overflow: hidden; }
+.flow > .react-flow { width: 100%; height: 100%; }
+.flow-offline { padding: 24px; text-align: center; color: var(--muted-foreground); font-size: 12.5px; }
+.flow .react-flow__node.flow-node { background: var(--card); color: var(--foreground); border: 1px solid var(--border); border-radius: 10px; padding: 8px 10px; width: 200px; text-align: left; font-family: var(--font-sans); box-shadow: none; }
+.flow .react-flow__node.flow-node.selected { box-shadow: 0 0 0 2px var(--ring); }
+.flow-card { display: flex; flex-direction: column; gap: 3px; }
+.flow-head { display: flex; align-items: center; gap: 6px; }
+.flow-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.flow-name { font-family: var(--font-mono); font-size: 12px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-meta { font-size: 11px; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow-stats { display: flex; gap: 8px; font-size: 11px; color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+.flow .react-flow__controls { box-shadow: none; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.flow .react-flow__controls-button { background: var(--card); border-bottom: 1px solid var(--border); fill: var(--foreground); }
+.flow .react-flow__controls-button:hover { background: var(--accent); }
+.sw.agent { background: var(--agent); }
+.sw.human { background: var(--human); }
+.ln { display: inline-block; width: 14px; height: 0; border-top: 2px dashed; }
+.ln.cond { border-color: var(--warn); }
+.ln.loop { border-color: var(--human); border-top-style: dotted; }
+@media (max-width: 860px) { .flow { height: 360px; } }
 
 @media (max-width: 1100px) {
   .kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
