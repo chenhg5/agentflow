@@ -5,6 +5,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/chenhg5/agentflow/internal/hub/app"
 	"github.com/chenhg5/agentflow/internal/hub/domain"
@@ -104,6 +105,28 @@ func (s *Store) Graph(_ context.Context, key string) (domain.Graph, bool, error)
 	defer s.mu.RUnlock()
 	graph, ok := s.graphs[key]
 	return graph, ok, nil
+}
+
+func (s *Store) DeleteFinishedBefore(_ context.Context, cutoff time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	removed := 0
+	for key, run := range s.runs {
+		if run.Status.Finished() && run.When().Before(cutoff) {
+			delete(s.runs, key)
+			removed++
+		}
+	}
+	used := map[string]bool{}
+	for _, run := range s.runs {
+		used[domain.GraphKey(run)] = true
+	}
+	for key := range s.graphs {
+		if !used[key] {
+			delete(s.graphs, key)
+		}
+	}
+	return removed, nil
 }
 
 func (s *Store) Close() error { return nil }

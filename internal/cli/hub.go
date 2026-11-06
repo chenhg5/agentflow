@@ -6,6 +6,8 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"syscall"
 	"time"
 
@@ -73,6 +75,14 @@ func hubServe(parsed parsedArgs) error {
 		}
 		dsn = "sqlite:" + filepath.Join(home, ".agentflow", "hub", "hub.db")
 	}
+	retainText := parsed.Retain
+	if retainText == "" {
+		retainText = os.Getenv("AGENTFLOW_HUB_RETAIN")
+	}
+	retain, err := parseRetention(retainText)
+	if err != nil {
+		return usageError(err.Error(), "Use --retain 90d, --retain 720h, or --retain 0 to keep runs forever.", "invalid_retain")
+	}
 	port := 7075
 	if parsed.PortSet {
 		port = parsed.Port
@@ -81,12 +91,16 @@ func hubServe(parsed parsedArgs) error {
 	defer cancel()
 	server, err := hub.New(ctx, hub.Options{
 		Host: parsed.Host, Port: port, Store: dsn, Version: version.Version,
-		IngestToken: os.Getenv("AGENTFLOW_HUB_TOKEN"), ViewToken: os.Getenv("AGENTFLOW_HUB_VIEW_TOKEN"),
+		IngestToken: os.Getenv("AGENTFLOW_HUB_TOKEN"), ViewToken: os.Getenv("AGENTFLOW_HUB_VIEW_TOKEN"), Retain: retain,
 	})
 	if err != nil {
 		return usageError(err.Error(), "Run `agentflow hub --help` for the options.", "hub_serve")
 	}
-	fmt.Fprintf(os.Stderr, "agentflow hub listening on %s (store %s)\n", server.URL(), dsn)
+	kept := "forever"
+	if retain > 0 {
+		kept = fmt.Sprintf("%dd", int(retain.Hours()/24))
+	}
+	fmt.Fprintf(os.Stderr, "agentflow hub listening on %s (store %s, finished runs kept %s)\n", server.URL(), dsn, kept)
 	if err := server.Serve(ctx); err != nil {
 		return internalError(err)
 	}
@@ -161,7 +175,7 @@ func hubStatus(parsed parsedArgs, root string) error {
 
 func printHubHelp() {
 	fmt.Println(`Usage:
-  agentflow hub serve [--host 127.0.0.1] [--port 7075] [--db sqlite:<path>|memory:]
+  agentflow hub serve [--host 127.0.0.1] [--port 7075] [--db sqlite:<path>|memory:] [--retain 90d]
   agentflow hub push [--all] [--format json|table]
   agentflow hub status [--format json|table]
 
@@ -175,7 +189,9 @@ each state change in <workspace>/hub-outbox and deliver it in the background.
 A Hub that is down never fails a run: reports wait in the outbox. Use
 "hub push --all" once to backfill runs from before the Hub was configured.
 
-Hub side: "hub serve" stores runs in SQLite (default ~/.agentflow/hub/hub.db).
+Hub side: "hub serve" stores runs in SQLite (default ~/.agentflow/hub/hub.db) and
+removes finished runs older than --retain (default 90d, AGENTFLOW_HUB_RETAIN;
+0 keeps them forever). Runs still going or waiting for input are always kept.
 AGENTFLOW_HUB_TOKEN authenticates runners and is required beyond loopback; there
 the pages ask for it as the password (any user name), or for
 AGENTFLOW_HUB_VIEW_TOKEN when that is set.
@@ -183,4 +199,29 @@ AGENTFLOW_HUB_VIEW_TOKEN when that is set.
 Examples:
   AGENTFLOW_HUB_TOKEN=$(openssl rand -hex 24) agentflow hub serve --host 0.0.0.0
   AGENTFLOW_HUB_URL=http://hub.local:7075 AGENTFLOW_HUB_TOKEN=... agentflow hub push --all`)
+}
+
+// defaultRetention keeps finished runs for 90 days.
+const defaultRetention = 90 * 24 * time.Hour
+
+// parseRetention reads "90d", "720h", "45m" or "0"; empty means the default.
+func parseRetention(value string) (time.Duration, error) {
+	value = strings.TrimSpace(value)
+	switch {
+	case value == "":
+		return defaultRetention, nil
+	case value == "0":
+		return 0, nil
+	case strings.HasSuffix(value, "d"):
+		days, err := strconv.Atoi(strings.TrimSuffix(value, "d"))
+		if err != nil || days < 0 {
+			return 0, fmt.Errorf("--retain %q: days must be a whole number", value)
+		}
+		return time.Duration(days) * 24 * time.Hour, nil
+	}
+	duration, err := time.ParseDuration(value)
+	if err != nil || duration < 0 {
+		return 0, fmt.Errorf("--retain %q is not a duration", value)
+	}
+	return duration, nil
 }

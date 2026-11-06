@@ -36,6 +36,8 @@ type Options struct {
 	ViewToken string
 	Version   string
 	Logf      func(format string, args ...any)
+	// Retain keeps finished runs this long; zero keeps them forever.
+	Retain time.Duration
 }
 
 // OpenStore opens the store a DSN names.
@@ -62,6 +64,7 @@ func OpenStore(ctx context.Context, dsn string) (app.Store, error) {
 
 // Server is a running Hub.
 type Server struct {
+	retain   time.Duration
 	store    app.Store
 	http     *http.Server
 	listener net.Listener
@@ -96,7 +99,7 @@ func New(ctx context.Context, options Options) (*Server, error) {
 	if logf == nil {
 		logf = log.Printf
 	}
-	return &Server{store: store, listener: listener, logf: logf, http: &http.Server{
+	return &Server{retain: options.Retain, store: store, listener: listener, logf: logf, http: &http.Server{
 		Handler: handler, ReadHeaderTimeout: 10 * time.Second, ReadTimeout: time.Minute, WriteTimeout: time.Minute, IdleTimeout: 2 * time.Minute,
 	}}, nil
 }
@@ -132,6 +135,7 @@ func (s *Server) URL() string { return "http://" + s.listener.Addr().String() }
 // Serve runs until ctx is done, then shuts down gracefully.
 func (s *Server) Serve(ctx context.Context) error {
 	defer s.store.Close()
+	go app.Retention{Store: s.store, Keep: s.retain, Logf: s.logf}.Every(ctx, time.Hour)
 	errs := make(chan error, 1)
 	go func() { errs <- s.http.Serve(s.listener) }()
 	select {
