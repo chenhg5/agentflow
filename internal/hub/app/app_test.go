@@ -8,16 +8,15 @@ import (
 	"github.com/chenhg5/agentflow/internal/hub/app"
 	"github.com/chenhg5/agentflow/internal/hub/domain"
 	"github.com/chenhg5/agentflow/internal/hub/store/memory"
-	"github.com/chenhg5/agentflow/internal/hubapi"
 )
 
 var now = time.Date(2026, 11, 6, 12, 0, 0, 0, time.Local)
 
-func report(machine, id, workflow, status string, started time.Time, seq int64) hubapi.RunReport {
-	return hubapi.RunReport{
-		Protocol: hubapi.ProtocolVersion, Source: hubapi.Source{Machine: machine, Hostname: machine + ".local", Version: "v1"},
-		RunID: id, Workflow: workflow, Status: status, Seq: seq, StartedAt: started.UTC().Format(time.RFC3339Nano),
-		DurationMs: 10000, Steps: []hubapi.StepReport{{ID: "a", Status: status, Summary: "did a"}},
+func report(machine, id, workflow, status string, started time.Time, seq int64) domain.Run {
+	return domain.Run{
+		Key: domain.RunKey{Machine: machine, RunID: id}, Hostname: machine + ".local", Version: "v1", Orchestration: "json",
+		Workflow: workflow, Status: domain.Status(status), Seq: seq, StartedAt: started.UTC(),
+		DurationMs: 10000, Steps: []domain.Step{{ID: "a", Status: domain.Status(status), Summary: "did a"}},
 	}
 }
 
@@ -27,14 +26,13 @@ func TestIngestCountsAcceptedStaleAndRejected(t *testing.T) {
 	ingest := app.Ingest{Store: store, Now: func() time.Time { return now }}
 	bad := report("m1", "r3", "wf", "exploded", now, 1)
 	noMachine := report("", "r4", "wf", "succeeded", now, 1)
-	oldProtocol := report("m1", "r5", "wf", "succeeded", now, 1)
-	oldProtocol.Protocol = 99
-	result, err := ingest.Accept(ctx, []hubapi.RunReport{
+	noSeq := report("m1", "r5", "wf", "succeeded", now, 0)
+	result, err := ingest.Accept(ctx, []domain.Run{
 		report("m1", "r1", "wf", "running", now, 1),
 		report("m1", "r1", "wf", "succeeded", now, 2),
 		report("m1", "r1", "wf", "running", now, 1), // arrives late
 		report("m2", "r2", "wf", "failed", now, 1),
-		bad, noMachine, oldProtocol,
+		bad, noMachine, noSeq,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -43,7 +41,7 @@ func TestIngestCountsAcceptedStaleAndRejected(t *testing.T) {
 		t.Fatalf("result = %+v", result)
 	}
 	run, err := store.Get(ctx, domain.RunKey{Machine: "m1", RunID: "r1"})
-	if err != nil || run.Status != domain.StatusSucceeded || run.Orchestration != hubapi.OrchestrationJSON || run.Steps[0].Summary != "did a" {
+	if err != nil || run.Status != domain.StatusSucceeded || !run.ReceivedAt.Equal(now.UTC()) || run.Steps[0].Summary != "did a" {
 		t.Fatalf("run = %+v, %v", run, err)
 	}
 	machines, _ := store.Machines(ctx)
@@ -52,24 +50,12 @@ func TestIngestCountsAcceptedStaleAndRejected(t *testing.T) {
 	}
 }
 
-func TestIngestKeepsCodeOrchestration(t *testing.T) {
-	ctx := context.Background()
-	store := memory.New()
-	code := report("m1", "r1", "wf", "succeeded", now, 1)
-	code.Orchestration = hubapi.OrchestrationCode
-	app.Ingest{Store: store}.Accept(ctx, []hubapi.RunReport{code})
-	run, _ := store.Get(ctx, domain.RunKey{Machine: "m1", RunID: "r1"})
-	if run.Orchestration != "code" {
-		t.Fatalf("orchestration = %q", run.Orchestration)
-	}
-}
-
 func TestOverview(t *testing.T) {
 	ctx := context.Background()
 	store := memory.New()
 	ingest := app.Ingest{Store: store, Now: func() time.Time { return now }}
 	day := 24 * time.Hour
-	ingest.Accept(ctx, []hubapi.RunReport{
+	ingest.Accept(ctx, []domain.Run{
 		report("m1", "r1", "build", "succeeded", now.Add(-2*day), 1),
 		report("m1", "r2", "build", "failed", now.Add(-2*day+time.Hour), 1),
 		report("m1", "r3", "build", "succeeded", now.Add(-time.Hour), 1),

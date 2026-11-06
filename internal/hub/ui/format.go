@@ -191,19 +191,7 @@ func funcs() template.FuncMap {
 		"icon": icon, "badge": badge, "dot": dot, "ago": ago, "clock": clockTime, "duration": duration,
 		"percent": percent, "runURL": runURL, "short": shortID, "trigger": triggerLabel, "orchestration": orchestrationLabel,
 		"firstLine": firstLine, "label": func(s domain.Status) string { return lookOf(s).Label },
-		"tone": func(s domain.Status) string { return lookOf(s).Tone },
-		"query": func(pairs ...string) template.URL {
-			values := url.Values{}
-			for index := 0; index+1 < len(pairs); index += 2 {
-				if pairs[index+1] != "" {
-					values.Set(pairs[index], pairs[index+1])
-				}
-			}
-			if len(values) == 0 {
-				return "?"
-			}
-			return template.URL("?" + values.Encode())
-		},
+		"tone":       func(s domain.Status) string { return lookOf(s).Tone },
 		"pathEscape": url.PathEscape,
 	}
 }

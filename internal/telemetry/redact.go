@@ -16,12 +16,18 @@ var secretPatterns = []*regexp.Regexp{
 	regexp.MustCompile(`(?:AKIA|ASIA)[0-9A-Z]{16}`),
 	regexp.MustCompile(`lin_(?:api|oauth)_[A-Za-z0-9]{16,}`),
 	regexp.MustCompile(`vck_[A-Za-z0-9]{16,}`),
+	regexp.MustCompile(`glpat-[A-Za-z0-9_-]{20,}`),
+	regexp.MustCompile(`(?:sk|rk|pk)_(?:live|test)_[A-Za-z0-9]{16,}`),
+	regexp.MustCompile(`npm_[A-Za-z0-9]{30,}`),
+	regexp.MustCompile(`AIza[0-9A-Za-z_-]{35}`),
 	regexp.MustCompile(`eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}`),
 	regexp.MustCompile(`-----BEGIN [A-Z ]*PRIVATE KEY-----[\s\S]*?(?:-----END [A-Z ]*PRIVATE KEY-----|$)`),
 }
 
 var (
-	bearerPattern   = regexp.MustCompile(`(?i)(bearer\s+)[A-Za-z0-9._~+/=-]{12,}`)
+	bearerPattern = regexp.MustCompile(`(?i)\b((?:bearer|basic|token)\s+)[A-Za-z0-9._~+/=-]{8,}`)
+	// scheme://user:password@host — git remotes, database URLs, proxies.
+	userinfoPattern = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.-]*://)[^\s/:@]+:[^\s/@]+@`)
 	keyValuePattern = regexp.MustCompile(`(?i)((?:token|secret|password|passwd|api[_-]?key|access[_-]?key|private[_-]?key|authorization)["']?\s*[:=]\s*["']?)[^\s"',;&]{6,}`)
 	secretKeyName   = regexp.MustCompile(`(?i)(token|secret|password|passwd|credential|api[_-]?key|access[_-]?key|private[_-]?key|auth)`)
 )
@@ -36,6 +42,7 @@ func Redact(text string) string {
 	for _, pattern := range secretPatterns {
 		text = pattern.ReplaceAllString(text, masked)
 	}
+	text = userinfoPattern.ReplaceAllString(text, "${1}"+masked+"@")
 	text = bearerPattern.ReplaceAllString(text, "${1}"+masked)
 	return keyValuePattern.ReplaceAllString(text, "${1}"+masked)
 }

@@ -31,6 +31,7 @@ func post(t *testing.T, url, token string, batch hubapi.Batch) *http.Response {
 	t.Helper()
 	body, _ := json.Marshal(batch)
 	request, _ := http.NewRequest(http.MethodPost, url+hubapi.IngestPath, bytes.NewReader(body))
+	request.Header.Set("Content-Type", "application/json")
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)
 	}
@@ -96,6 +97,35 @@ func TestIngestRefusesOversizedBatchAndBadJSON(t *testing.T) {
 	response.Body.Close()
 	if response.StatusCode != http.StatusBadRequest {
 		t.Fatalf("bad json: %d", response.StatusCode)
+	}
+	body, _ := json.Marshal(sample())
+	response, _ = http.Post(srv.URL+hubapi.IngestPath, "text/plain", bytes.NewReader(body))
+	response.Body.Close()
+	if response.StatusCode != http.StatusUnsupportedMediaType {
+		t.Fatalf("a form or text/plain post (what a web page can send cross-origin) must be refused: %d", response.StatusCode)
+	}
+}
+
+func TestIngestTranslatesTheProtocol(t *testing.T) {
+	srv := server(t, hub.Options{}, true)
+	batch := sample()
+	code := batch.Reports[0]
+	code.RunID, code.Orchestration = "run_code", hubapi.OrchestrationCode
+	future := batch.Reports[0]
+	future.RunID, future.Protocol = "run_future", 99
+	batch.Reports = append(batch.Reports, code, future)
+	var result hubapi.IngestResult
+	json.NewDecoder(post(t, srv.URL, "", batch).Body).Decode(&result)
+	if result.Accepted != 2 || len(result.Rejected) != 1 || !strings.Contains(result.Rejected[0], "run_future") {
+		t.Fatalf("result = %+v", result)
+	}
+	_, body := get(t, srv.URL+"/api/v1/runs/laptop/run_code", nil)
+	if !strings.Contains(body, `"orchestration":"code"`) {
+		t.Fatalf("code orchestration lost: %s", body)
+	}
+	_, body = get(t, srv.URL+"/api/v1/runs/laptop/run_1", nil)
+	if !strings.Contains(body, `"orchestration":"json"`) {
+		t.Fatalf("json orchestration default lost: %s", body)
 	}
 }
 

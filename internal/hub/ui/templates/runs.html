@@ -20,9 +20,12 @@
 <form class="filters" method="get" action="/runs" data-autosubmit>
   <div class="tabs" role="group" aria-label="状态">
     {{$status := .Status}}{{$wf := .Filter.Workflow}}{{$machine := .Filter.Machine}}
-    {{range .Tabs}}<a href="/runs{{query "status" .Status "workflow" $wf "machine" $machine}}" {{if eq .Status $status}}aria-current="page"{{end}}>{{.Label}}</a>{{end}}
+    {{range .Tabs}}<a href="{{.Href}}" {{if eq .Status $status}}aria-current="page"{{end}}>{{.Label}}</a>{{end}}
   </div>
   <input type="hidden" name="status" value="{{.Status}}">
+  {{with .Filter.Project}}<input type="hidden" name="project" value="{{.}}">{{end}}
+  {{if not .Filter.Since.IsZero}}<input type="hidden" name="since" value="{{.Filter.Since.Format "2006-01-02T15:04:05Z07:00"}}">{{end}}
+  {{if not .Filter.Until.IsZero}}<input type="hidden" name="until" value="{{.Filter.Until.Format "2006-01-02T15:04:05Z07:00"}}">{{end}}
   <label class="select"><span class="sr-only">Workflow</span>
     <select name="workflow"><option value="">全部 workflow</option>{{range .Workflows}}<option value="{{.}}" {{if eq . $wf}}selected{{end}}>{{.}}</option>{{end}}</select>
   </label>
@@ -36,12 +39,12 @@
   {{if .Runs}}{{template "runTable" .Runs}}{{else}}<p class="empty">没有符合条件的运行。</p>{{end}}
 </section>
 
-{{if or (ge .Prev 0) (ge .Next 0)}}
+{{if or .PrevHref .NextHref}}
 <nav class="pager" aria-label="翻页">
   <span class="muted num">第 {{.From}}–{{.To}} 条，共 {{.Total}} 条</span>
   <span>
-    {{if ge .Prev 0}}<a class="button" href="/runs{{query "status" .Status "workflow" .Filter.Workflow "machine" .Filter.Machine "offset" (print .Prev)}}">上一页</a>{{end}}
-    {{if ge .Next 0}}<a class="button" href="/runs{{query "status" .Status "workflow" .Filter.Workflow "machine" .Filter.Machine "offset" (print .Next)}}">下一页</a>{{end}}
+    {{with .PrevHref}}<a class="button" href="{{.}}">上一页</a>{{end}}
+    {{with .NextHref}}<a class="button" href="{{.}}">下一页</a>{{end}}
   </span>
 </nav>
 {{end}}

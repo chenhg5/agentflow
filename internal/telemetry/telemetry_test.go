@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -18,6 +19,8 @@ func TestRedact(t *testing.T) {
 		"sk-abcdefghijklmnopqrstuvwxyz123456", "ghp_abcdefghijklmnopqrstuvwxyz0123", "github_pat_abcdefghijklmnopqrstuvwxyz",
 		"xoxb-1234567890-abcdef", "AKIAABCDEFGHIJKLMNOP", "lin_api_abcdefghijklmnop1234", "vck_abcdefghijklmnop1234",
 		"eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.abcdefghijklmnop",
+		"glpat-abcdefghijklmnopqrst", "sk_live_abcdefghijklmnop1234", "npm_abcdefghijklmnopqrstuvwxyz0123456789",
+		"AIzaSyA1234567890abcdefghijklmnopqrstuv",
 	} {
 		if got := Redact("leaked " + secret + " here"); strings.Contains(got, secret) || !strings.Contains(got, "***") {
 			t.Errorf("%s not masked: %q", secret, got)
@@ -38,6 +41,9 @@ func TestRedact(t *testing.T) {
 	}
 	if got := redactValue("GITHUB_TOKEN", "anything"); got != "***" {
 		t.Errorf("secret-named input not masked: %q", got)
+	}
+	if got := redactValue("DATABASE_URL", "postgres://app:pw@db/main"); got != "postgres://***@db/main" {
+		t.Errorf("DSN input not masked: %q", got)
 	}
 	if got := redactValue("issue", "ABC-1"); got != "ABC-1" {
 		t.Errorf("plain input changed: %q", got)
@@ -199,15 +205,74 @@ func TestLoadConfigLayers(t *testing.T) {
 	os.WriteFile(filepath.Join(home, ".agentflow", ConfigFile), []byte(`{"url":"http://home/","token":"t1","machine":"laptop"}`), 0o600)
 	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"url":"http://project"}`), 0o600)
 	config, err := LoadConfig(root)
-	if err != nil || config.URL != "http://project" || config.Token != "t1" || config.Machine != "laptop" {
-		t.Fatalf("layers: %+v %v", config, err)
+	if err != nil || config.URL != "http://project" || config.Token != "" || config.Machine != "laptop" {
+		t.Fatalf("a project URL must not receive the user's token: %+v %v", config, err)
 	}
 	t.Setenv("AGENTFLOW_HUB_TOKEN", "t2")
-	if config, _ := LoadConfig(root); config.Token != "t2" {
-		t.Fatalf("env must win: %+v", config)
+	if config, _ := LoadConfig(root); config.Token != "" {
+		t.Fatalf("nor the token from the environment: %+v", config)
 	}
+	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"url":"http://project","token":"p1"}`), 0o600)
+	if config, _ := LoadConfig(root); config.Token != "p1" {
+		t.Fatalf("a project token goes with the project URL: %+v", config)
+	}
+	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"machine":"build"}`), 0o600)
+	if config, _ := LoadConfig(root); config.URL != "http://home" || config.Token != "t2" || config.Machine != "build" {
+		t.Fatalf("user URL keeps the user token: %+v", config)
+	}
+	t.Setenv("AGENTFLOW_HUB_URL", "http://env")
+	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"url":"http://project"}`), 0o600)
+	if config, _ := LoadConfig(root); config.URL != "http://env" || config.Token != "t2" {
+		t.Fatalf("env URL wins and keeps the env token: %+v", config)
+	}
+	t.Setenv("AGENTFLOW_HUB_URL", "")
 	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{`), 0o600)
 	if _, err := LoadConfig(root); err == nil {
 		t.Fatal("a broken config file must be reported")
+	}
+}
+
+// The engine saves while a background flush is delivering: the newest snapshot
+// must survive, whatever the interleaving.
+func TestOutboxNeverDropsANewerSnapshotUnderConcurrency(t *testing.T) {
+	for trial := 0; trial < 300; trial++ {
+		outbox := NewOutbox(t.TempDir())
+		outbox.Put(hubapi.RunReport{RunID: "r", Seq: 1})
+		sent, _ := outbox.Pending()
+		done := make(chan struct{})
+		go func() {
+			outbox.Done(sent[0])
+			close(done)
+		}()
+		outbox.Put(hubapi.RunReport{RunID: "r", Seq: 2, Status: "succeeded"})
+		<-done
+		pending, _ := outbox.Pending()
+		if len(pending) != 1 || pending[0].Seq != 2 {
+			t.Fatalf("trial %d: pending = %+v", trial, pending)
+		}
+	}
+}
+
+func TestOutboxConcurrentPutsKeepTheHighestSeq(t *testing.T) {
+	outbox := NewOutbox(t.TempDir())
+	var wg sync.WaitGroup
+	errs := make(chan error, 200)
+	for seq := 1; seq <= 200; seq++ {
+		wg.Add(1)
+		go func(seq int64) {
+			defer wg.Done()
+			if err := outbox.Put(hubapi.RunReport{RunID: "r", Seq: seq}); err != nil {
+				errs <- err
+			}
+		}(int64(seq))
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Errorf("put: %v", err)
+	}
+	pending, _ := outbox.Pending()
+	if len(pending) != 1 || pending[0].Seq != 200 {
+		t.Fatalf("pending = %+v", pending)
 	}
 }

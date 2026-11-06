@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -60,5 +61,18 @@ func TestRunsChart(t *testing.T) {
 		if got := niceCeiling(peak); got != want {
 			t.Errorf("niceCeiling(%d) = %d, want %d", peak, got, want)
 		}
+	}
+}
+
+func TestRunsHrefKeepsEveryFilter(t *testing.T) {
+	current := url.Values{"project": {"demo"}, "since": {"2026-11-01"}, "status": {"failed"}, "offset": {"50"}}
+	if got := runsHref(current, "offset", "100"); got != "/runs?offset=100&project=demo&since=2026-11-01&status=failed" {
+		t.Errorf("next = %s", got)
+	}
+	if got := runsHref(current, "status", "", "offset", ""); got != "/runs?project=demo&since=2026-11-01" {
+		t.Errorf("tab = %s", got)
+	}
+	if current.Get("offset") != "50" {
+		t.Error("runsHref must not change the current query")
 	}
 }

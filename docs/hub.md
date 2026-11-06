@@ -31,6 +31,8 @@ agentflow hub status --format json                      # 看配置、待发数�
 
 配置按字段覆盖，后面的赢：`~/.agentflow/hub.json` → `<项目>/.agentflow/hub.json` → 环境变量 `AGENTFLOW_HUB_URL` / `AGENTFLOW_HUB_TOKEN` / `AGENTFLOW_MACHINE`。
 
+项目里的 `hub.json` 跟着仓库走，不可信：**当 Hub 地址来自项目文件时，只会带上同一个文件里的 token**，你在 `~/.agentflow/hub.json` 或环境变量里的 token 不会发给它。这样克隆一个仓库不会把你的 token 引到别人的地址上。
+
 ```json
 { "url": "http://hub.example:8787", "token": "…", "machine": "build-01" }
 ```
@@ -38,14 +40,14 @@ agentflow hub status --format json                      # 看配置、待发数�
 ## 2. 上报怎么做到「不拖累运行」
 
 - **在引擎外面挂钩子。** `store.SaveState` 每次落盘后通知订阅者，telemetry 订阅它。引擎、审批、取消、trigger worker 不知道 Hub 的存在，以后换引擎（比如代码编排）只要还落状态就会被报上去。
-- **先写本地发件箱，再发。** 每次保存把这次运行的最新快照写进 `.agentflow/outbox/<run-id>.json`（只留最新的一份），不碰网络。后台每 10 秒发一次，命令结束时再给 2 秒发一次。发不出去就留着，下次命令或 `hub push` 再发；Hub 宕机期间的运行一条不丢。
+- **先写本地发件箱，再发。** 每次保存把这次运行的快照写进 `.agentflow/outbox/<run-id>.<seq>.json`（先写临时文件再改名，同一运行的旧快照随即删掉），不碰网络。发完只删 seq 不大于已发那份的文件，所以引擎在发送途中写下的新快照（比如最后的 succeeded）不会被误删；多个 agentflow 进程同时动同一个运行也一样。后台每 10 秒发一次，命令结束时再给 2 秒发一次。发不出去就留着，下次命令或 `hub push` 再发；Hub 宕机期间的运行一条不丢。
 - **快照幂等。** 每份快照带 `seq`（`updatedAt` 的纳秒），Hub 只留 seq 最大的那份；重发、乱序、补报都安全。
 - **只读命令不联网。** `run list / get / stats`、`web` 等不装钩子，不会因为 Hub 慢而变慢。
-- **离开机器前脱敏。** 错误、`summary`、`reason`、输入里像令牌的串（`sk-…`、`ghp_…`、JWT、私钥、`Bearer …`、`token=…` 等）先打码；名字像密钥的输入整值打码；错误截 2000 字，summary/reason 截 500 字，输入最多 30 个、每个 300 字。stdout/stderr、结果文件全文、产物不上报，只报字节数。
+- **离开机器前脱敏。** 错误、`summary`、`reason`、输入里像令牌的串（`sk-…`、`ghp_…`、`glpat-…`、`sk_live_…`、`npm_…`、`AIza…`、AWS key、JWT、私钥、`Bearer …` / `Basic …`、`token=…`、URL 里的 `user:password@` 等）先打码；名字像密钥的输入整值打码；错误截 2000 字，summary/reason 截 500 字，输入最多 30 个、每个 300 字。stdout/stderr、结果文件全文、产物不上报，只报字节数。
 
 ## 3. 上报协议（v1）
 
-`POST /api/v1/reports`，`Authorization: Bearer <token>`，一批最多 100 份：
+`POST /api/v1/reports`，`Content-Type: application/json`，`Authorization: Bearer <token>`，一批最多 100 份：
 
 ```json
 {
@@ -90,12 +92,14 @@ agentflow hub status --format json                      # 看配置、待发数�
 | --- | --- | --- |
 | `internal/hubapi` | 线上协议（runner 和 Hub 共用的唯一契约） | 无 |
 | `internal/hub/domain` | 运行、步骤、机器、状态；校验和「谁新」的规则 | 无 |
-| `internal/hub/app` | 用例：`Ingest`（收报告）、`Query`（总览、列表、详情、统计）；存储端口 `Store` | domain |
+| `internal/hub/app` | 用例：`Ingest`（存运行）、`Query`（总览、列表、详情、统计）；存储端口 `Store` | domain |
 | `internal/hub/store/sqlite`、`memory` | 端口的实现；`storetest` 是每个实现都要过的契约测试 | app, domain |
-| `internal/hub/api` | JSON 接口和鉴权 | app |
-| `internal/hub/ui` | 服务端渲染的页面（`html/template` + 内嵌 CSS，样式取自 Loops 控制台，不需要前端构建） | app, api |
+| `internal/hub/api` | JSON 接口和鉴权；把协议翻译成领域对象（防腐层，`translate.go`） | app, domain, hubapi |
+| `internal/hub/ui` | 服务端渲染的页面（`html/template` + 内嵌 CSS，样式取自 Loops 控制台，不需要前端构建） | app, domain, api |
 | `internal/hub` | 组装：按 DSN 选存储、挂路由、安全头 | 以上 |
-| `internal/telemetry` | runner 侧：配置、适配、脱敏、发件箱、发送 | hubapi, model, store |
+| `internal/telemetry` | runner 侧：配置、适配、脱敏、发件箱、发送 | hubapi, model, store, metrics, version |
+
+协议只在 `api` 和 `telemetry` 两头出现；领域和用例不认识它，协议升版本时只改这两处的翻译。
 
 换数据库：实现 `app.Store`、跑通 `storetest.Run`、在 `hub.OpenStore` 里加一个 DSN 前缀。仓储只做过滤和分页，聚合在 `app.Query` 里算，所以不依赖数据库特有的功能。
 
@@ -108,7 +112,7 @@ SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo
 | 本机（默认 `127.0.0.1`） | 设了 `AGENTFLOW_HUB_TOKEN` 就要 token，没设就不要 | 不要 |
 | 其它地址 | 必须设 `AGENTFLOW_HUB_TOKEN`，否则拒绝启动 | 要：浏览器弹登录框，用户名随意，密码填 `AGENTFLOW_HUB_VIEW_TOKEN`（没设就用上报 token）；接口用 `Authorization: Bearer` |
 
-`/healthz` 不鉴权。Hub 没有自带 TLS，跨网络使用时放在反向代理或内网后面。
+`/healthz` 不鉴权。上报接口只收 `Content-Type: application/json`：网页不经 CORS 预检发不出这种请求，而 Hub 从不放行预检，所以你浏览的网页没法往本机的 Hub 塞假运行。Hub 没有自带 TLS，跨网络使用时放在反向代理或内网后面。
 
 ## 7. 读接口
 

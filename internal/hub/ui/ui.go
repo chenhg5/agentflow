@@ -100,9 +100,10 @@ func (p *Pages) overview(w http.ResponseWriter, r *http.Request) {
 type statusTab struct {
 	Label  string
 	Status string
+	Href   string
 }
 
-var statusTabs = []statusTab{{"全部", ""}, {"运行中", "running"}, {"等人处理", "waiting_human"}, {"失败", "failed"}, {"成功", "succeeded"}, {"已取消", "cancelled"}}
+var statusTabs = []statusTab{{Label: "全部"}, {Label: "运行中", Status: "running"}, {Label: "等人处理", Status: "waiting_human"}, {Label: "失败", Status: "failed"}, {Label: "成功", Status: "succeeded"}, {Label: "已取消", Status: "cancelled"}}
 
 type runsData struct {
 	Runs      []domain.Run
@@ -113,10 +114,30 @@ type runsData struct {
 	Workflows []string
 	Machines  []string
 	Stat      *app.WorkflowStat
-	Prev      int
-	Next      int
+	PrevHref  string
+	NextHref  string
 	From      int
 	To        int
+}
+
+// runsHref is the runs page with the current filters, some of them changed;
+// an empty value removes that parameter.
+func runsHref(current url.Values, changes ...string) string {
+	values := url.Values{}
+	for key, list := range current {
+		values[key] = append([]string(nil), list...)
+	}
+	for index := 0; index+1 < len(changes); index += 2 {
+		if changes[index+1] == "" {
+			values.Del(changes[index])
+		} else {
+			values.Set(changes[index], changes[index+1])
+		}
+	}
+	if len(values) == 0 {
+		return "/runs"
+	}
+	return "/runs?" + values.Encode()
 }
 
 const pageSize = 50
@@ -143,8 +164,13 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, err)
 		return
 	}
-	data := runsData{Runs: runs, Total: total, Filter: filter, Status: r.URL.Query().Get("status"), Tabs: statusTabs,
-		Prev: -1, Next: -1, From: filter.Offset + 1, To: filter.Offset + len(runs)}
+	current := r.URL.Query()
+	data := runsData{Runs: runs, Total: total, Filter: filter, Status: current.Get("status"),
+		From: filter.Offset + 1, To: filter.Offset + len(runs)}
+	for _, tab := range statusTabs {
+		tab.Href = runsHref(current, "status", tab.Status, "offset", "")
+		data.Tabs = append(data.Tabs, tab)
+	}
 	for index := range stats {
 		data.Workflows = append(data.Workflows, stats[index].Name)
 		if stats[index].Name == filter.Workflow {
@@ -157,10 +183,14 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 	}
 	sort.Strings(data.Machines)
 	if filter.Offset > 0 {
-		data.Prev = max(filter.Offset-pageSize, 0)
+		previous := ""
+		if offset := max(filter.Offset-pageSize, 0); offset > 0 {
+			previous = itoa(offset)
+		}
+		data.PrevHref = runsHref(current, "offset", previous)
 	}
 	if filter.Offset+len(runs) < total {
-		data.Next = filter.Offset + pageSize
+		data.NextHref = runsHref(current, "offset", itoa(filter.Offset+pageSize))
 	}
 	crumbs := []Crumb{{Label: "运行", Href: "/runs"}}
 	if filter.Workflow != "" {

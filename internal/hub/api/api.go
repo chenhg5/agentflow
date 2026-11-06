@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"mime"
 	"net/http"
 	"strconv"
 	"strings"
@@ -40,6 +41,13 @@ func (a API) Register(mux *http.ServeMux, ingest, view Guard) {
 }
 
 func (a API) reports(w http.ResponseWriter, r *http.Request) {
+	// Only JSON: a web page cannot send that cross-origin without a CORS
+	// preflight, which the Hub never grants, so pages a user visits cannot
+	// post fake runs to a Hub on their machine.
+	if mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mediaType != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		return
+	}
 	var batch hubapi.Batch
 	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, maxBody))
 	if err := decoder.Decode(&batch); err != nil {
@@ -50,11 +58,23 @@ func (a API) reports(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusRequestEntityTooLarge, fmt.Sprintf("at most %d reports per batch", hubapi.MaxBatch))
 		return
 	}
-	result, err := a.Ingest.Accept(r.Context(), batch.Reports)
+	var result hubapi.IngestResult
+	runs := make([]domain.Run, 0, len(batch.Reports))
+	for _, report := range batch.Reports {
+		run, err := runFromReport(report)
+		if err != nil {
+			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: %v", report.RunID, err))
+			continue
+		}
+		runs = append(runs, run)
+	}
+	accepted, err := a.Ingest.Accept(r.Context(), runs)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	result.Accepted, result.Stale = accepted.Accepted, accepted.Stale
+	result.Rejected = append(result.Rejected, accepted.Rejected...)
 	writeJSON(w, http.StatusOK, result)
 }
 

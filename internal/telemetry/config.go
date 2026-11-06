@@ -29,29 +29,45 @@ const ConfigFile = "hub.json"
 // LoadConfig resolves the Hub configuration. Later sources override earlier
 // ones field by field: ~/.agentflow/hub.json, <root>/hub.json, then the
 // AGENTFLOW_HUB_URL, AGENTFLOW_HUB_TOKEN and AGENTFLOW_MACHINE variables.
+//
+// The project file comes with the repository, so it is not trusted with your
+// token: when it is the one that sets the URL, only a token from the same file
+// is sent there. A cloned repository cannot point your token at its own host.
 func LoadConfig(root string) (Config, error) {
-	var config Config
-	files := []string{}
+	var user Config
 	if home, err := os.UserHomeDir(); err == nil {
-		files = append(files, filepath.Join(home, ".agentflow", ConfigFile))
-	}
-	files = append(files, filepath.Join(root, ConfigFile))
-	for _, file := range files {
-		data, err := os.ReadFile(file)
-		if errors.Is(err, os.ErrNotExist) {
-			continue
-		}
+		layer, err := readConfig(filepath.Join(home, ".agentflow", ConfigFile))
 		if err != nil {
 			return Config{}, err
 		}
-		var layer Config
-		if err := json.Unmarshal(data, &layer); err != nil {
-			return Config{}, errors.New(file + ": " + err.Error())
-		}
-		config = merge(config, layer)
+		user = layer
 	}
-	config = merge(config, Config{URL: os.Getenv("AGENTFLOW_HUB_URL"), Token: os.Getenv("AGENTFLOW_HUB_TOKEN"), Machine: os.Getenv("AGENTFLOW_MACHINE")})
+	project, err := readConfig(filepath.Join(root, ConfigFile))
+	if err != nil {
+		return Config{}, err
+	}
+	env := Config{URL: os.Getenv("AGENTFLOW_HUB_URL"), Token: os.Getenv("AGENTFLOW_HUB_TOKEN"), Machine: os.Getenv("AGENTFLOW_MACHINE")}
+
+	config := merge(merge(user, project), env)
+	if env.URL == "" && project.URL != "" {
+		config.Token = project.Token
+	}
 	config.URL = strings.TrimRight(strings.TrimSpace(config.URL), "/")
+	return config, nil
+}
+
+func readConfig(file string) (Config, error) {
+	var config Config
+	data, err := os.ReadFile(file)
+	if errors.Is(err, os.ErrNotExist) {
+		return config, nil
+	}
+	if err != nil {
+		return config, err
+	}
+	if err := json.Unmarshal(data, &config); err != nil {
+		return Config{}, errors.New(file + ": " + err.Error())
+	}
 	return config, nil
 }
 

@@ -5,6 +5,7 @@ go 1.22
 require (
 	github.com/robfig/cron/v3 v3.0.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.1
+	modernc.org/sqlite v1.34.5
 )
 
 require (
@@ -18,5 +19,4 @@ require (
 	modernc.org/libc v1.55.3 // indirect
 	modernc.org/mathutil v1.6.0 // indirect
 	modernc.org/memory v1.8.0 // indirect
-	modernc.org/sqlite v1.34.5 // indirect
 )
