@@ -3,29 +3,27 @@
 <div class="page-head">
   <div>
     <h1>Workflow</h1>
-    <p class="muted">最近 {{.Days}} 天有运行的 workflow{{with .Group}} · 分组 {{.}}{{end}}{{with .Tag}} · 标签 #{{.}}{{end}}</p>
+    <p class="muted">最近 {{.Days}} 天有运行的 workflow · {{len .Workflows}} 个</p>
   </div>
   <div class="segmented" role="group" aria-label="时间范围">
-    {{range .Choices}}<a href="?days={{.}}&tag={{$tag}}&group={{$group}}" {{if eq . $days}}aria-current="page"{{end}}>{{.}} 天</a>{{end}}
+    {{range .Choices}}<a href="?days={{.}}&group={{$group}}&tag={{$tag}}" {{if eq . $days}}aria-current="page"{{end}}>{{.}} 天</a>{{end}}
   </div>
 </div>
 
-{{if or .Tags .Tag .Group}}
-<nav class="tag-filter" aria-label="按标签筛选">
-  <a href="?days={{$days}}" {{if and (not $tag) (not $group)}}aria-current="page"{{end}}>全部</a>
-  {{range .Tags}}<a href="?days={{$days}}&tag={{.Tag}}&group={{$group}}" {{if eq .Tag $tag}}aria-current="page"{{end}}>#{{.Tag}} <span class="num muted">{{.Count}}</span></a>{{end}}
-</nav>
-{{end}}
-
-{{range .Groups}}
-<section class="card flush wf-group">
-  <div class="card-head group-head">
-    <h2>{{if .Name}}<a class="link-quiet" href="?days={{$days}}&group={{.Name}}">{{.Name}}</a>{{else}}未分组{{end}}</h2>
-    <span class="muted">{{len .Workflows}} 个{{if .Name}} · <a class="link-quiet" href="/runs?group={{.Name}}">看运行 ›</a>{{end}}</span>
+<form class="filters" method="get" action="/workflows" data-autosubmit>
+  {{if .Groups}}
+  <div class="tabs" role="group" aria-label="分组">
+    <a href="?days={{$days}}&tag={{$tag}}" {{if not $group}}aria-current="page"{{end}}>全部</a>
+    {{range .Groups}}<a href="?days={{$days}}&group={{.}}&tag={{$tag}}" {{if eq . $group}}aria-current="page"{{end}}>{{.}}</a>{{end}}
   </div>
-  {{template "workflowTable" .Workflows}}
-</section>
-{{else}}
-<section class="card flush">{{template "workflowTable" .Groups}}</section>
-{{end}}
+  {{end}}
+  <input type="hidden" name="days" value="{{$days}}">
+  {{with $group}}<input type="hidden" name="group" value="{{.}}">{{end}}
+  {{if .Tags}}<label class="select"><span class="sr-only">标签</span>
+    <select name="tag"><option value="">全部标签</option>{{range .Tags}}<option value="{{.Tag}}" {{if eq .Tag $tag}}selected{{end}}>#{{.Tag}} · {{.Count}}</option>{{end}}</select>
+  </label>{{end}}
+  <noscript><button type="submit">筛选</button></noscript>
+</form>
+
+<section class="card flush">{{template "workflowTable" .Workflows}}</section>
 {{end}}

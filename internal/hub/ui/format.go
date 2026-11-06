@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/chenhg5/agentflow/internal/hub/app"
 	"github.com/chenhg5/agentflow/internal/hub/domain"
 )
 
@@ -197,6 +198,19 @@ func funcs() template.FuncMap {
 		"tone":       func(s domain.Status) string { return lookOf(s).Tone },
 		"pathEscape": url.PathEscape,
 		"wf":         func(name, title string) wfRef { return wfRef{Name: name, Title: title} },
+		"failure": func(counts app.StepCounts) string {
+			rate := counts.FailureRate()
+			if rate < 0 {
+				return "—"
+			}
+			return percent(rate)
+		},
+		"index0": func(groups []app.ErrorGroup) *app.ErrorGroup {
+			if len(groups) == 0 {
+				return nil
+			}
+			return &groups[0]
+		},
 		"firstTag": func(tags []string) string {
 			if len(tags) == 0 {
 				return ""

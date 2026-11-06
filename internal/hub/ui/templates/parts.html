@@ -1,4 +1,4 @@
-{{define "workflowName"}}<a class="pill{{if ne .Title .Name}} wf{{end}}" href="/runs?workflow={{.Name}}" title="{{.Name}}">{{.Title}}</a>{{end}}
+{{define "workflowName"}}<a class="pill{{if ne .Title .Name}} wf{{end}}" href="/workflows/{{pathEscape .Name}}" title="{{.Name}}">{{.Title}}</a>{{end}}
 
 {{define "tagChips"}}{{range .}}<a class="tag tag-link" href="/workflows?tag={{.}}">#{{.}}</a>{{end}}{{end}}
 
@@ -31,15 +31,12 @@
 {{define "workflowTable"}}
 <div class="table-wrap">
 <table class="table">
-  <thead><tr><th>Workflow</th><th>最近结果</th><th class="right">运行</th><th class="right">成功率</th><th class="right hide-sm">P50</th><th class="right hide-sm">P95</th><th>最近一次</th><th class="hide-sm">机器</th></tr></thead>
+  <thead><tr><th>Workflow</th><th class="hide-sm">分组</th><th>最近结果</th><th class="right">运行</th><th class="right">成功率</th><th class="right hide-sm">P50</th><th class="right hide-sm">P95</th><th>最近一次</th><th class="hide-sm">机器</th></tr></thead>
   <tbody>
   {{range .}}
   <tr>
-    <td class="grow">
-      <div class="cell-main">{{template "workflowName" (wf .Name .Label)}}{{if ne .Label .Name}} <span class="mono muted small">{{.Name}}</span>{{end}}</div>
-      {{with .Description}}<div class="cell-sub clip" title="{{.}}">{{firstLine .}}</div>{{end}}
-      {{with .Tags}}<div class="tags tags-sm">{{template "tagChips" .}}</div>{{end}}
-    </td>
+    <td class="grow"><div class="cell-main">{{template "workflowName" (wf .Name .Label)}}{{if ne .Label .Name}} <span class="mono muted small">{{.Name}}</span>{{end}}</div></td>
+    <td class="hide-sm muted">{{with .Group}}<a class="link-quiet" href="/workflows?group={{.}}">{{.}}</a>{{else}}—{{end}}</td>
     <td><span class="spark">{{range .Recent}}{{dot .}}{{end}}</span></td>
     <td class="num right">{{.Counts.Total}}</td>
     <td class="num right {{if and (ge .Counts.SuccessRate 0.0) (lt .Counts.SuccessRate 0.8)}}bad{{end}}">{{percent .Counts.SuccessRate}}</td>
@@ -49,7 +46,7 @@
     <td class="hide-sm mono muted">{{range $i, $m := .Machines}}{{if $i}}, {{end}}{{$m}}{{end}}</td>
   </tr>
   {{else}}
-  <tr><td colspan="8" class="empty">还没有运行上报上来。</td></tr>
+  <tr><td colspan="9" class="empty">还没有运行上报上来。</td></tr>
   {{end}}
   </tbody>
 </table>
@@ -63,5 +60,29 @@
 <pre class="code">export AGENTFLOW_HUB_URL=http://这台机器:7075
 export AGENTFLOW_HUB_TOKEN=…
 agentflow hub push --all</pre>
+</div>
+{{end}}
+
+{{define "stepTable"}}
+<div class="table-wrap">
+<table class="table">
+  <thead><tr><th>步骤</th><th class="right">到达</th><th class="right">失败率</th><th class="right hide-sm">重试</th><th class="right hide-sm">P50</th><th class="right">P95</th><th class="right hide-sm">等人</th><th>最常见的错误</th></tr></thead>
+  <tbody>
+  {{range .}}
+  <tr>
+    <td><span class="mono">{{.Step}}</span>{{with .Type}} <span class="muted small">{{.}}</span>{{end}}</td>
+    <td class="num right">{{.Runs}}</td>
+    <td class="num right {{if gt .Counts.Failed 0}}bad{{end}}">{{failure .Counts}}</td>
+    <td class="num right hide-sm">{{if .Retried}}{{.Retried}}{{else}}—{{end}}</td>
+    <td class="num right hide-sm">{{duration .P50Ms}}</td>
+    <td class="num right">{{duration .P95Ms}}</td>
+    <td class="num right hide-sm">{{if .WaitP50Ms}}<span class="human">{{duration .WaitP50Ms}}</span>{{else}}—{{end}}</td>
+    <td class="grow">{{with index0 .Errors}}<span class="cell-sub bad clip" title="{{.Message}}">{{.Count}}× {{.Message}}</span>{{else}}<span class="muted">—</span>{{end}}</td>
+  </tr>
+  {{else}}
+  <tr><td colspan="8" class="empty">这段时间没有步骤记录。</td></tr>
+  {{end}}
+  </tbody>
+</table>
 </div>
 {{end}}

@@ -197,6 +197,7 @@ func printHubHelp() {
                      [--limit 50] [--offset 0]
   agentflow hub run <machine>/<run-id> | <run-id>
   agentflow hub workflows [--days 30] [--tag T]... [--group G]
+  agentflow hub workflow <name> [--days 30]
   agentflow hub machines
   agentflow hub steps [--workflow W] [--days 30]
   agentflow hub submit <machine>/<run-id> <node-id> --output '{...}' [--wait]

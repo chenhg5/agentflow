@@ -24,7 +24,7 @@ import (
 // them. Each command is one call to the Hub's read API (see docs/hub.md).
 
 // hubClientVerbs are the hub actions that talk to a Hub as a client.
-var hubClientVerbs = map[string]bool{"overview": true, "runs": true, "run": true, "workflows": true, "machines": true, "steps": true, "submit": true}
+var hubClientVerbs = map[string]bool{"overview": true, "runs": true, "run": true, "workflows": true, "workflow": true, "machines": true, "steps": true, "submit": true}
 
 const (
 	hubRequestTimeout = 30 * time.Second
@@ -150,6 +150,11 @@ func hubClientCommand(verb string, parsed parsedArgs, root string) error {
 		query := hubQuery("days", parsed.Days, "group", parsed.Group)
 		addTags(query, parsed.Tags)
 		return client.show(ctx, verb, "/api/v1/workflows", query, parsed)
+	case "workflow":
+		if len(parsed.Positionals) != 1 {
+			return usageError("usage: agentflow hub workflow <name> [--days 30]", "List names with `agentflow hub workflows`.", "hub_arguments")
+		}
+		return client.show(ctx, verb, "/api/v1/workflows/"+url.PathEscape(parsed.Positionals[0]), hubQuery("days", parsed.Days), parsed)
 	case "machines":
 		return client.show(ctx, verb, "/api/v1/machines", nil, parsed)
 	case "steps":
@@ -238,7 +243,7 @@ func (c *hubClient) resolveRun(ctx context.Context, ref, machine string) (string
 }
 
 func (c *hubClient) show(ctx context.Context, verb, path string, query url.Values, parsed parsedArgs) error {
-	if verb != "run" {
+	if verb != "run" && verb != "workflow" {
 		if err := noPositionals(verb, parsed); err != nil {
 			return err
 		}
@@ -397,6 +402,16 @@ func writeHub(verb string, data map[string]any, options OutputOptions) error {
 		for _, workflow := range workflows {
 			fmt.Fprintf(out, "%v\t%s\t%s\t%v\t%s\t%s\t%s\t%v\n", hubText(workflow["group"]), hubTitle(workflow["title"], workflow["name"]), hubTags(workflow["tags"]),
 				hubMap(workflow["counts"])["total"], hubPercent(workflow["success_rate"]), hubDuration(workflow["p50_ms"]), hubDuration(workflow["p95_ms"]), workflow["last_status"])
+		}
+	case "workflow":
+		counts := hubMap(data["counts"])
+		fmt.Fprintf(out, "%s\t%v\truns %v\tsuccess %s\tp50 %s\tp95 %s\n", hubTitle(data["title"], data["name"]), hubText(data["group"]), counts["total"],
+			hubPercent(data["success_rate"]), hubDuration(data["p50_ms"]), hubDuration(data["p95_ms"]))
+		if description, _ := data["description"].(string); description != "" {
+			fmt.Fprintf(out, "  %s\n", hubText(description))
+		}
+		for _, step := range hubItems(data["steps"]) {
+			fmt.Fprintf(out, "  %v\truns %v\tfailed %v\tp95 %s\n", step["step"], step["runs"], hubMap(step["counts"])["failed"], hubDuration(step["p95_ms"]))
 		}
 	case "machines":
 		fmt.Fprintf(out, "MACHINE\tHOSTNAME\tVERSION\tLAST SEEN\tCAPABILITIES\n")
