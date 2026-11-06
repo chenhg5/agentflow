@@ -5,6 +5,7 @@ package ui
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
@@ -31,9 +32,11 @@ var staticFS embed.FS
 
 // Pages serves the HTML pages.
 type Pages struct {
-	Query   app.Query
-	Version string
-	pages   map[string]*template.Template
+	Query    app.Query
+	Commands app.Commands
+	Version  string
+	pages    map[string]*template.Template
+	csrfKey  []byte
 }
 
 // assetURLs maps each static file to /static/<name>?v=<content hash>, so a
@@ -58,7 +61,7 @@ func assetURLs() map[string]string {
 }
 
 // New parses the templates once.
-func New(query app.Query, version string) (*Pages, error) {
+func New(query app.Query, commands app.Commands, version string) (*Pages, error) {
 	assets := assetURLs()
 	helpers := funcs()
 	helpers["asset"] = func(name string) string {
@@ -79,7 +82,11 @@ func New(query app.Query, version string) (*Pages, error) {
 		}
 		pages[name] = page
 	}
-	return &Pages{Query: query, Version: version, pages: pages}, nil
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		return nil, err
+	}
+	return &Pages{Query: query, Commands: commands, Version: version, pages: pages, csrfKey: key}, nil
 }
 
 // Register mounts the pages and static files behind view.
@@ -89,6 +96,7 @@ func (p *Pages) Register(mux *http.ServeMux, view api.Guard) {
 	mux.Handle("GET /{$}", view(http.HandlerFunc(p.overview)))
 	mux.Handle("GET /runs", view(http.HandlerFunc(p.runs)))
 	mux.Handle("GET /runs/{machine}/{run}", view(http.HandlerFunc(p.run)))
+	mux.Handle("POST /runs/{machine}/{run}/submit", view(api.SameOrigin(http.HandlerFunc(p.submit))))
 	mux.Handle("GET /workflows", view(http.HandlerFunc(p.workflows)))
 	mux.Handle("GET /machines", view(http.HandlerFunc(p.machines)))
 }
@@ -233,6 +241,10 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 
 type runData struct {
 	Run      domain.Run
+	Inputs   []inputForm
+	Commands []domain.Command
+	Notice   string
+	Problem  string
 	Flow     string
 	Timeline []timelineRow
 	Done     int
@@ -241,7 +253,8 @@ type runData struct {
 
 func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 	key := domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")}
-	run, err := p.Query.Run(r.Context(), key)
+	detail, err := p.Query.Detail(r.Context(), key)
+	run := detail.Run
 	if errors.Is(err, app.ErrNotFound) {
 		p.render(w, http.StatusNotFound, "missing", page{Title: "找不到这次运行", Tab: "runs",
 			Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: key.RunID}}, Data: key})
@@ -251,7 +264,8 @@ func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, err)
 		return
 	}
-	data := runData{Run: run, Flow: flowJSON(run), Timeline: timeline(run, clock())}
+	data := runData{Run: run, Flow: flowJSON(run), Timeline: timeline(run, clock()), Notice: r.URL.Query().Get("notice"), Problem: r.URL.Query().Get("problem"),
+		Inputs: p.inputForms(detail), Commands: detail.Commands}
 	for index, step := range run.Steps {
 		if step.Status == domain.StatusSucceeded || step.Status == domain.StatusSkipped {
 			data.Done++
@@ -333,4 +347,63 @@ func cacheStatic(next http.Handler) http.Handler {
 		}
 		next.ServeHTTP(w, r)
 	})
+}
+
+// inputForms builds a form for each step of the run that waits for input.
+func (p *Pages) inputForms(detail app.RunDetail) []inputForm {
+	var forms []inputForm
+	for _, input := range detail.Inputs {
+		form := inputForm{NodeID: input.NodeID, Executor: input.Executor, Accepts: input.Accepts, CSRF: p.csrfToken(detail.Run.Key)}
+		if !input.Since.IsZero() {
+			form.Waiting = duration(clock().Sub(input.Since).Milliseconds())
+		}
+		form.Fields, form.RawJSON = formFor(input.OutputSchema)
+		forms = append(forms, form)
+	}
+	return forms
+}
+
+// submit takes the input form of a waiting step and queues it for the runner.
+func (p *Pages) submit(w http.ResponseWriter, r *http.Request) {
+	key := domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")}
+	back := runURL(domain.Run{Key: key})
+	if err := r.ParseForm(); err != nil || !p.validCSRF(key, r.PostForm.Get("csrf")) {
+		http.Error(w, "表单已过期，请刷新页面后再提交", http.StatusForbidden)
+		return
+	}
+	run, err := p.Query.Run(r.Context(), key)
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	nodeID := r.PostForm.Get("node")
+	var schema map[string]any
+	if run.Graph != nil {
+		for _, node := range run.Graph.Nodes {
+			if node.ID == nodeID {
+				schema = node.OutputSchema
+			}
+		}
+	}
+	output, err := outputFromForm(r.PostForm, schema)
+	if err != nil {
+		http.Redirect(w, r, back+"?problem="+url.QueryEscape(err.Error())+"#input", http.StatusSeeOther)
+		return
+	}
+	if _, err := p.Commands.Submit(r.Context(), key, nodeID, output, api.Who(r)); err != nil {
+		http.Redirect(w, r, back+"?problem="+url.QueryEscape(submitProblem(err))+"#input", http.StatusSeeOther)
+		return
+	}
+	http.Redirect(w, r, back+"?notice="+url.QueryEscape("已提交，等 "+key.Machine+" 取走执行")+"#input", http.StatusSeeOther)
+}
+
+func submitProblem(err error) string {
+	switch {
+	case errors.Is(err, domain.ErrNotWaiting):
+		return "这一步已经不在等输入了"
+	case errors.Is(err, domain.ErrNoCapability):
+		return "这台机器没有开启从 Hub 接收输入"
+	default:
+		return err.Error()
+	}
 }

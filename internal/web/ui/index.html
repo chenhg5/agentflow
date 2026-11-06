@@ -4,6 +4,7 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>AgentFlow</title>
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A//www.w3.org/2000/svg%22%20viewBox%3D%22-16%20-16%201056%201056%22%3E%3Cdefs%3E%3ClinearGradient%20id%3D%22g%22%20x1%3D%220%22%20y1%3D%220%22%20x2%3D%221%22%20y2%3D%221%22%3E%3Cstop%20offset%3D%220%22%20stop-color%3D%22%234fd6e8%22/%3E%3Cstop%20offset%3D%221%22%20stop-color%3D%22%23ff6fa8%22/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath%20d%3D%22M%20723.206%2045.593%20L%20582.019%20290.136%20C%20467.365%20253.952%20344.026%20311.088%20297.487%20421.943%20C%20250.947%20532.798%20296.539%20660.855%20402.663%20717.357%20C%20508.787%20773.86%20640.482%20740.196%20706.473%20639.697%20C%20772.464%20539.198%20751.01%20404.972%20656.982%20330.048%20L%20797.364%2086.899%20C%201025.282%20239.897%201091.984%20545.416%20948.573%20779.484%20C%20805.162%201013.552%20502.673%201092.871%20262.857%20959.294%20C%2023.041%20825.716%20-68.758%20526.778%2054.756%20281.627%20C%20178.27%2036.476%20473.143%20-67.645%20723.206%2045.593%20Z%22%20fill%3D%22url%28%23g%29%22%20fill-rule%3D%22evenodd%22/%3E%3C/svg%3E" />
     <link rel="preconnect" href="https://esm.sh" />
     <link rel="stylesheet" href="https://unpkg.com/reactflow@11.11.4/dist/style.css" />
     <style>
@@ -72,7 +73,8 @@
       .shell { display: grid; grid-template-columns: 290px 1fr; height: 100%; overflow: hidden; }
       .sidebar { background: var(--panel); border-right: 1px solid var(--border); display: flex; flex-direction: column; min-width: 0; }
       .brand { height: 62px; padding: 0 18px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; justify-content: center; }
-      .brand h1 { margin: 0; font-size: 16px; line-height: 1.1; letter-spacing: .02em; }
+      .brand h1 { margin: 0; font-size: 16px; line-height: 1.1; letter-spacing: .02em; display: flex; align-items: center; gap: 8px; }
+      .brand h1 img { width: 18px; height: 18px; }
       .brand p { color: var(--muted); font-size: 11px; line-height: 1.2; margin: 3px 0 0; }
       .side-section { padding: 14px 12px 7px; color: var(--muted); font-size: 10px; text-transform: uppercase; letter-spacing: .08em; }
       .run-list { overflow: auto; padding: 0 8px 16px; }
@@ -507,7 +509,7 @@
       function Sidebar({ view, language }) {
         const runs = view.mode === "dashboard" ? view.runs : view.runs || [];
         return h("aside", { className: "sidebar" },
-          h("div", { className: "brand" }, h("h1", null, "AgentFlow"), h("p", null, t(language, "visualization"))),
+          h("div", { className: "brand" }, h("h1", null, h("img", { src: document.querySelector("link[rel=icon]").href, alt: "" }), "AgentFlow"), h("p", null, t(language, "visualization"))),
           h("div", { className: "side-section" }, t(language, "recentRuns")),
           h("div", { className: "run-list" }, runs.length ? runs.map((run) => h("a", { className: "run-item" + (view.run?.run_id === run.run_id ? " active" : ""), href: "?run=" + encodeURIComponent(run.run_id), key: run.run_id },
             h("div", { className: "run-name" }, run.workflow),

@@ -3,6 +3,7 @@ package api
 import (
 	"crypto/subtle"
 	"net/http"
+	"net/url"
 	"strings"
 )
 
@@ -52,4 +53,28 @@ func bearer(r *http.Request) string {
 
 func equal(got, want string) bool {
 	return got != "" && subtle.ConstantTimeCompare([]byte(got), []byte(want)) == 1
+}
+
+// SameOrigin refuses state-changing requests a browser sent from another
+// site: when Origin (or, failing that, Referer) is present it must name this
+// Hub's own host. Requests without either come from scripts, not pages.
+func SameOrigin(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		source := r.Header.Get("Origin")
+		if source == "" {
+			source = r.Header.Get("Referer")
+		}
+		if source != "" {
+			parsed, err := url.Parse(source)
+			if err != nil || parsed.Host != r.Host {
+				writeError(w, http.StatusForbidden, "cross-site request refused")
+				return
+			}
+		}
+		if r.Header.Get("Sec-Fetch-Site") == "cross-site" {
+			writeError(w, http.StatusForbidden, "cross-site request refused")
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }

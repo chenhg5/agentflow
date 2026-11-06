@@ -25,6 +25,7 @@ func runFromReport(report hubapi.RunReport) (domain.Run, error) {
 		Project:       report.Source.Project,
 		Path:          report.Source.Path,
 		Version:       report.Source.Version,
+		Capabilities:  report.Source.Capabilities,
 		Orchestration: orchestration,
 		Workflow:      report.Workflow,
 		Digest:        report.WorkflowDigest,
@@ -43,7 +44,7 @@ func runFromReport(report hubapi.RunReport) (domain.Run, error) {
 	if report.Graph != nil {
 		graph := domain.Graph{Entry: report.Graph.Entry}
 		for _, node := range report.Graph.Nodes {
-			graph.Nodes = append(graph.Nodes, domain.GraphNode{ID: node.ID, Executors: node.Executors, Parallel: node.Parallel, Join: node.Join})
+			graph.Nodes = append(graph.Nodes, domain.GraphNode{ID: node.ID, Executors: node.Executors, Parallel: node.Parallel, Join: node.Join, OutputSchema: node.OutputSchema})
 		}
 		for _, edge := range report.Graph.Edges {
 			graph.Edges = append(graph.Edges, domain.GraphEdge{Source: edge.Source, Target: edge.Target, Condition: edge.Condition,
@@ -60,6 +61,7 @@ func runFromReport(report hubapi.RunReport) (domain.Run, error) {
 			Attempts: step.Attempts, StartedAt: parseTime(step.StartedAt), FinishedAt: parseTime(step.FinishedAt),
 			DurationMs: step.DurationMs, WaitingMs: step.WaitingMs, Error: step.Error, Summary: step.Summary, Reason: step.Reason,
 			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes,
+			StdoutTail: step.StdoutTail, StderrTail: step.StderrTail, Result: step.Result, Artifacts: artifacts(step.Artifacts),
 		})
 	}
 	return run, nil
@@ -74,4 +76,12 @@ func parseTime(value string) time.Time {
 		return time.Time{}
 	}
 	return parsed.UTC()
+}
+
+func artifacts(in []hubapi.Artifact) []domain.Artifact {
+	var out []domain.Artifact
+	for _, item := range in {
+		out = append(out, domain.Artifact{Name: item.Name, Bytes: item.Bytes})
+	}
+	return out
 }

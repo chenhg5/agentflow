@@ -13,6 +13,13 @@
     var form = event.target.closest("form[data-autosubmit]");
     if (form) form.submit();
   });
+  // a log tail is the end of a log: show its last lines first
+  function scrollTails() {
+    document.querySelectorAll("pre.tail").forEach(function (pre) { if (!pre.dataset.scrolled) { pre.scrollTop = pre.scrollHeight; pre.dataset.scrolled = "1"; } });
+  }
+  scrollTails();
+  document.addEventListener("toggle", scrollTails, true);
+  document.addEventListener("hub:refresh", scrollTails);
   var busy = false;
   setInterval(function () {
     var main = document.getElementById("main");
@@ -25,6 +32,10 @@
         if (!html) return;
         var next = new DOMParser().parseFromString(html, "text/html").getElementById("main");
         if (!next) return;
+        // keep what the person opened (step logs) across the refresh
+        var opened = {};
+        main.querySelectorAll("details[data-keep]").forEach(function (d) { opened[d.dataset.keep] = d.open; });
+        next.querySelectorAll("details[data-keep]").forEach(function (d) { if (d.dataset.keep in opened) d.open = opened[d.dataset.keep]; });
         var oldFlow = main.querySelector("[data-flow]");
         var newFlow = next.querySelector("[data-flow]");
         var keep = oldFlow && newFlow && oldFlow.dataset.flow === newFlow.dataset.flow;

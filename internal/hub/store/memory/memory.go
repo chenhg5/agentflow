@@ -5,6 +5,7 @@ import (
 	"context"
 	"sort"
 	"sync"
+	"time"
 
 	"github.com/chenhg5/agentflow/internal/hub/app"
 	"github.com/chenhg5/agentflow/internal/hub/domain"
@@ -16,13 +17,14 @@ type Store struct {
 	runs     map[domain.RunKey]domain.Run
 	machines map[string]domain.Machine
 	graphs   map[string]domain.Graph
+	commands map[string]domain.Command
 }
 
 var _ app.Store = (*Store)(nil)
 
 // New returns an empty store.
 func New() *Store {
-	return &Store{runs: map[domain.RunKey]domain.Run{}, machines: map[string]domain.Machine{}, graphs: map[string]domain.Graph{}}
+	return &Store{runs: map[domain.RunKey]domain.Run{}, machines: map[string]domain.Machine{}, graphs: map[string]domain.Graph{}, commands: map[string]domain.Command{}}
 }
 
 func (s *Store) Save(_ context.Context, run domain.Run) (bool, error) {
@@ -106,6 +108,68 @@ func (s *Store) Graph(_ context.Context, key string) (domain.Graph, bool, error)
 	return graph, ok, nil
 }
 
+func (s *Store) SaveCommand(_ context.Context, command domain.Command) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.commands[command.ID] = command
+	return nil
+}
+
+func (s *Store) Command(_ context.Context, id string) (domain.Command, bool, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	command, ok := s.commands[id]
+	return command, ok, nil
+}
+
+func (s *Store) PendingCommands(_ context.Context, machine string) ([]domain.Command, error) {
+	return s.selectCommands(func(c domain.Command) bool { return c.Run.Machine == machine && c.Status == domain.CommandPending }, false), nil
+}
+
+func (s *Store) RunCommands(_ context.Context, run domain.RunKey) ([]domain.Command, error) {
+	return s.selectCommands(func(c domain.Command) bool { return c.Run == run }, true), nil
+}
+
+func (s *Store) selectCommands(keep func(domain.Command) bool, newestFirst bool) []domain.Command {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]domain.Command, 0)
+	for _, command := range s.commands {
+		if keep(command) {
+			out = append(out, command)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if newestFirst {
+			return out[i].CreatedAt.After(out[j].CreatedAt)
+		}
+		return out[i].CreatedAt.Before(out[j].CreatedAt)
+	})
+	return out
+}
+
+func (s *Store) DeleteFinishedBefore(_ context.Context, cutoff time.Time) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	removed := 0
+	for key, run := range s.runs {
+		if run.Status.Finished() && run.When().Before(cutoff) {
+			delete(s.runs, key)
+			removed++
+		}
+	}
+	used := map[string]bool{}
+	for _, run := range s.runs {
+		used[domain.GraphKey(run)] = true
+	}
+	for key := range s.graphs {
+		if !used[key] {
+			delete(s.graphs, key)
+		}
+	}
+	return removed, nil
+}
+
 func (s *Store) Close() error { return nil }
 
 // Matches reports whether run passes filter.
@@ -117,6 +181,9 @@ func Matches(run domain.Run, filter app.RunFilter) bool {
 		return false
 	}
 	if filter.Project != "" && run.Project != filter.Project {
+		return false
+	}
+	if filter.RunID != "" && run.Key.RunID != filter.RunID {
 		return false
 	}
 	if len(filter.Statuses) > 0 {

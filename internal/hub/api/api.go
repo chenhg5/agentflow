@@ -22,8 +22,9 @@ const maxBody = 16 << 20
 
 // API serves the JSON endpoints.
 type API struct {
-	Ingest app.Ingest
-	Query  app.Query
+	Ingest   app.Ingest
+	Query    app.Query
+	Commands app.Commands
 }
 
 // Register mounts the endpoints. ingest guards the report endpoint and view
@@ -35,6 +36,12 @@ func (a API) Register(mux *http.ServeMux, ingest, view Guard) {
 	mux.Handle("GET /api/v1/runs/{machine}/{run}", view(http.HandlerFunc(a.run)))
 	mux.Handle("GET /api/v1/workflows", view(http.HandlerFunc(a.workflows)))
 	mux.Handle("GET /api/v1/machines", view(http.HandlerFunc(a.machines)))
+	mux.Handle("GET /api/v1/steps", view(http.HandlerFunc(a.steps)))
+	// Runners pull commands and answer them with the ingest token.
+	mux.Handle("GET "+hubapi.CommandsPath, ingest(http.HandlerFunc(a.pendingCommands)))
+	mux.Handle("POST "+hubapi.CommandsPath+"/{id}", ingest(http.HandlerFunc(a.answerCommand)))
+	// People submit input with view access, from the same origin only.
+	mux.Handle("POST /api/v1/runs/{machine}/{run}/submit", view(SameOrigin(http.HandlerFunc(a.submit))))
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "protocol": hubapi.ProtocolVersion})
 	})
@@ -102,7 +109,7 @@ func (a API) runs(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a API) run(w http.ResponseWriter, r *http.Request) {
-	run, err := a.Query.Run(r.Context(), domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")})
+	detail, err := a.Query.Detail(r.Context(), domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")})
 	if errors.Is(err, app.ErrNotFound) {
 		writeError(w, http.StatusNotFound, "run not found")
 		return
@@ -111,7 +118,7 @@ func (a API) run(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	writeJSON(w, http.StatusOK, toRunJSON(run))
+	writeJSON(w, http.StatusOK, toRunDetailJSON(detail))
 }
 
 func (a API) workflows(w http.ResponseWriter, r *http.Request) {
@@ -132,6 +139,16 @@ func (a API) machines(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"machines": toMachinesJSON(machines)})
 }
 
+func (a API) steps(w http.ResponseWriter, r *http.Request) {
+	days := Days(r, 30)
+	stats, err := a.Query.Steps(r.Context(), r.URL.Query().Get("workflow"), days)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"days": days, "steps": toStepStatsJSON(stats)})
+}
+
 // Days reads ?days=, clamped to 1..90.
 func Days(r *http.Request, fallback int) int {
 	days, err := strconv.Atoi(r.URL.Query().Get("days"))
@@ -144,7 +161,7 @@ func Days(r *http.Request, fallback int) int {
 // Filter reads a run filter from the query string. The pages use it too.
 func Filter(r *http.Request) (app.RunFilter, error) {
 	query := r.URL.Query()
-	filter := app.RunFilter{Workflow: query.Get("workflow"), Machine: query.Get("machine"), Project: query.Get("project")}
+	filter := app.RunFilter{Workflow: query.Get("workflow"), Machine: query.Get("machine"), Project: query.Get("project"), RunID: query.Get("run")}
 	for _, value := range strings.Split(query.Get("status"), ",") {
 		if value = strings.TrimSpace(value); value == "" {
 			continue
@@ -204,4 +221,103 @@ func writeJSON(w http.ResponseWriter, status int, value any) {
 
 func writeError(w http.ResponseWriter, status int, message string) {
 	writeJSON(w, status, map[string]any{"error": message})
+}
+
+func (a API) pendingCommands(w http.ResponseWriter, r *http.Request) {
+	machine := r.URL.Query().Get("machine")
+	if machine == "" {
+		writeError(w, http.StatusBadRequest, "machine is required")
+		return
+	}
+	commands, err := a.Commands.Pending(r.Context(), machine)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	list := hubapi.CommandList{Commands: make([]hubapi.Command, 0, len(commands))}
+	for _, command := range commands {
+		list.Commands = append(list.Commands, toWireCommand(command))
+	}
+	writeJSON(w, http.StatusOK, list)
+}
+
+func (a API) answerCommand(w http.ResponseWriter, r *http.Request) {
+	var answer struct {
+		hubapi.CommandResult
+		Machine string `json:"machine"`
+	}
+	if mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mediaType != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		return
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&answer); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	machine := r.URL.Query().Get("machine")
+	if answer.Machine != "" {
+		machine = answer.Machine
+	}
+	err := a.Commands.Answer(r.Context(), r.PathValue("id"), machine, domain.CommandStatus(answer.Status), answer.Error)
+	switch {
+	case errors.Is(err, app.ErrNotFound):
+		writeError(w, http.StatusNotFound, "command not found for this machine")
+	case errors.Is(err, app.ErrCommandDone):
+		writeError(w, http.StatusConflict, err.Error())
+	case err != nil:
+		writeError(w, http.StatusBadRequest, err.Error())
+	default:
+		writeJSON(w, http.StatusOK, map[string]any{"ok": true})
+	}
+}
+
+func (a API) submit(w http.ResponseWriter, r *http.Request) {
+	var body struct {
+		NodeID string         `json:"node_id"`
+		Output map[string]any `json:"output"`
+	}
+	if mediaType, _, _ := mime.ParseMediaType(r.Header.Get("Content-Type")); mediaType != "application/json" {
+		writeError(w, http.StatusUnsupportedMediaType, "Content-Type must be application/json")
+		return
+	}
+	if err := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20)).Decode(&body); err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	command, err := a.Commands.Submit(r.Context(), domain.RunKey{Machine: r.PathValue("machine"), RunID: r.PathValue("run")}, body.NodeID, body.Output, Who(r))
+	if err != nil {
+		writeError(w, SubmitStatus(err), err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "command": toWireCommand(command)})
+}
+
+// SubmitStatus maps a submission error to an HTTP status.
+func SubmitStatus(err error) int {
+	switch {
+	case errors.Is(err, app.ErrNotFound):
+		return http.StatusNotFound
+	case errors.Is(err, domain.ErrNotWaiting), errors.Is(err, domain.ErrNoCapability):
+		return http.StatusConflict
+	default:
+		return http.StatusInternalServerError
+	}
+}
+
+// Who names the person behind a request: the basic-auth user when there is
+// one, else "web".
+func Who(r *http.Request) string {
+	if user, _, ok := r.BasicAuth(); ok && user != "" {
+		return user
+	}
+	return "web"
+}
+
+func toWireCommand(command domain.Command) hubapi.Command {
+	wire := hubapi.Command{ID: command.ID, Kind: command.Kind, RunID: command.Run.RunID, NodeID: command.NodeID, Output: command.Output,
+		By: command.By, CreatedAt: command.CreatedAt.Format(time.RFC3339Nano)}
+	if !command.StepStartedAt.IsZero() {
+		wire.StepStartedAt = command.StepStartedAt.Format(time.RFC3339Nano)
+	}
+	return wire
 }

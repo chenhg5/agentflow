@@ -13,6 +13,8 @@ type GraphNode struct {
 	Executors []string
 	Parallel  bool
 	Join      []string
+	// OutputSchema is the node's JSON Schema, used for the Hub's input form.
+	OutputSchema map[string]any
 }
 
 // GraphEdge is one transition; Target "$end" ends the run.

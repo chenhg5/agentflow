@@ -19,6 +19,7 @@ type RunFilter struct {
 	Workflow string
 	Machine  string
 	Project  string
+	RunID    string
 	Statuses []domain.Status
 	Since    time.Time
 	Until    time.Time
@@ -35,6 +36,10 @@ type RunRepository interface {
 	Get(ctx context.Context, key domain.RunKey) (domain.Run, error)
 	// List returns matching runs, newest first, and the total number of matches.
 	List(ctx context.Context, filter RunFilter) ([]domain.Run, int, error)
+	// DeleteFinishedBefore removes finished runs placed before cutoff, with
+	// everything only they used (graphs no run refers to any more), and
+	// reports how many runs it removed. Unfinished runs are never removed.
+	DeleteFinishedBefore(ctx context.Context, cutoff time.Time) (int, error)
 }
 
 // MachineRepository stores machines.
@@ -50,10 +55,21 @@ type GraphRepository interface {
 	Graph(ctx context.Context, key string) (domain.Graph, bool, error)
 }
 
+// CommandRepository stores commands for runners.
+type CommandRepository interface {
+	SaveCommand(ctx context.Context, command domain.Command) error
+	Command(ctx context.Context, id string) (domain.Command, bool, error)
+	// PendingCommands lists a machine's pending commands, oldest first.
+	PendingCommands(ctx context.Context, machine string) ([]domain.Command, error)
+	// RunCommands lists a run's commands, newest first.
+	RunCommands(ctx context.Context, run domain.RunKey) ([]domain.Command, error)
+}
+
 // Store is everything the Hub persists.
 type Store interface {
 	RunRepository
 	MachineRepository
 	GraphRepository
+	CommandRepository
 	Close() error
 }

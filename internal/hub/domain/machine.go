@@ -9,10 +9,22 @@ type Machine struct {
 	Version   string
 	FirstSeen time.Time
 	LastSeen  time.Time
+	// Capabilities are what the runner last said it lets the Hub ask of it.
+	Capabilities []string
+}
+
+// Accepts reports whether the machine said it handles capability.
+func (m Machine) Accepts(capability string) bool {
+	for _, item := range m.Capabilities {
+		if item == capability {
+			return true
+		}
+	}
+	return false
 }
 
 // Seen updates a machine with a new report.
-func (m Machine) Seen(hostname, version string, at time.Time) Machine {
+func (m Machine) Seen(hostname, version string, capabilities []string, at time.Time) Machine {
 	if m.FirstSeen.IsZero() || at.Before(m.FirstSeen) {
 		m.FirstSeen = at
 	}
@@ -24,6 +36,7 @@ func (m Machine) Seen(hostname, version string, at time.Time) Machine {
 		if version != "" {
 			m.Version = version
 		}
+		m.Capabilities = append([]string(nil), capabilities...)
 	}
 	return m
 }

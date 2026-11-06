@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -33,6 +34,11 @@ func (s Ingest) Accept(ctx context.Context, runs []domain.Run) (IngestResult, er
 			result.Rejected = append(result.Rejected, fmt.Sprintf("%s: %v", run.Key.RunID, err))
 			continue
 		}
+		if old, err := s.Store.Get(ctx, run.Key); err == nil {
+			run.KeepTails(old)
+		} else if !errors.Is(err, ErrNotFound) {
+			return result, err
+		}
 		saved, err := s.Store.Save(ctx, run)
 		if err != nil {
 			return result, err
@@ -62,7 +68,7 @@ func (s Ingest) seeMachine(ctx context.Context, run domain.Run, at time.Time) er
 		return err
 	}
 	machine.ID = run.Key.Machine
-	return s.Store.SaveMachine(ctx, machine.Seen(run.Hostname, run.Version, at))
+	return s.Store.SaveMachine(ctx, machine.Seen(run.Hostname, run.Version, run.Capabilities, at))
 }
 
 func (s Ingest) now() time.Time {

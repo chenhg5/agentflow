@@ -43,7 +43,7 @@ agentflow hub status --format json                      # 看配置、待发数�
 - **先写本地发件箱，再发。** 每次保存把这次运行的快照写进 `<工作区>/hub-outbox/<run-id>.<seq>.json`（先写临时文件再改名，同一运行的旧快照随即删掉），不碰网络。发完只删 seq 不大于已发那份的文件，所以引擎在发送途中写下的新快照（比如最后的 succeeded）不会被误删；多个 agentflow 进程同时动同一个运行也一样。后台每 10 秒发一次，命令结束时再给 2 秒发一次。发不出去就留着，下次命令或 `hub push` 再发；Hub 宕机期间的运行一条不丢。
 - **快照幂等。** 每份快照带 `seq`（`updatedAt` 的纳秒），Hub 只留 seq 最大的那份；重发、乱序、补报都安全。
 - **只读命令不联网。** `run list / get / stats`、`web` 等不装钩子，不会因为 Hub 慢而变慢。
-- **离开机器前脱敏。** 错误、`summary`、`reason`、输入里像令牌的串（`sk-…`、`ghp_…`、`glpat-…`、`sk_live_…`、`npm_…`、`AIza…`、AWS key、JWT、私钥、`Bearer …` / `Basic …`、`token=…`、URL 里的 `user:password@` 等）先打码；名字像密钥的输入整值打码；错误截 2000 字，summary/reason 截 500 字，输入最多 30 个、每个 300 字。stdout/stderr、结果文件全文、产物不上报，只报字节数。
+- **离开机器前脱敏。** 错误、`summary`、`reason`、输入里像令牌的串（`sk-…`、`ghp_…`、`glpat-…`、`sk_live_…`、`npm_…`、`AIza…`、AWS key、JWT、私钥、`Bearer …` / `Basic …`、`token=…`、URL 里的 `user:password@` 等）先打码；名字像密钥的输入整值打码；错误截 2000 字，summary/reason 截 500 字，输入最多 30 个、每个 300 字。stdout/stderr 只报末尾一段、结果只报前一段（见「结果和日志」），产物文件只报名字和大小。
 
 ## 3. 上报协议（v1）
 
@@ -73,20 +73,41 @@ agentflow hub status --format json                      # 看配置、待发数�
 
 **流程图 `graph`（可选）：** `entry`、`nodes`（`id`、候选执行器 `executors`、`parallel`、`join`）、`edges`（`source`、`target`、`condition`、`maxIterations`、`parallel`；`target` 为 `$end` 表示结束）。Hub 按 `workflow@workflowDigest` 只存一份，运行详情页用它画 React Flow 画布（React Flow 从 esm.sh 加载，离线时画布提示加载不到，步骤列表照常）。补报已有的运行时，就算快照本身是旧的，图也会补上。
 
+**结果和日志：** 每一步带上最近一次尝试的 `stdoutTail` / `stderrTail`（各最后 2KB）、`result`（结果 JSON 的前 2KB）和 `artifacts`（文件名和大小，内容不上报）。都先脱敏；日志从中间截断时丢掉不完整的第一行，避免半截密钥漏过脱敏规则。一份报告里这些加起来最多 32KB，失败的步骤优先，然后是正在跑和等输入的，再然后是最近完成的；没带上的步骤，Hub 保留它之前收到的同一次执行的内容。运行详情页每一步下面可以展开「结果和日志」，失败的默认展开。
+
 **保留字段 `summary` / `reason`：** 节点结果 JSON 里的 `summary`（做了什么）和 `reason`（为什么这样判断）会原样（脱敏、截断后）显示在运行详情的步骤下面。想让 Hub 上一眼看懂一步做了什么，就在结果里写这两个字段。
 
 **状态：** `pending`、`queued`、`running`、`waiting_input`（等人提交表单或外部输入；旧版本的 `waiting_human` 同样处理）、`waiting_resource`（等共享资源）、`succeeded`、`failed`、`cancelled`、`skipped`（步骤）。
 
 **步骤的 `type`** 是这一步用的执行器（`codex`、`claude-code`、`process` 或 `executors.json` 里注册的名字）：选中候选后报选中的那个，还没开始时报第一个候选。
 
-## 4. 兼容以后的代码编排
+## 4. 代码编排
 
-协议和 Hub 都不认识 JSON workflow 本身，只认「一次运行 + 有序的步骤」：
+除了 JSON 工作流，也可以让脚本自己决定步骤：`agentflow code`。脚本用什么语言都行，调 CLI 就是 SDK。
 
-- `orchestration` 现在是 `json`，代码编排的 runner 报 `code`；页面上会标出来，其余完全一样。
-- 步骤是一个有序列表，`id` 是步骤名。JSON 编排按 workflow 里的节点顺序报；代码编排按步骤第一次出现的顺序报，循环、foreach、子流程里的步骤用带下标的 id（如 `review[2]`、`deploy/notify`）。
-- `workflowDigest` 对 JSON 是定义的哈希，对代码可以是源码或构建的哈希，用来按版本比较。
-- 代码编排的 runner 只要实现「状态变化时产出一份 RunReport」，复用同一个发件箱和发送器（`internal/telemetry` 里与引擎有关的只有 `adapter.go`）。
+```bash
+agentflow code run nightly-triage --input repo=agentflow -- ./nightly.sh
+```
+
+`nightly.sh` 里：
+
+```bash
+count=$(agentflow code step fetch -- ./fetch.sh | jq .count)        # 跑一个命令当一步
+for i in $(seq 1 "$count"); do
+  agentflow code step triage --summary "第 $i 条" -- ./triage.sh "$i"  # 同一步再跑是新的一次
+done
+agentflow code step lint -- make lint &                              # 并行的步骤
+agentflow code step test -- make test &
+wait
+agentflow code step decide --output '{"ship":true}' --summary "发布"  # 脚本自己算完的一步，直接记结果
+```
+
+- `code run` 开一次运行，把 `AGENTFLOW_RUN_ID` 交给脚本，脚本退出码决定运行成败（脚本自己调了 `code end` 就以它为准）。脚本中途退出时还在跑的步骤记为失败。
+- `code step <id> -- <命令>` 和执行器的约定一样：命令可以往 `$AGENTFLOW_RESULT_FILE` 写一个 JSON 对象；stdout / stderr 记进日志，同时显示在脚本的 stderr；非零退出就记为失败并原样返回退出码；结果 JSON 打印到 stdout，方便 `$(...)` 拿。`--summary` / `--reason` 是 Hub 上显示的说明。
+- 不带命令的 `code step <id> --output JSON [--status failed|skipped]` 记录脚本自己做完的一步。
+- 不在 `code run` 里时，用 `code start <name>` 拿运行 ID，传 `--run` 或设 `AGENTFLOW_RUN_ID`，最后 `code end`。
+
+运行和 JSON 工作流存在同一个地方（`runs/<id>/`，workflow 版本是 `code`），`run list / get / metrics` 和 Hub 都认。上报时 `orchestration` 是 `code`，页面上标「代码编排」。流程图按脚本实际走到的顺序长出来：一步接上「上次有步骤开始之后完成的那些步骤」，所以先后执行的是一条链，一起开始的共享前驱，之后的一步把它们汇合。每次改动都在运行目录的系统文件锁里做，脚本并行跑的步骤不会互相覆盖。`run resume / retry` 不会去执行代码运行。
 
 ## 5. Hub 内部结构
 
@@ -109,6 +130,8 @@ agentflow hub status --format json                      # 看配置、待发数�
 
 SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo，所有发布平台照常交叉编译。
 
+**数据保留：** `hub serve --retain 90d`（默认 90 天，也可以用 `AGENTFLOW_HUB_RETAIN`；`720h` 这类写法也行，`0` 表示永远保留）。启动时和之后每小时清理一次：删掉**已结束**且早于保留期的运行，以及不再有运行用到的流程图。还在跑、在等输入的运行不管多老都保留。
+
 ## 6. 访问控制
 
 | Hub 监听 | 上报 | 看页面 / 读接口 |
@@ -123,15 +146,61 @@ SQLite 用纯 Go 驱动（`modernc.org/sqlite`），二进制仍然不需要 cgo
 | 路径 | 说明 |
 | --- | --- |
 | `GET /api/v1/overview?days=14` | 总数、成功率、每天的运行、等人处理、最近失败、各 workflow 统计、机器数 |
-| `GET /api/v1/runs?workflow=&machine=&project=&status=a,b&since=&until=&limit=&offset=` | 运行列表，新的在前，带 `total` |
-| `GET /api/v1/runs/{machine}/{runId}` | 一次运行和它的步骤 |
+| `GET /api/v1/runs?workflow=&machine=&project=&run=&status=a,b&since=&until=&limit=&offset=` | 运行列表，新的在前，带 `total`；`run=` 按运行 id 找（不知道在哪台机器时用） |
+| `GET /api/v1/runs/{machine}/{runId}` | 运行页上的全部：步骤（耗时、错误、summary/reason、日志尾、结果预览、产物）、`graph`（节点、边、`output_schema`）、`machine_info`（版本、`capabilities`）、`waiting_inputs`（等输入的步骤、`hub_can_submit`、`output_schema`）、`commands`（发给它的提交和结果） |
 | `GET /api/v1/workflows?days=30` | 各 workflow 的次数、成功率、P50/P95、最近结果 |
-| `GET /api/v1/machines` | 上报过的机器 |
+| `GET /api/v1/machines` | 上报过的机器，带 `capabilities`（`submit` 表示收 Hub 的输入） |
+| `GET /api/v1/steps?workflow=&days=30` | 每个 workflow 每一步的统计：到达次数、各状态次数、`failure_rate`、`retried`、P50/P95、等待中位数、最常见的 5 种错误（各带最近一次的运行）；失败多的排前面 |
 
 运行 id 只在一台机器上唯一，所以运行的主键是 `machine + runId`。
 
-## 8. 还没做
+### 用 CLI 读（给 agent）
+
+网页给人看；同样的数据 CLI 都能拿到，默认输出 JSON（终端里是简表，`--format ndjson` 一行一条）：
+
+```bash
+agentflow hub overview [--days 14]
+agentflow hub runs [--workflow W] [--machine M] [--project P] [--status failed,waiting_input] [--since 2026-11-01] [--until ...] [--run ID] [--limit 50] [--offset 0]
+agentflow hub run <machine>/<run-id>      # 或只给 run-id，Hub 上只有一台机器有它时自动找到
+agentflow hub workflows [--days 30]
+agentflow hub machines
+agentflow hub steps [--workflow W] [--days 30]
+agentflow hub submit <machine>/<run-id> <node-id> --output '{...}' [--wait]
+```
+
+地址取 `--hub`、`AGENTFLOW_HUB_URL` 或 `hub.json`；读用查看 token：`AGENTFLOW_HUB_VIEW_TOKEN` 或 `~/.agentflow/hub.json` 的 `view_token`，没有就用上报 token（Hub 没单独设查看 token 时也认它）。和上报 token 一样，工作区的 `hub.json` 指定了地址时，只会把同一个文件里的 token 发过去。
+
+`hub submit` 先读这次运行，确认这一步在等输入、机器开了 `accept_commands`、输出符合 `output_schema`，再提交；`--wait` 等到那台机器执行或拒绝（最多 90 秒）。机器只在跑着会上报的命令（`run worker`、`trigger serve`、`run start` 等）时取指令。
+
+一个分析的例子：
+
+```bash
+agentflow hub steps --workflow pr-pipeline --days 7 | jq '.steps[0]'          # 最该修的一步
+agentflow hub run "$(agentflow hub steps --workflow pr-pipeline | jq -r '.steps[0].errors[0] | .last_machine + "/" + .last_run_id')" \
+  | jq '.steps[] | select(.status == "failed") | {id, error, stderr_tail}'
+```
+
+## 8. 在 Hub 上提交等待输入的节点
+
+运行停在等待输入的节点上（`external` 执行器，比如审批、填表）时，运行详情页会出现「提交输入」卡片。表单从节点的 `outputSchema` 生成：枚举是单选，布尔是勾选，数字是数字框，字符串是输入框或多行文本；嵌套对象、数组这类复杂 schema 就给一个 JSON 输入框。
+
+Hub 不会去连 runner。流程是「拉取」：
+
+```text
+页面提交 → Hub 存一条待处理命令 → runner 上报时顺便 GET /api/v1/commands?machine=<自己>
+        → 本地校验（运行没结束、节点确实在等、还是同一次等待、输出符合 outputSchema）
+        → 交给执行器（和 agentflow run submit 一样）→ POST /api/v1/commands/<id> 回报 applied / rejected
+```
+
+- **要 runner 显式开启**：在那台机器的 `~/.agentflow/hub.json` 加 `"accept_commands": true`，或者设 `AGENTFLOW_HUB_ACCEPT_COMMANDS=1`，然后重启常驻进程（`trigger serve` / `run worker`）。工作区里的 `hub.json` 开不了这个开关；Hub 地址来自工作区文件时也一律不接受命令。没开启的机器，页面只显示怎么开启和等价的 `run submit` 命令。
+- **只认同一次等待**：命令带上提交时看到的这一步的开始时间；节点如果在这期间被重新进入，runner 会拒绝，不会把旧的决定用到新的一轮上。
+- **防跨站**：提交表单带 Hub 进程级密钥签的令牌，并检查 `Origin` / `Referer`，别的网站没法借你的浏览器提交。命令记下提交人（基本认证的用户名，否则是 `web`）。
+- **只有命令所属的机器能回报结果**，回报过的命令不会再被取走；页面上「从 Hub 提交的输入」列出每条命令的状态（等机器取走 / 已执行 / 被拒绝 + 原因）。
+- 只有常驻进程会定期取命令（每 10 秒，随上报一起）。只用 `run start` 跑、没有常驻进程的机器，提交会一直等到下一次有常驻进程运行。
+
+JSON 接口：`POST /api/v1/runs/{machine}/{runId}/submit`，`{"node_id": "...", "output": {...}}`，需要查看权限，同样只接受同源请求。
+
+## 9. 还没做
 
 - 日志、产物上传；跳回运行所在机器的 `agentflow web --run`。
-- 从 Hub 审批 human 节点（需要把决定送回 runner，留到有双向通道时）。
 - 数据保留策略和 Postgres 存储。

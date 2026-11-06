@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/hubapi"
@@ -55,4 +56,50 @@ func (s *HTTPSender) Send(ctx context.Context, reports []hubapi.RunReport) (huba
 	}
 	err = json.Unmarshal(data, &result)
 	return result, err
+}
+
+// Commands fetches the Hub's pending commands for machine.
+func (s *HTTPSender) Commands(ctx context.Context, machine string) ([]hubapi.Command, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, s.URL+hubapi.CommandsPath+"?machine="+url.QueryEscape(machine), nil)
+	if err != nil {
+		return nil, err
+	}
+	var list hubapi.CommandList
+	if err := s.do(request, &list); err != nil {
+		return nil, err
+	}
+	return list.Commands, nil
+}
+
+// Answer reports what happened to a command.
+func (s *HTTPSender) Answer(ctx context.Context, machine, id string, result hubapi.CommandResult) error {
+	body, err := json.Marshal(result)
+	if err != nil {
+		return err
+	}
+	request, err := http.NewRequestWithContext(ctx, http.MethodPost, s.URL+hubapi.CommandsPath+"/"+url.PathEscape(id)+"?machine="+url.QueryEscape(machine), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	request.Header.Set("Content-Type", "application/json")
+	return s.do(request, nil)
+}
+
+func (s *HTTPSender) do(request *http.Request, into any) error {
+	if s.Token != "" {
+		request.Header.Set("Authorization", "Bearer "+s.Token)
+	}
+	response, err := s.Client.Do(request)
+	if err != nil {
+		return err
+	}
+	defer response.Body.Close()
+	data, _ := io.ReadAll(io.LimitReader(response.Body, 4<<20))
+	if response.StatusCode != http.StatusOK {
+		return fmt.Errorf("hub answered %d: %s", response.StatusCode, bytes.TrimSpace(data))
+	}
+	if into == nil {
+		return nil
+	}
+	return json.Unmarshal(data, into)
 }

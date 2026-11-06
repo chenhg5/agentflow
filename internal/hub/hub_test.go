@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -68,7 +70,8 @@ func sample() hubapi.Batch {
 			Edges: []hubapi.GraphEdge{{Source: "fetch", Target: "probe", Condition: "x < 1 && y > \"<b>\""}, {Source: "probe", Target: "$end"}}},
 		Steps: []hubapi.StepReport{
 			{ID: "fetch", Type: "shell", Status: "succeeded", Attempts: 1, StartedAt: started.Format(time.RFC3339Nano), FinishedAt: started.Add(10 * time.Second).Format(time.RFC3339Nano), DurationMs: 10000, Summary: "拉到 42 条"},
-			{ID: "probe", Type: "agent", Provider: "claude", Status: "failed", Attempts: 2, StartedAt: started.Add(10 * time.Second).Format(time.RFC3339Nano), FinishedAt: started.Add(30 * time.Second).Format(time.RFC3339Nano), DurationMs: 20000, Error: "exit 3", Reason: "<script>alert(1)</script>"},
+			{ID: "probe", Type: "agent", Provider: "claude", Status: "failed", Attempts: 2, StderrTail: "…<b>fatal</b>: boom", Result: `{"why":"nope"}`,
+				Artifacts: []hubapi.Artifact{{Name: "stderrLog", Bytes: 3000}}, StartedAt: started.Add(10 * time.Second).Format(time.RFC3339Nano), FinishedAt: started.Add(30 * time.Second).Format(time.RFC3339Nano), DurationMs: 20000, Error: "exit 3", Reason: "<script>alert(1)</script>"},
 		},
 	}}}
 }
@@ -139,7 +142,7 @@ func TestPagesAndReadAPI(t *testing.T) {
 		"/runs":                         {"run_1", "probe: exit 3"},
 		"/runs?status=failed":           {"run_1"},
 		"/runs?status=succeeded":        {"没有符合条件的运行"},
-		"/runs/laptop/run_1":            {"失败在 <span class=\"mono\">probe</span>", "拉到 42 条", "ABC-1", "&lt;script&gt;alert(1)&lt;/script&gt;", "×2", "流程图", "data-flow=", "/static/flow.js"},
+		"/runs/laptop/run_1":            {"失败在 <span class=\"mono\">probe</span>", "拉到 42 条", "ABC-1", "&lt;script&gt;alert(1)&lt;/script&gt;", "×2", "流程图", "data-flow=", "/static/flow.js", "结果和日志 · 1 个文件", "&lt;b&gt;fatal&lt;/b&gt;: boom", "stderrLog · 2.9 KB"},
 		"/workflows":                    {"nightly"},
 		"/machines":                     {"laptop"},
 		"/api/v1/overview?days=7":       {`"days":7`, `"failed":1`},
@@ -229,5 +232,111 @@ func TestRunPageWithoutGraphHasNoCanvas(t *testing.T) {
 	_, body := get(t, srv.URL+"/runs/laptop/run_1", nil)
 	if strings.Contains(body, "data-flow") {
 		t.Fatal("a run reported without a graph shows no canvas")
+	}
+}
+
+func waitingBatch(capable bool) hubapi.Batch {
+	started := time.Now().Add(-time.Hour).UTC().Format(time.RFC3339Nano)
+	source := hubapi.Source{Machine: "laptop", Version: "v1"}
+	if capable {
+		source.Capabilities = []string{hubapi.CapabilitySubmit}
+	}
+	return hubapi.Batch{Reports: []hubapi.RunReport{{
+		Protocol: 1, Source: source, RunID: "run_w", Workflow: "review", WorkflowDigest: "d2", Status: "waiting_input", Seq: 1, StartedAt: started,
+		Steps: []hubapi.StepReport{{ID: "decide", Type: "external", Status: "waiting_input", StartedAt: started}},
+		Graph: &hubapi.Graph{Entry: "decide", Nodes: []hubapi.GraphNode{{ID: "decide", Executors: []string{"external"},
+			OutputSchema: map[string]any{"type": "object", "required": []any{"decision"}, "properties": map[string]any{"decision": map[string]any{"type": "string", "enum": []any{"approve", "hold"}}}}}},
+			Edges: []hubapi.GraphEdge{{Source: "decide", Target: "$end"}}},
+	}}}
+}
+
+func TestSubmitInputFromThePage(t *testing.T) {
+	srv := server(t, hub.Options{IngestToken: "tok"}, true)
+	post(t, srv.URL, "tok", waitingBatch(true))
+	_, page := get(t, srv.URL+"/runs/laptop/run_w", nil)
+	if !strings.Contains(page, `name="f.decision" value="approve"`) || !strings.Contains(page, `name="csrf"`) {
+		t.Fatal("the run page offers a form for the waiting step")
+	}
+	csrf := regexp.MustCompile(`name="csrf" value="([0-9a-f]+)"`).FindStringSubmatch(page)[1]
+	noRedirect := &http.Client{CheckRedirect: func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }}
+	send := func(form url.Values, origin string) *http.Response {
+		request, _ := http.NewRequest(http.MethodPost, srv.URL+"/runs/laptop/run_w/submit", strings.NewReader(form.Encode()))
+		request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		if origin != "" {
+			request.Header.Set("Origin", origin)
+		}
+		response, err := noRedirect.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		response.Body.Close()
+		return response
+	}
+	if response := send(url.Values{"csrf": {csrf}, "node": {"decide"}, "f.decision": {"approve"}}, "https://evil.example"); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("cross-site post: %d", response.StatusCode)
+	}
+	if response := send(url.Values{"csrf": {"0000"}, "node": {"decide"}, "f.decision": {"approve"}}, ""); response.StatusCode != http.StatusForbidden {
+		t.Fatalf("wrong csrf token: %d", response.StatusCode)
+	}
+	if response := send(url.Values{"csrf": {csrf}, "node": {"decide"}, "f.decision": {"drop tables"}}, srv.URL); response.StatusCode != http.StatusSeeOther || !strings.Contains(response.Header.Get("Location"), "problem=") {
+		t.Fatalf("invalid choice: %d %s", response.StatusCode, response.Header.Get("Location"))
+	}
+	if response := send(url.Values{"csrf": {csrf}, "node": {"decide"}, "f.decision": {"approve"}}, srv.URL); response.StatusCode != http.StatusSeeOther || !strings.Contains(response.Header.Get("Location"), "notice=") {
+		t.Fatalf("valid submission: %d %s", response.StatusCode, response.Header.Get("Location"))
+	}
+
+	// the runner pulls it with its token, and only its own machine's commands
+	pull := func(machine, token string) (int, hubapi.CommandList) {
+		request, _ := http.NewRequest(http.MethodGet, srv.URL+hubapi.CommandsPath+"?machine="+machine, nil)
+		request.Header.Set("Authorization", "Bearer "+token)
+		response, err := http.DefaultClient.Do(request)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer response.Body.Close()
+		var list hubapi.CommandList
+		json.NewDecoder(response.Body).Decode(&list)
+		return response.StatusCode, list
+	}
+	if status, _ := pull("laptop", "wrong"); status != http.StatusUnauthorized {
+		t.Fatalf("pull without the token: %d", status)
+	}
+	_, list := pull("laptop", "tok")
+	if len(list.Commands) != 1 || list.Commands[0].NodeID != "decide" || list.Commands[0].Output["decision"] != "approve" || list.Commands[0].StepStartedAt == "" || list.Commands[0].By != "web" {
+		t.Fatalf("pulled = %+v", list)
+	}
+	if _, other := pull("server", "tok"); len(other.Commands) != 0 {
+		t.Fatal("another machine sees nothing")
+	}
+	body := strings.NewReader(`{"status":"applied"}`)
+	request, _ := http.NewRequest(http.MethodPost, srv.URL+hubapi.CommandsPath+"/"+list.Commands[0].ID+"?machine=laptop", body)
+	request.Header.Set("Authorization", "Bearer tok")
+	request.Header.Set("Content-Type", "application/json")
+	response, _ := http.DefaultClient.Do(request)
+	response.Body.Close()
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("answer: %d", response.StatusCode)
+	}
+	if _, again := pull("laptop", "tok"); len(again.Commands) != 0 {
+		t.Fatal("an answered command is not pulled again")
+	}
+	if _, page := get(t, srv.URL+"/runs/laptop/run_w", nil); !strings.Contains(page, "已执行") {
+		t.Fatal("the run page shows the outcome")
+	}
+}
+
+func TestNoFormForAMachineThatDidNotOptIn(t *testing.T) {
+	srv := server(t, hub.Options{}, true)
+	post(t, srv.URL, "", waitingBatch(false))
+	_, page := get(t, srv.URL+"/runs/laptop/run_w", nil)
+	if strings.Contains(page, `name="csrf"`) || !strings.Contains(page, "accept_commands") {
+		t.Fatal("without the capability the page explains how to enable it instead of offering a form")
+	}
+	request, _ := http.NewRequest(http.MethodPost, srv.URL+"/api/v1/runs/laptop/run_w/submit", strings.NewReader(`{"node_id":"decide","output":{"decision":"approve"}}`))
+	request.Header.Set("Content-Type", "application/json")
+	response, _ := http.DefaultClient.Do(request)
+	response.Body.Close()
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("api submit to a machine that did not opt in: %d", response.StatusCode)
 	}
 }

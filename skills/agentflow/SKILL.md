@@ -1,13 +1,24 @@
 ---
 name: agentflow
 metadata:
-  version: "3.10.0"
+  version: "3.11.0"
 description: "使用 AgentFlow 设计、执行和检查由 JSON 数据交接与显式条件边组成的本地工作流。"
 ---
 
 # AgentFlow workflow
 
 先查 `agentflow schema --all --format json`、`schema workspace` 和 `schema workflow`。自定义程序查 `schema executors`，定时或 webhook 查 `schema trigger`。根据用户要求确定入口数据、每个节点的输出契约、边条件和完成标准，再创建工作流。
+
+## 先对齐，再设计
+
+写新 workflow、改 workflow、设计给人看的消息之前，先读 [写好一条 workflow 的原则](references/principles.md)。最要紧的几条：
+
+- **先跟人对齐**：什么时候跑、读写什么、谁拍板、出错怎么办、一次花多少，用大白话写进 `DESIGN.md` 顶部，配一张流程图请需求方确认。
+- **权限只要用得到的**，范围先跟负责人确认；对外写操作先 shadow（只记不做）或等人拍板，过期走「不做」。
+- **能用程序就别用 agent**；agent 只做模型才能做的那段，写死型号、设花费上限，便宜的档够用就不升。
+- **跟人说话**：结论先行、改前改后的例子、细节收起来、一条消息只问一件事、给 Hub 运行页链接；节点结果写 `summary` / `reason`。
+- **开发时先拆开验**：纯逻辑配固定测试数据单测；每个外部依赖用探针单独调一次；用 `--input probe=true`、`stop_after`、`fixture` 只跑要验的那段；第一个节点检查前置条件；贵的放后面、做完先存档。
+- **上线以后看数据再改**：`agentflow hub steps` 找最常失败 / 最慢 / 等人最久的那一步。
 
 ## 先设计职责与数据
 
@@ -190,3 +201,30 @@ agentflow hub push --all --format json  # 配好后补报这个工作区已有�
 ```
 
 配置靠 `AGENTFLOW_HUB_URL`、`AGENTFLOW_HUB_TOKEN`（或工作区的 `hub.json`、`~/.agentflow/hub.json`），token 向用户要，不要写进仓库。配好后状态变化会自动上报，Hub 挂了不影响运行。想让 Hub 上看得懂每一步，就在节点结果里写 `summary` 和 `reason`。
+
+网页是给人看的；agent 用 CLI 拿同样的数据（JSON，`--format ndjson` 一行一条），读需要 `AGENTFLOW_HUB_VIEW_TOKEN`（Hub 没单独设查看 token 时用 `AGENTFLOW_HUB_TOKEN`）：
+
+```bash
+agentflow hub overview --days 7                     # 首页：计数、成功率、等人的、最近失败、跑着的
+agentflow hub runs --status failed --since 2026-11-01 --format ndjson   # 所有机器的运行，筛选同网页
+agentflow hub run <machine>/<run-id>                # 一次运行的全部：每步耗时/错误/summary/日志尾/结果/产物、图、等输入的步骤和 output_schema、发过的指令
+agentflow hub workflows                             # 每个 workflow 的成功率、p50/p95、最近状态
+agentflow hub machines                              # 机器、版本、最后上报、能不能从 Hub 收输入
+agentflow hub steps --workflow <名字> --days 7      # 每一步失败率、重试、p95、等人时长和最常见的错误（失败多的排前面）
+agentflow hub submit <machine>/<run-id> <node> --output '{...}' --wait  # 经 Hub 回答等输入的步骤
+```
+
+分析时先 `hub steps` 找排在最前面的那一步，再用 `errors[].last_run_id` 打开对应的 `hub run` 看日志尾和结果。`hub submit` 会先按该步的 `output_schema` 校验；对方机器要在自己的配置里开了 `accept_commands` 才会执行，`--wait` 等到它执行或拒绝。替人拍板之前先确认用户授权过。
+
+## 代码编排：脚本自己决定步骤
+
+步骤由代码决定（循环次数看数据、分支多、要调别的程序）时，不必写成 JSON：
+
+```bash
+agentflow code run <name> -- <脚本>          # 整个脚本是一次运行，退出码决定成败
+agentflow code step <id> -- <命令>           # 脚本里：跑一个命令当一步，结果 JSON 打到 stdout
+agentflow code step <id> --output '{...}' --summary "..."   # 记录脚本自己做完的一步
+```
+
+运行记在 `runs/` 里，`run list / get` 和 Hub 都能看，Hub 上标「代码编排」。
+

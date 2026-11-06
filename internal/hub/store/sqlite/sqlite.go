@@ -67,6 +67,23 @@ var migrations = []string{
 		key TEXT PRIMARY KEY,
 		graph TEXT NOT NULL
 	);`,
+	`ALTER TABLE machines ADD COLUMN capabilities TEXT NOT NULL DEFAULT '[]';
+	CREATE TABLE commands (
+		id TEXT PRIMARY KEY,
+		kind TEXT NOT NULL,
+		machine TEXT NOT NULL,
+		run_id TEXT NOT NULL,
+		node_id TEXT NOT NULL,
+		output TEXT NOT NULL DEFAULT '{}',
+		step_started_at INTEGER NOT NULL DEFAULT 0,
+		by TEXT NOT NULL DEFAULT '',
+		status TEXT NOT NULL,
+		error TEXT NOT NULL DEFAULT '',
+		created_at INTEGER NOT NULL,
+		updated_at INTEGER NOT NULL
+	);
+	CREATE INDEX commands_pending ON commands (machine, status, created_at);
+	CREATE INDEX commands_run ON commands (machine, run_id, created_at DESC);`,
 }
 
 // Open opens or creates the database at path.
@@ -211,6 +228,9 @@ func whereClause(filter app.RunFilter) (string, []any) {
 	if filter.Project != "" {
 		add("project = ?", filter.Project)
 	}
+	if filter.RunID != "" {
+		add("run_id = ?", filter.RunID)
+	}
 	if len(filter.Statuses) > 0 {
 		marks := make([]string, len(filter.Statuses))
 		for index, status := range filter.Statuses {
@@ -266,8 +286,9 @@ func scanRun(row scanner, withSteps bool) (domain.Run, error) {
 func (s *Store) GetMachine(ctx context.Context, id string) (domain.Machine, bool, error) {
 	var machine domain.Machine
 	var first, last int64
-	err := s.db.QueryRowContext(ctx, `SELECT id, hostname, version, first_seen, last_seen FROM machines WHERE id = ?`, id).
-		Scan(&machine.ID, &machine.Hostname, &machine.Version, &first, &last)
+	var capabilities string
+	err := s.db.QueryRowContext(ctx, `SELECT id, hostname, version, first_seen, last_seen, capabilities FROM machines WHERE id = ?`, id).
+		Scan(&machine.ID, &machine.Hostname, &machine.Version, &first, &last, &capabilities)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.Machine{}, false, nil
 	}
@@ -275,21 +296,26 @@ func (s *Store) GetMachine(ctx context.Context, id string) (domain.Machine, bool
 		return domain.Machine{}, false, err
 	}
 	machine.FirstSeen, machine.LastSeen = fromMs(first), fromMs(last)
+	_ = json.Unmarshal([]byte(capabilities), &machine.Capabilities)
 	return machine, true, nil
 }
 
 // SaveMachine upserts a machine.
 func (s *Store) SaveMachine(ctx context.Context, machine domain.Machine) error {
-	_, err := s.db.ExecContext(ctx, `INSERT INTO machines (id, hostname, version, first_seen, last_seen) VALUES (?, ?, ?, ?, ?)
+	capabilities, err := json.Marshal(nonNilStrings(machine.Capabilities))
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO machines (id, hostname, version, first_seen, last_seen, capabilities) VALUES (?, ?, ?, ?, ?, ?)
 		ON CONFLICT (id) DO UPDATE SET hostname = excluded.hostname, version = excluded.version,
-			first_seen = excluded.first_seen, last_seen = excluded.last_seen`,
-		machine.ID, machine.Hostname, machine.Version, ms(machine.FirstSeen), ms(machine.LastSeen))
+			first_seen = excluded.first_seen, last_seen = excluded.last_seen, capabilities = excluded.capabilities`,
+		machine.ID, machine.Hostname, machine.Version, ms(machine.FirstSeen), ms(machine.LastSeen), string(capabilities))
 	return err
 }
 
 // Machines lists machines by id.
 func (s *Store) Machines(ctx context.Context) ([]domain.Machine, error) {
-	rows, err := s.db.QueryContext(ctx, `SELECT id, hostname, version, first_seen, last_seen FROM machines ORDER BY id`)
+	rows, err := s.db.QueryContext(ctx, `SELECT id, hostname, version, first_seen, last_seen, capabilities FROM machines ORDER BY id`)
 	if err != nil {
 		return nil, err
 	}
@@ -298,10 +324,12 @@ func (s *Store) Machines(ctx context.Context) ([]domain.Machine, error) {
 	for rows.Next() {
 		var machine domain.Machine
 		var first, last int64
-		if err := rows.Scan(&machine.ID, &machine.Hostname, &machine.Version, &first, &last); err != nil {
+		var capabilities string
+		if err := rows.Scan(&machine.ID, &machine.Hostname, &machine.Version, &first, &last, &capabilities); err != nil {
 			return nil, err
 		}
 		machine.FirstSeen, machine.LastSeen = fromMs(first), fromMs(last)
+		_ = json.Unmarshal([]byte(capabilities), &machine.Capabilities)
 		machines = append(machines, machine)
 	}
 	return machines, rows.Err()
@@ -310,21 +338,30 @@ func (s *Store) Machines(ctx context.Context) ([]domain.Machine, error) {
 // stepRow is the stored shape of a step, kept apart from the domain type so
 // renaming a domain field never breaks rows already on disk.
 type stepRow struct {
-	ID          string `json:"id"`
-	Type        string `json:"type,omitempty"`
-	Provider    string `json:"provider,omitempty"`
-	Status      string `json:"status"`
-	SkipReason  string `json:"skip_reason,omitempty"`
-	Attempts    int    `json:"attempts,omitempty"`
-	StartedAt   int64  `json:"started_at,omitempty"`
-	FinishedAt  int64  `json:"finished_at,omitempty"`
-	DurationMs  int64  `json:"duration_ms,omitempty"`
-	WaitingMs   int64  `json:"waiting_ms,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Summary     string `json:"summary,omitempty"`
-	Reason      string `json:"reason,omitempty"`
-	OutputBytes int64  `json:"output_bytes,omitempty"`
-	LogBytes    int64  `json:"log_bytes,omitempty"`
+	ID          string        `json:"id"`
+	Type        string        `json:"type,omitempty"`
+	Provider    string        `json:"provider,omitempty"`
+	Status      string        `json:"status"`
+	SkipReason  string        `json:"skip_reason,omitempty"`
+	Attempts    int           `json:"attempts,omitempty"`
+	StartedAt   int64         `json:"started_at,omitempty"`
+	FinishedAt  int64         `json:"finished_at,omitempty"`
+	DurationMs  int64         `json:"duration_ms,omitempty"`
+	WaitingMs   int64         `json:"waiting_ms,omitempty"`
+	Error       string        `json:"error,omitempty"`
+	Summary     string        `json:"summary,omitempty"`
+	Reason      string        `json:"reason,omitempty"`
+	OutputBytes int64         `json:"output_bytes,omitempty"`
+	LogBytes    int64         `json:"log_bytes,omitempty"`
+	StdoutTail  string        `json:"stdout_tail,omitempty"`
+	StderrTail  string        `json:"stderr_tail,omitempty"`
+	Result      string        `json:"result,omitempty"`
+	Artifacts   []artifactRow `json:"artifacts,omitempty"`
+}
+
+type artifactRow struct {
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
 }
 
 func stepRows(steps []domain.Step) []stepRow {
@@ -333,7 +370,10 @@ func stepRows(steps []domain.Step) []stepRow {
 		rows[index] = stepRow{ID: step.ID, Type: step.Type, Provider: step.Provider, Status: string(step.Status),
 			SkipReason: step.SkipReason, Attempts: step.Attempts, StartedAt: ms(step.StartedAt), FinishedAt: ms(step.FinishedAt),
 			DurationMs: step.DurationMs, WaitingMs: step.WaitingMs, Error: step.Error, Summary: step.Summary, Reason: step.Reason,
-			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes}
+			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes, StdoutTail: step.StdoutTail, StderrTail: step.StderrTail, Result: step.Result}
+		for _, item := range step.Artifacts {
+			rows[index].Artifacts = append(rows[index].Artifacts, artifactRow(item))
+		}
 	}
 	return rows
 }
@@ -344,7 +384,10 @@ func domainSteps(rows []stepRow) []domain.Step {
 		steps[index] = domain.Step{ID: row.ID, Type: row.Type, Provider: row.Provider, Status: domain.Status(row.Status),
 			SkipReason: row.SkipReason, Attempts: row.Attempts, StartedAt: fromMs(row.StartedAt), FinishedAt: fromMs(row.FinishedAt),
 			DurationMs: row.DurationMs, WaitingMs: row.WaitingMs, Error: row.Error, Summary: row.Summary, Reason: row.Reason,
-			OutputBytes: row.OutputBytes, LogBytes: row.LogBytes}
+			OutputBytes: row.OutputBytes, LogBytes: row.LogBytes, StdoutTail: row.StdoutTail, StderrTail: row.StderrTail, Result: row.Result}
+		for _, item := range row.Artifacts {
+			steps[index].Artifacts = append(steps[index].Artifacts, domain.Artifact(item))
+		}
 	}
 	return steps
 }
@@ -378,10 +421,11 @@ type graphRow struct {
 }
 
 type graphNodeRow struct {
-	ID        string   `json:"id"`
-	Executors []string `json:"executors,omitempty"`
-	Parallel  bool     `json:"parallel,omitempty"`
-	Join      []string `json:"join,omitempty"`
+	ID           string         `json:"id"`
+	Executors    []string       `json:"executors,omitempty"`
+	Parallel     bool           `json:"parallel,omitempty"`
+	Join         []string       `json:"join,omitempty"`
+	OutputSchema map[string]any `json:"output_schema,omitempty"`
 }
 
 type graphEdgeRow struct {
@@ -431,4 +475,95 @@ func (s *Store) Graph(ctx context.Context, key string) (domain.Graph, bool, erro
 		graph.Edges = append(graph.Edges, domain.GraphEdge(edge))
 	}
 	return graph, true, nil
+}
+
+func nonNilStrings(values []string) []string {
+	if values == nil {
+		return []string{}
+	}
+	return values
+}
+
+const commandColumns = `id, kind, machine, run_id, node_id, output, step_started_at, by, status, error, created_at, updated_at`
+
+// SaveCommand stores or replaces a command.
+func (s *Store) SaveCommand(ctx context.Context, command domain.Command) error {
+	output, err := json.Marshal(command.Output)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `INSERT INTO commands (`+commandColumns+`) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+		ON CONFLICT (id) DO UPDATE SET status = excluded.status, error = excluded.error, updated_at = excluded.updated_at`,
+		command.ID, command.Kind, command.Run.Machine, command.Run.RunID, command.NodeID, string(output), ms(command.StepStartedAt),
+		command.By, string(command.Status), command.Error, ms(command.CreatedAt), ms(command.UpdatedAt))
+	return err
+}
+
+// Command returns one command.
+func (s *Store) Command(ctx context.Context, id string) (domain.Command, bool, error) {
+	commands, err := s.queryCommands(ctx, `WHERE id = ?`, id)
+	if err != nil || len(commands) == 0 {
+		return domain.Command{}, false, err
+	}
+	return commands[0], true, nil
+}
+
+// PendingCommands lists a machine's pending commands, oldest first.
+func (s *Store) PendingCommands(ctx context.Context, machine string) ([]domain.Command, error) {
+	return s.queryCommands(ctx, `WHERE machine = ? AND status = ? ORDER BY created_at, id`, machine, string(domain.CommandPending))
+}
+
+// RunCommands lists a run's commands, newest first.
+func (s *Store) RunCommands(ctx context.Context, run domain.RunKey) ([]domain.Command, error) {
+	return s.queryCommands(ctx, `WHERE machine = ? AND run_id = ? ORDER BY created_at DESC, id`, run.Machine, run.RunID)
+}
+
+func (s *Store) queryCommands(ctx context.Context, where string, args ...any) ([]domain.Command, error) {
+	rows, err := s.db.QueryContext(ctx, `SELECT `+commandColumns+` FROM commands `+where, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	commands := make([]domain.Command, 0)
+	for rows.Next() {
+		var command domain.Command
+		var output, status string
+		var stepStarted, created, updated int64
+		if err := rows.Scan(&command.ID, &command.Kind, &command.Run.Machine, &command.Run.RunID, &command.NodeID, &output, &stepStarted,
+			&command.By, &status, &command.Error, &created, &updated); err != nil {
+			return nil, err
+		}
+		if err := json.Unmarshal([]byte(output), &command.Output); err != nil {
+			return nil, fmt.Errorf("command %s output: %w", command.ID, err)
+		}
+		command.Status = domain.CommandStatus(status)
+		command.StepStartedAt, command.CreatedAt, command.UpdatedAt = fromMs(stepStarted), fromMs(created), fromMs(updated)
+		commands = append(commands, command)
+	}
+	return commands, rows.Err()
+}
+
+// DeleteFinishedBefore removes finished runs placed before cutoff and the
+// graphs no remaining run refers to, in one transaction.
+func (s *Store) DeleteFinishedBefore(ctx context.Context, cutoff time.Time) (int, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback()
+	result, err := tx.ExecContext(ctx, `DELETE FROM runs WHERE status IN (?, ?, ?) AND at < ?`,
+		string(domain.StatusSucceeded), string(domain.StatusFailed), string(domain.StatusCancelled), ms(cutoff))
+	if err != nil {
+		return 0, err
+	}
+	removed, err := result.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	// graphs are keyed workflow@digest (or run:<machine>/<id> without a digest)
+	if _, err := tx.ExecContext(ctx, `DELETE FROM graphs WHERE key NOT IN (
+		SELECT CASE WHEN digest != '' THEN workflow || '@' || digest ELSE 'run:' || machine || '/' || run_id END FROM runs)`); err != nil {
+		return 0, err
+	}
+	return int(removed), tx.Commit()
 }
