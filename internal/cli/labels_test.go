@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/chenhg5/agentflow/internal/trigger"
 )
 
 const labelledWorkflow = `{"version":"3","name":"pr-daily","title":"每日 PR 汇总","description":"每天把合进 main 的 PR 整理成一段话",
@@ -124,5 +126,19 @@ func TestHubWorkflowsByTag(t *testing.T) {
 	runs, err := hubJSON(t, "hub", "runs", "--group", "nope")
 	if err != nil || runs["total"] != 0.0 {
 		t.Fatalf("--group filters runs on the Hub: %v, %v", runs, err)
+	}
+}
+
+func TestDeliverySummaryCountsTheRealBacklog(t *testing.T) {
+	views := []trigger.DeliveryView{
+		{DeliveryReceipt: trigger.DeliveryReceipt{Status: "delivered"}, RunStatus: "succeeded"},
+		{DeliveryReceipt: trigger.DeliveryReceipt{Status: "delivered"}, RunStatus: "succeeded"},
+		{DeliveryReceipt: trigger.DeliveryReceipt{Status: "delivered"}, RunStatus: "running"},
+		{DeliveryReceipt: trigger.DeliveryReceipt{Status: "delivered"}, RunStatus: "missing"},
+		{DeliveryReceipt: trigger.DeliveryReceipt{Status: "skipped"}},
+	}
+	summary := deliverySummary(views)
+	if summary["deliveries"] != 5 || summary["active_runs"] != 1 || summary["by_run_status"].(map[string]int)["succeeded"] != 2 || summary["by_delivery_status"].(map[string]int)["skipped"] != 1 {
+		t.Fatalf("summary = %v", summary)
 	}
 }

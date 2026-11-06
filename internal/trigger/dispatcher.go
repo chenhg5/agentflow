@@ -5,9 +5,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -219,6 +221,49 @@ func DeliveryStatus(root string) ([]DeliveryReceipt, error) {
 		out = append(out, receipt)
 	}
 	return out, nil
+}
+
+// DeliveryView is a delivery as `trigger status` shows it. Receipts are
+// written once, when the delivery creates its run, so their run status is
+// the one at that moment; the view reads the run's current state instead.
+type DeliveryView struct {
+	DeliveryReceipt
+	// RunStatus is the run's current status, "missing" when its run
+	// directory is gone, or empty when the delivery created no run.
+	RunStatus string `json:"run_status,omitempty"`
+}
+
+// DeliveryStatusView lists deliveries newest first. Status reads "delivered"
+// once a run exists (a receipt stores that as "queued", meaning handed to the
+// run queue, which says nothing about the run now), and Run.Status and
+// RunStatus carry the run's current status.
+func DeliveryStatusView(root string) ([]DeliveryView, error) {
+	receipts, err := DeliveryStatus(root)
+	if err != nil {
+		return nil, err
+	}
+	views := make([]DeliveryView, 0, len(receipts))
+	for _, receipt := range receipts {
+		view := DeliveryView{DeliveryReceipt: receipt}
+		if receipt.Run.RunID != "" {
+			if receipt.Status == "queued" {
+				view.Status = "delivered"
+			}
+			run, err := store.LoadRun(root, receipt.Run.RunID)
+			switch {
+			case err == nil:
+				view.RunStatus = run.State.Status
+			case os.IsNotExist(err) || errors.Is(err, os.ErrNotExist):
+				view.RunStatus = "missing"
+			default:
+				view.RunStatus = "unreadable"
+			}
+			view.Run.Status = view.RunStatus
+		}
+		views = append(views, view)
+	}
+	sort.SliceStable(views, func(i, j int) bool { return views[i].ReceivedAt > views[j].ReceivedAt })
+	return views, nil
 }
 
 func (d *Dispatcher) hasActiveRun(triggerID string) (bool, error) {

@@ -136,11 +136,11 @@ func triggerCommand(args []string, root, cwd string) error {
 		if err != nil {
 			return internalError(err)
 		}
-		deliveries, err := trigger.DeliveryStatus(root)
+		deliveries, err := trigger.DeliveryStatusView(root)
 		if err != nil {
 			return internalError(err)
 		}
-		return writeData(map[string]any{"ok": true, "schedules": cursors, "deliveries": deliveries}, parsed.Output())
+		return writeData(map[string]any{"ok": true, "schedules": cursors, "summary": deliverySummary(deliveries), "deliveries": deliveries}, parsed.Output())
 	case "validate":
 		return writeData(map[string]any{"ok": true, "valid": true, "count": len(config.Triggers)}, parsed.Output())
 	case "fire":
@@ -1488,7 +1488,7 @@ func commandSchema() map[string]any {
 		{"name": "schema", "description": "Inspect command metadata or workflow/trigger/executor schemas.", "arguments": []map[string]any{{"name": "target", "required": false, "type": "string", "examples": []string{"--all", "workflow", "trigger", "run start"}}}, "flags": []map[string]any{flag("--all", "boolean", "Return every command", false), formatFlag}},
 		{"name": "config init", "description": "Create local executor configuration.", "flags": []map[string]any{flag("--dry-run", "boolean", "Preview without writing a file", false), formatFlag}},
 		{"name": "doctor", "description": "Check local setup and configured executors.", "flags": []map[string]any{formatFlag}},
-		{"name": "trigger status", "description": "Inspect durable schedule baselines, missed ranges, pending plans and delivery decisions.", "flags": []map[string]any{formatFlag}},
+		{"name": "trigger status", "description": "Inspect durable schedule baselines, missed ranges, pending plans and delivery decisions. Deliveries are newest first with their run's current status (run_status); summary counts deliveries by run status, so active shows what is really still queued or running.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger list", "description": "List configured cron and webhook triggers.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger validate", "description": "Validate triggers.json.", "flags": []map[string]any{formatFlag}},
 		{"name": "code run", "description": "Run a script as a code-orchestrated run: it records its own steps with `code step`; the run ends by the script's exit code.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}, {"name": "-- command...", "required": true, "type": "argv"}}, "flags": []map[string]any{flag("--input", "key=value", "Run input; repeat for multiple inputs", false), flag("--title", "string", "Readable name shown on the Hub and in run lists", false), flag("--description", "string", "What the script does", false), flag("--tag", "string", "Label; repeat for several", false), flag("--group", "string", "Section to list it under", false)}, "examples": []string{"agentflow code run nightly --title \"夜间巡检\" --tag ops -- python3 nightly.py"}},
@@ -1796,3 +1796,24 @@ func stderrTTY() bool {
 }
 
 func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
+
+// deliverySummary counts deliveries by their run's current status. Active
+// counts runs not finished yet: what a monitor should treat as backlog.
+func deliverySummary(deliveries []trigger.DeliveryView) map[string]any {
+	byRunStatus := map[string]int{}
+	byDelivery := map[string]int{}
+	active := 0
+	for _, delivery := range deliveries {
+		byDelivery[delivery.Status]++
+		if delivery.RunStatus == "" {
+			continue
+		}
+		byRunStatus[delivery.RunStatus]++
+		switch delivery.RunStatus {
+		case "succeeded", "failed", "cancelled", "missing", "unreadable":
+		default:
+			active++
+		}
+	}
+	return map[string]any{"deliveries": len(deliveries), "by_delivery_status": byDelivery, "by_run_status": byRunStatus, "active_runs": active}
+}

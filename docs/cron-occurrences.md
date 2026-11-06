@@ -82,6 +82,14 @@ agentflow trigger validate --format json
 agentflow trigger status --format json
 ```
 
+`trigger status` lists deliveries newest first. A delivery's `status` is what
+the dispatcher decided: `pending` (creation intent saved), `skipped` (with
+`reason`, e.g. `active_run`), or `delivered` (a run was created; the receipt
+file stores this as `queued`, meaning handed to the run queue). `run_status`
+and `run.status` are the run's current status, read from `runs/` at the time
+of the command, or `missing` when the run directory is gone. `summary` counts
+deliveries by run status; `active_runs` is the backlog a monitor should watch.
+
 `trigger-cursors/` contains baselines, outstanding plans, missed ranges and the
 last decision. `trigger-deliveries/` contains pending/completed/skipped receipts
 and prepared request snapshots. `runs/` remains the execution truth. These are

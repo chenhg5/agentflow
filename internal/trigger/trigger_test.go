@@ -204,3 +204,62 @@ func (f *fakeStarter) Start(context.Context, StartRunCommand) (RunRef, error) {
 	f.calls++
 	return RunRef{RunID: f.next, Status: "queued"}, nil
 }
+
+func TestDeliveryStatusViewReadsTheRunsCurrentStatus(t *testing.T) {
+	root := t.TempDir()
+	workflow := model.Workflow{Version: "3", Name: "daily", Entry: "a", Nodes: []model.Node{{ID: "a", Execution: model.Execution{Candidates: []model.ExecutorCandidate{{Executor: "external"}}}}}, Edges: []model.Transition{{From: "a", To: "$end"}}}
+	finished, err := store.CreateRun(root, workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	finished.State.Status = "succeeded"
+	if err := store.SaveState(finished); err != nil {
+		t.Fatal(err)
+	}
+	waiting, err := store.CreateRun(root, workflow, nil, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	waiting.State.Status = "waiting_input"
+	if err := store.SaveState(waiting); err != nil {
+		t.Fatal(err)
+	}
+	dispatcher := &Dispatcher{Root: root}
+	for _, receipt := range []DeliveryReceipt{
+		{TriggerID: "daily", DeliveryID: "d1", Status: "queued", Run: RunRef{RunID: finished.RunID, Status: "queued"}, ReceivedAt: "2026-10-28T08:15:00Z"},
+		{TriggerID: "daily", DeliveryID: "d2", Status: "queued", Run: RunRef{RunID: waiting.RunID, Status: "queued"}, ReceivedAt: "2026-10-29T08:15:00Z"},
+		{TriggerID: "daily", DeliveryID: "d3", Status: "queued", Run: RunRef{RunID: "run_gone", Status: "queued"}, ReceivedAt: "2026-10-27T08:15:00Z"},
+		{TriggerID: "daily", DeliveryID: "d4", Status: "skipped", Reason: "active_run", ReceivedAt: "2026-10-30T08:15:00Z"},
+	} {
+		if err := dispatcher.saveReceipt(receipt); err != nil {
+			t.Fatal(err)
+		}
+	}
+	views, err := DeliveryStatusView(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]DeliveryView{}
+	for _, view := range views {
+		got[view.DeliveryID] = view
+	}
+	if views[0].DeliveryID != "d4" || views[3].DeliveryID != "d3" {
+		t.Fatalf("newest first: %v, %v", views[0].DeliveryID, views[3].DeliveryID)
+	}
+	if view := got["d1"]; view.Status != "delivered" || view.RunStatus != "succeeded" || view.Run.Status != "succeeded" {
+		t.Fatalf("a finished run must not show as queued: %+v", view)
+	}
+	if view := got["d2"]; view.RunStatus != "waiting_input" {
+		t.Fatalf("waiting run: %+v", view)
+	}
+	if view := got["d3"]; view.RunStatus != "missing" {
+		t.Fatalf("deleted run: %+v", view)
+	}
+	if view := got["d4"]; view.Status != "skipped" || view.RunStatus != "" {
+		t.Fatalf("skipped delivery: %+v", view)
+	}
+	// the receipts on disk are left as written: the dispatcher still reads them
+	if receipt, err := dispatcher.loadReceipt("daily", "d1"); err != nil || receipt.Status != "queued" {
+		t.Fatalf("receipt changed on disk: %+v, %v", receipt, err)
+	}
+}
