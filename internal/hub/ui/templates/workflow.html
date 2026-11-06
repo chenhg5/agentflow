@@ -1,0 +1,41 @@
+{{define "content"}}
+{{$stat := .Stat}}{{$days := .Days}}
+<div class="page-head">
+  <div>
+    <h1 class="run-title"><span class="pill pill-lg{{if ne $stat.Label $stat.Name}} wf{{end}}">{{$stat.Label}}</span> {{dot $stat.LastStatus}}</h1>
+    <p class="muted mono">{{$stat.Name}}</p>
+    {{with $stat.Description}}<p class="wf-description">{{.}}</p>{{end}}
+    {{if or $stat.Group $stat.Tags}}<div class="tags tags-sm">{{with $stat.Group}}<a class="tag tag-link" href="/workflows?group={{.}}">{{.}}</a>{{end}}{{template "tagChips" $stat.Tags}}</div>{{end}}
+  </div>
+  <div class="segmented" role="group" aria-label="时间范围">
+    {{range .Choices}}<a href="?days={{.}}" {{if eq . $days}}aria-current="page"{{end}}>{{.}} 天</a>{{end}}
+  </div>
+</div>
+
+<div class="stats">
+  <div><b class="num">{{$stat.Counts.Total}}</b><span>{{$days}} 天运行</span></div>
+  <div><b class="num">{{percent $stat.Counts.SuccessRate}}</b><span>成功率</span></div>
+  <div><b class="num {{if $stat.Counts.Failed}}bad{{end}}">{{$stat.Counts.Failed}}</b><span>失败</span></div>
+  <div><b class="num {{if $stat.Counts.Waiting}}human{{end}}">{{$stat.Counts.Waiting}}</b><span>等人处理</span></div>
+  <div><b class="num">{{duration $stat.P50Ms}}</b><span>耗时 P50</span></div>
+  <div><b class="num">{{duration $stat.P95Ms}}</b><span>耗时 P95</span></div>
+</div>
+
+{{with .Flow}}
+<section class="card">
+  <div class="card-head"><h2>流程图</h2>{{with $.Latest}}<span class="muted">按最近一次运行着色 · <a class="link-quiet mono" href="{{runURL .}}">{{short .Key.RunID}}</a> {{ago .When}}</span>{{end}}</div>
+  <div class="flow" data-flow="{{.}}"><span class="muted">正在加载画布…</span></div>
+</section>
+<script type="module" src="{{asset "flow.js"}}"></script>
+{{end}}
+
+<section class="card">
+  <div class="card-head"><h2>步骤</h2><span class="muted">最近 {{$days}} 天，失败多的在前</span></div>
+  {{template "stepTable" .Steps}}
+</section>
+
+<section class="card">
+  <div class="card-head"><h2>最近运行</h2><a class="more" href="/runs?workflow={{$stat.Name}}">全部运行 ›</a></div>
+  {{template "runTable" .Recent}}
+</section>
+{{end}}

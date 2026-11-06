@@ -37,6 +37,7 @@ func (a API) Register(mux *http.ServeMux, ingest, view Guard) {
 	mux.Handle("GET /api/v1/workflows", view(http.HandlerFunc(a.workflows)))
 	mux.Handle("GET /api/v1/machines", view(http.HandlerFunc(a.machines)))
 	mux.Handle("GET /api/v1/steps", view(http.HandlerFunc(a.steps)))
+	mux.Handle("GET /api/v1/workflows/{name}", view(http.HandlerFunc(a.workflow)))
 	// Runners pull commands and answer them with the ingest token.
 	mux.Handle("GET "+hubapi.CommandsPath, ingest(http.HandlerFunc(a.pendingCommands)))
 	mux.Handle("POST "+hubapi.CommandsPath+"/{id}", ingest(http.HandlerFunc(a.answerCommand)))
@@ -137,6 +138,20 @@ func (a API) machines(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"machines": toMachinesJSON(machines)})
+}
+
+func (a API) workflow(w http.ResponseWriter, r *http.Request) {
+	days := Days(r, 30)
+	detail, err := a.Query.Workflow(r.Context(), r.PathValue("name"), days)
+	if errors.Is(err, app.ErrNotFound) {
+		writeError(w, http.StatusNotFound, "no runs of this workflow")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, toWorkflowDetailJSON(detail))
 }
 
 func (a API) steps(w http.ResponseWriter, r *http.Request) {

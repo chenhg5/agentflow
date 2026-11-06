@@ -142,3 +142,17 @@ func TestDeliverySummaryCountsTheRealBacklog(t *testing.T) {
 		t.Fatalf("summary = %v", summary)
 	}
 }
+
+func TestHubWorkflowDetail(t *testing.T) {
+	hubFixture(t)
+	_, restore := chdirForTest(t, t.TempDir())
+	defer restore()
+	detail, err := hubJSON(t, "hub", "workflow", "review")
+	if err != nil || detail["name"] != "review" || detail["graph"] == nil || len(detail["steps"].([]any)) == 0 || len(detail["recent_runs"].([]any)) != 2 {
+		t.Fatalf("workflow detail = %v, %v", detail, err)
+	}
+	var commandErr *CommandError
+	if _, err := hubJSON(t, "hub", "workflow", "nope"); !errors.As(err, &commandErr) || commandErr.Kind != "not_found" {
+		t.Fatalf("unknown workflow: %v", err)
+	}
+}

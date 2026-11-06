@@ -353,8 +353,9 @@ func TestWorkflowLabelsOnPagesAndAPI(t *testing.T) {
 	post(t, srv.URL, "", hubapi.Batch{Reports: []hubapi.RunReport{labelled, other}})
 
 	for path, want := range map[string][]string{
-		"/workflows":                    {"infra", "未分组", "夜间巡检", "nightly", "#ops", "#github", "&lt;b&gt;服务&lt;/b&gt;"},
-		"/workflows?tag=github":         {"pr-daily", "未分组"},
+		"/workflows":                    {`aria-label="分组"`, ">infra<", "夜间巡检", "nightly", "#ops · 1", "#github · 1"},
+		"/workflows?tag=github":         {"pr-daily"},
+		"/workflows/nightly":            {"夜间巡检", "&lt;b&gt;服务&lt;/b&gt;", "#ops", ">infra<", "流程图", "data-flow=", "步骤", "probe", "最近运行", "run_1", "全部运行"},
 		"/workflows?group=infra":        {"夜间巡检", "#ops"},
 		"/runs":                         {"夜间巡检", "全部分组", "全部标签"},
 		"/runs?group=infra":             {"run_1", "分组 infra"},
@@ -387,7 +388,16 @@ func TestWorkflowLabelsOnPagesAndAPI(t *testing.T) {
 			t.Errorf("%s: should not list %q", path, absent)
 		}
 	}
-	if _, body := get(t, srv.URL+"/workflows", nil); strings.Contains(body, "<b>服务") {
+	if _, body := get(t, srv.URL+"/workflows/nightly", nil); strings.Contains(body, "<b>服务") {
 		t.Error("descriptions must be escaped")
+	}
+	if _, body := get(t, srv.URL+"/workflows", nil); strings.Contains(body, "每晚检查") {
+		t.Error("the list leaves descriptions to the workflow page")
+	}
+	if status, _ := get(t, srv.URL+"/workflows/nope", nil); status != http.StatusNotFound {
+		t.Errorf("unknown workflow page: %d", status)
+	}
+	if _, body := get(t, srv.URL+"/runs", nil); !strings.Contains(body, `href="/workflows/nightly"`) {
+		t.Error("workflow names link to the workflow page")
 	}
 }

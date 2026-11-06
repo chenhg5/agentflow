@@ -75,7 +75,7 @@ func New(query app.Query, commands app.Commands, version string) (*Pages, error)
 		return nil, err
 	}
 	pages := map[string]*template.Template{}
-	for _, name := range []string{"overview", "runs", "run", "workflows", "machines", "missing"} {
+	for _, name := range []string{"overview", "runs", "run", "workflows", "workflow", "machines", "missing"} {
 		page, err := template.Must(base.Clone()).ParseFS(templateFS, "templates/"+name+".html")
 		if err != nil {
 			return nil, err
@@ -98,6 +98,7 @@ func (p *Pages) Register(mux *http.ServeMux, view api.Guard) {
 	mux.Handle("GET /runs/{machine}/{run}", view(http.HandlerFunc(p.run)))
 	mux.Handle("POST /runs/{machine}/{run}/submit", view(api.SameOrigin(http.HandlerFunc(p.submit))))
 	mux.Handle("GET /workflows", view(http.HandlerFunc(p.workflows)))
+	mux.Handle("GET /workflows/{name}", view(http.HandlerFunc(p.workflow)))
 	mux.Handle("GET /machines", view(http.HandlerFunc(p.machines)))
 }
 
@@ -242,7 +243,7 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 	}
 	crumbs := []Crumb{{Label: "运行", Href: "/runs"}}
 	if data.Stat != nil {
-		crumbs = append(crumbs, Crumb{Label: data.Stat.Label()})
+		crumbs = append(crumbs, Crumb{Label: data.Stat.Label(), Href: "/workflows/" + url.PathEscape(data.Stat.Name)})
 	} else if filter.Workflow != "" {
 		crumbs = append(crumbs, Crumb{Label: filter.Workflow})
 	}
@@ -267,7 +268,9 @@ func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 	run := detail.Run
 	if errors.Is(err, app.ErrNotFound) {
 		p.render(w, http.StatusNotFound, "missing", page{Title: "找不到这次运行", Tab: "runs",
-			Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: key.RunID}}, Data: key})
+			Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: key.RunID}}, Data: missingData{Heading: "找不到这次运行",
+				Message: "机器 " + key.Machine + " 上没有报过 " + key.RunID + "。可能还没上报，或者在那台机器上跑一次 agentflow hub push --all。",
+				Back:    "/runs", BackLabel: "回到运行列表"}})
 		return
 	}
 	if err != nil {
@@ -285,17 +288,18 @@ func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	p.render(w, http.StatusOK, "run", page{Title: run.Label() + " · " + run.Key.RunID, Tab: "runs", Live: !run.Status.Finished(),
-		Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: run.Label(), Href: "/runs?workflow=" + url.QueryEscape(run.Workflow)}, {Label: shortID(run.Key.RunID)}},
+		Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: run.Label(), Href: "/workflows/" + url.PathEscape(run.Workflow)}, {Label: shortID(run.Key.RunID)}},
 		Data:   data})
 }
 
 type workflowsData struct {
-	Groups  []app.WorkflowGroup
-	Tags    []app.TagCount
-	Tag     string
-	Group   string
-	Days    int
-	Choices []int
+	Workflows []app.WorkflowStat
+	Groups    []string
+	Tags      []app.TagCount
+	Tag       string
+	Group     string
+	Days      int
+	Choices   []int
 }
 
 func (p *Pages) workflows(w http.ResponseWriter, r *http.Request) {
@@ -306,16 +310,27 @@ func (p *Pages) workflows(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, err)
 		return
 	}
-	// The tag chips list every tag of the window, so picking one keeps the rest.
+	// The group tabs and tag menu list every group and tag of the window, so
+	// picking one keeps the others in reach.
 	all := stats
 	if len(tags) > 0 || group != "" {
-		if all, err = p.Query.Workflows(r.Context(), days, nil, group); err != nil {
+		if all, err = p.Query.Workflows(r.Context(), days, nil, ""); err != nil {
 			p.fail(w, err)
 			return
 		}
 	}
-	sort.SliceStable(stats, func(i, j int) bool { return stats[i].Label() < stats[j].Label() })
-	data := workflowsData{Groups: app.GroupWorkflows(stats), Tags: app.Tags(all), Group: group, Days: days, Choices: []int{7, 30, 90}}
+	sort.SliceStable(stats, func(i, j int) bool {
+		if stats[i].Group != stats[j].Group {
+			return stats[j].Group == "" || (stats[i].Group != "" && stats[i].Group < stats[j].Group)
+		}
+		return stats[i].Label() < stats[j].Label()
+	})
+	data := workflowsData{Workflows: stats, Tags: app.Tags(all), Group: group, Days: days, Choices: []int{7, 30, 90}}
+	for _, section := range app.GroupWorkflows(all) {
+		if section.Name != "" {
+			data.Groups = append(data.Groups, section.Name)
+		}
+	}
 	if len(tags) > 0 {
 		data.Tag = tags[0]
 	}
@@ -324,6 +339,40 @@ func (p *Pages) workflows(w http.ResponseWriter, r *http.Request) {
 		crumbs = append(crumbs, Crumb{Label: group})
 	}
 	p.render(w, http.StatusOK, "workflows", page{Title: "Workflow", Tab: "workflows", Crumbs: crumbs, Data: data})
+}
+
+type missingData struct{ Heading, Message, Back, BackLabel string }
+
+type workflowData struct {
+	app.WorkflowDetail
+	Flow    string
+	Choices []int
+}
+
+func (p *Pages) workflow(w http.ResponseWriter, r *http.Request) {
+	name := r.PathValue("name")
+	days := api.Days(r, 30)
+	detail, err := p.Query.Workflow(r.Context(), name, days)
+	if errors.Is(err, app.ErrNotFound) {
+		p.render(w, http.StatusNotFound, "missing", page{Title: "找不到这个 workflow", Tab: "workflows",
+			Crumbs: []Crumb{{Label: "Workflow", Href: "/workflows"}, {Label: name}}, Data: missingData{Heading: "找不到这个 workflow",
+				Message: "Hub 上还没有 " + name + " 的运行。它跑过一次并上报后就会出现在这里。", Back: "/workflows", BackLabel: "回到 Workflow 列表"}})
+		return
+	}
+	if err != nil {
+		p.fail(w, err)
+		return
+	}
+	data := workflowData{WorkflowDetail: detail, Choices: []int{7, 30, 90}}
+	if detail.Latest != nil {
+		data.Flow = flowJSON(*detail.Latest)
+	}
+	crumbs := []Crumb{{Label: "Workflow", Href: "/workflows"}}
+	if group := detail.Stat.Group; group != "" {
+		crumbs = append(crumbs, Crumb{Label: group, Href: "/workflows?group=" + url.QueryEscape(group)})
+	}
+	crumbs = append(crumbs, Crumb{Label: detail.Stat.Label()})
+	p.render(w, http.StatusOK, "workflow", page{Title: detail.Stat.Label(), Tab: "workflows", Live: true, Crumbs: crumbs, Data: data})
 }
 
 type machineRow struct {

@@ -244,3 +244,51 @@ func clip(text string) string {
 	}
 	return text
 }
+
+// WorkflowDetail is what the workflow page shows: the workflow's summary over
+// a window, its graph coloured by its latest run, how each step does, and its
+// recent runs.
+type WorkflowDetail struct {
+	Stat   WorkflowStat
+	Days   int
+	Latest *domain.Run // the newest run, with its graph when one was reported
+	Recent []domain.Run
+	Steps  []StepStat
+}
+
+const recentRuns = 10
+
+// Workflow returns the detail of the workflow called name over the last days
+// days, or ErrNotFound when it has no runs at all.
+func (q Query) Workflow(ctx context.Context, name string, days int) (WorkflowDetail, error) {
+	detail := WorkflowDetail{Days: days}
+	recent, _, err := q.Store.List(ctx, RunFilter{Workflow: name, Limit: recentRuns})
+	if err != nil {
+		return detail, err
+	}
+	if len(recent) == 0 {
+		return detail, ErrNotFound
+	}
+	detail.Recent = recent
+	window, _, err := q.Store.List(ctx, RunFilter{Workflow: name, Since: startOfDay(q.now()).AddDate(0, 0, -(days - 1))})
+	if err != nil {
+		return detail, err
+	}
+	if stats := workflowStats(window); len(stats) == 1 {
+		detail.Stat = stats[0]
+	} else {
+		// no runs in the window: describe it from the runs there are
+		stats := workflowStats(recent)
+		detail.Stat = WorkflowStat{Name: name, Title: stats[0].Title, Description: stats[0].Description, Tags: stats[0].Tags,
+			Group: stats[0].Group, LastStatus: stats[0].LastStatus, LastAt: stats[0].LastAt, Machines: stats[0].Machines}
+	}
+	latest, err := q.Run(ctx, recent[0].Key)
+	if err != nil {
+		return detail, err
+	}
+	detail.Latest = &latest
+	if detail.Steps, err = q.Steps(ctx, name, days); err != nil {
+		return detail, err
+	}
+	return detail, nil
+}

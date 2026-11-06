@@ -327,3 +327,24 @@ func tagList(tags []string) []string {
 	}
 	return tags
 }
+
+// workflowDetailJSON is GET /api/v1/workflows/{name}: what the workflow page
+// shows.
+type workflowDetailJSON struct {
+	workflowJSON
+	Days   int            `json:"days"`
+	Graph  *graphJSON     `json:"graph,omitempty"`
+	Latest *runJSON       `json:"latest_run,omitempty"`
+	Steps  []stepStatJSON `json:"steps"`
+	Recent []runJSON      `json:"recent_runs"`
+}
+
+func toWorkflowDetailJSON(detail app.WorkflowDetail) workflowDetailJSON {
+	out := workflowDetailJSON{workflowJSON: toWorkflowJSON(detail.Stat), Days: detail.Days, Steps: toStepStatsJSON(detail.Steps), Recent: toRunsJSON(detail.Recent)}
+	if latest := detail.Latest; latest != nil {
+		run := toRunJSON(*latest)
+		out.Latest = &run
+		out.Graph = toRunDetailJSON(app.RunDetail{Run: *latest}).Graph
+	}
+	return out
+}
