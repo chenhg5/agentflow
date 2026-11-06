@@ -15,10 +15,11 @@ import (
 )
 
 const (
-	maxErrorRunes   = 2000
-	maxSummaryRunes = 500
-	maxInputRunes   = 300
-	maxInputs       = 30
+	maxErrorRunes       = 2000
+	maxSummaryRunes     = 500
+	maxDescriptionRunes = 2000
+	maxInputRunes       = 300
+	maxInputs           = 30
 )
 
 // SourceFor describes this machine and the project whose .agentflow root is root.
@@ -67,6 +68,12 @@ func FromRun(run *model.Run, source hubapi.Source, asOf time.Time) hubapi.RunRep
 		report.Workflow = run.Workflow.Name
 	}
 	report.Graph = graphOf(run.Workflow)
+	report.WorkflowTitle = clip(Redact(run.Workflow.Title), maxSummaryRunes)
+	report.WorkflowDescription = clip(Redact(run.Workflow.Description), maxDescriptionRunes)
+	report.Group = clip(Redact(run.Workflow.Group), maxSummaryRunes)
+	for _, tag := range run.Workflow.Tags {
+		report.Tags = append(report.Tags, clip(Redact(tag), maxSummaryRunes))
+	}
 	if trigger := run.State.Trigger; trigger != nil {
 		report.Trigger = &hubapi.Trigger{ID: trigger.ID, Kind: trigger.Kind, DeliveryID: trigger.DeliveryID, ScheduledAt: trigger.ScheduledAt}
 	}

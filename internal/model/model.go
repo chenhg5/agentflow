@@ -1,12 +1,20 @@
 package model
 
 type Workflow struct {
-	Version string                     `json:"version"`
-	Name    string                     `json:"name"`
-	Inputs  map[string]InputDefinition `json:"inputs,omitempty"`
-	Nodes   []Node                     `json:"nodes"`
-	Entry   string                     `json:"entry,omitempty"`
-	Edges   []Transition               `json:"edges,omitempty"`
+	Version string `json:"version"`
+	// Name identifies the workflow in commands, triggers and the Hub.
+	Name string `json:"name"`
+	// Title, Description, Tags and Group are for people: a readable name,
+	// what the workflow does, labels to filter by, and the section it is
+	// listed under. The engine never reads them.
+	Title       string                     `json:"title,omitempty"`
+	Description string                     `json:"description,omitempty"`
+	Tags        []string                   `json:"tags,omitempty"`
+	Group       string                     `json:"group,omitempty"`
+	Inputs      map[string]InputDefinition `json:"inputs,omitempty"`
+	Nodes       []Node                     `json:"nodes"`
+	Entry       string                     `json:"entry,omitempty"`
+	Edges       []Transition               `json:"edges,omitempty"`
 	// AllowUnboundedCycles explicitly permits cycles with no maxIterations edge.
 	// The default remains bounded to catch accidental infinite loops.
 	AllowUnboundedCycles bool `json:"allowUnboundedCycles,omitempty"`
@@ -247,4 +255,12 @@ type Run struct {
 	RunDir   string
 	Workflow Workflow
 	State    RunState
+}
+
+// Label is how people see a workflow: its title, or its name without one.
+func (w Workflow) Label() string {
+	if w.Title != "" {
+		return w.Title
+	}
+	return w.Name
 }

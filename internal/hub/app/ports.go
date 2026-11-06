@@ -20,6 +20,10 @@ type RunFilter struct {
 	Machine  string
 	Project  string
 	RunID    string
+	// Tags keeps runs whose workflow has every one of them; Group, runs of
+	// workflows in that group.
+	Tags     []string
+	Group    string
 	Statuses []domain.Status
 	Since    time.Time
 	Until    time.Time

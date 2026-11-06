@@ -16,6 +16,10 @@
       "type": "string",
       "minLength": 1
     },
+    "title": {"type": "string", "minLength": 1, "maxLength": 120, "pattern": "^\\S(.*\\S)?$", "description": "Readable name shown on the Hub, agentflow web and run lists; name stays the identifier"},
+    "description": {"type": "string", "minLength": 1, "maxLength": 2000, "description": "What the workflow does and for whom, in plain language"},
+    "tags": {"type": "array", "maxItems": 20, "uniqueItems": true, "items": {"type": "string", "minLength": 1, "maxLength": 40, "pattern": "^\\S(.*\\S)?$"}, "description": "Labels to filter workflows and runs by"},
+    "group": {"type": "string", "minLength": 1, "maxLength": 80, "pattern": "^\\S(.*\\S)?$", "description": "Section the workflow is listed under, e.g. a team or product"},
     "inputs": {
       "type": "object",
       "additionalProperties": {

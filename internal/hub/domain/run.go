@@ -68,20 +68,26 @@ type Run struct {
 	Orchestration string
 	Workflow      string
 	Digest        string
-	Status        Status
-	Seq           int64
-	CreatedAt     time.Time
-	StartedAt     time.Time
-	FinishedAt    time.Time
-	UpdatedAt     time.Time
-	ReceivedAt    time.Time
-	DurationMs    int64
-	WaitingMs     int64
-	TriggerKind   string
-	TriggerID     string
-	Inputs        map[string]string
-	Error         string
-	Steps         []Step
+	// Title, Description, Tags and Group label the workflow for people. They
+	// come with every report, so the latest run carries the current labels.
+	Title       string
+	Description string
+	Tags        []string
+	Group       string
+	Status      Status
+	Seq         int64
+	CreatedAt   time.Time
+	StartedAt   time.Time
+	FinishedAt  time.Time
+	UpdatedAt   time.Time
+	ReceivedAt  time.Time
+	DurationMs  int64
+	WaitingMs   int64
+	TriggerKind string
+	TriggerID   string
+	Inputs      map[string]string
+	Error       string
+	Steps       []Step
 	// Graph is stored once per workflow version (see GraphKey), not per run.
 	Graph *Graph
 	// Capabilities come with the report and update the machine; not stored per run.
@@ -190,4 +196,27 @@ func (r Run) WaitingStep() (Step, bool) {
 		}
 	}
 	return Step{}, false
+}
+
+// Label is the workflow's title, or its name without one.
+func (r Run) Label() string {
+	if r.Title != "" {
+		return r.Title
+	}
+	return r.Workflow
+}
+
+// Labelled reports whether the run carries any workflow label.
+func (r Run) Labelled() bool {
+	return r.Title != "" || r.Description != "" || len(r.Tags) > 0 || r.Group != ""
+}
+
+// HasTag reports whether the run's workflow carries tag.
+func (r Run) HasTag(tag string) bool {
+	for _, item := range r.Tags {
+		if item == tag {
+			return true
+		}
+	}
+	return false
 }

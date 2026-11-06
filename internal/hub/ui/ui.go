@@ -151,7 +151,9 @@ type runsData struct {
 	Filter    app.RunFilter
 	Status    string
 	Tabs      []statusTab
-	Workflows []string
+	Workflows []app.WorkflowStat
+	Groups    []string
+	Tags      []app.TagCount
 	Machines  []string
 	Stat      *app.WorkflowStat
 	PrevHref  string
@@ -194,7 +196,7 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 		p.fail(w, err)
 		return
 	}
-	stats, err := p.Query.Workflows(r.Context(), 30)
+	stats, err := p.Query.Workflows(r.Context(), 30, nil, "")
 	if err != nil {
 		p.fail(w, err)
 		return
@@ -212,12 +214,18 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 		data.Tabs = append(data.Tabs, tab)
 	}
 	for index := range stats {
-		data.Workflows = append(data.Workflows, stats[index].Name)
+		data.Workflows = append(data.Workflows, stats[index])
 		if stats[index].Name == filter.Workflow {
 			data.Stat = &stats[index]
 		}
 	}
-	sort.Strings(data.Workflows)
+	sort.SliceStable(data.Workflows, func(i, j int) bool { return data.Workflows[i].Label() < data.Workflows[j].Label() })
+	for _, group := range app.GroupWorkflows(stats) {
+		if group.Name != "" {
+			data.Groups = append(data.Groups, group.Name)
+		}
+	}
+	data.Tags = app.Tags(stats)
 	for _, machine := range machines {
 		data.Machines = append(data.Machines, machine.ID)
 	}
@@ -233,7 +241,9 @@ func (p *Pages) runs(w http.ResponseWriter, r *http.Request) {
 		data.NextHref = runsHref(current, "offset", itoa(filter.Offset+pageSize))
 	}
 	crumbs := []Crumb{{Label: "运行", Href: "/runs"}}
-	if filter.Workflow != "" {
+	if data.Stat != nil {
+		crumbs = append(crumbs, Crumb{Label: data.Stat.Label()})
+	} else if filter.Workflow != "" {
 		crumbs = append(crumbs, Crumb{Label: filter.Workflow})
 	}
 	p.render(w, http.StatusOK, "runs", page{Title: "运行", Tab: "runs", Live: filter.Offset == 0, Crumbs: crumbs, Data: data})
@@ -274,27 +284,46 @@ func (p *Pages) run(w http.ResponseWriter, r *http.Request) {
 			data.Failed = &run.Steps[index]
 		}
 	}
-	p.render(w, http.StatusOK, "run", page{Title: run.Workflow + " · " + run.Key.RunID, Tab: "runs", Live: !run.Status.Finished(),
-		Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: run.Workflow, Href: "/runs?workflow=" + url.QueryEscape(run.Workflow)}, {Label: shortID(run.Key.RunID)}},
+	p.render(w, http.StatusOK, "run", page{Title: run.Label() + " · " + run.Key.RunID, Tab: "runs", Live: !run.Status.Finished(),
+		Crumbs: []Crumb{{Label: "运行", Href: "/runs"}, {Label: run.Label(), Href: "/runs?workflow=" + url.QueryEscape(run.Workflow)}, {Label: shortID(run.Key.RunID)}},
 		Data:   data})
 }
 
 type workflowsData struct {
-	Workflows []app.WorkflowStat
-	Days      int
-	Choices   []int
+	Groups  []app.WorkflowGroup
+	Tags    []app.TagCount
+	Tag     string
+	Group   string
+	Days    int
+	Choices []int
 }
 
 func (p *Pages) workflows(w http.ResponseWriter, r *http.Request) {
 	days := api.Days(r, 30)
-	stats, err := p.Query.Workflows(r.Context(), days)
+	tags, group := api.Tags(r), strings.TrimSpace(r.URL.Query().Get("group"))
+	stats, err := p.Query.Workflows(r.Context(), days, tags, group)
 	if err != nil {
 		p.fail(w, err)
 		return
 	}
-	sort.SliceStable(stats, func(i, j int) bool { return stats[i].Name < stats[j].Name })
-	p.render(w, http.StatusOK, "workflows", page{Title: "Workflow", Tab: "workflows", Crumbs: []Crumb{{Label: "Workflow"}},
-		Data: workflowsData{Workflows: stats, Days: days, Choices: []int{7, 30, 90}}})
+	// The tag chips list every tag of the window, so picking one keeps the rest.
+	all := stats
+	if len(tags) > 0 || group != "" {
+		if all, err = p.Query.Workflows(r.Context(), days, nil, group); err != nil {
+			p.fail(w, err)
+			return
+		}
+	}
+	sort.SliceStable(stats, func(i, j int) bool { return stats[i].Label() < stats[j].Label() })
+	data := workflowsData{Groups: app.GroupWorkflows(stats), Tags: app.Tags(all), Group: group, Days: days, Choices: []int{7, 30, 90}}
+	if len(tags) > 0 {
+		data.Tag = tags[0]
+	}
+	crumbs := []Crumb{{Label: "Workflow", Href: "/workflows"}}
+	if group != "" {
+		crumbs = append(crumbs, Crumb{Label: group})
+	}
+	p.render(w, http.StatusOK, "workflows", page{Title: "Workflow", Tab: "workflows", Crumbs: crumbs, Data: data})
 }
 
 type machineRow struct {

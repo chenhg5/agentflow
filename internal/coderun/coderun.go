@@ -37,7 +37,8 @@ var ErrFinished = errors.New("run already finished")
 func now() string { return time.Now().UTC().Format(time.RFC3339Nano) }
 
 // Start creates a running code run named name.
-func Start(root, name string, inputs map[string]string) (*model.Run, error) {
+func Start(root string, labels model.Workflow, inputs map[string]string) (*model.Run, error) {
+	name := labels.Name
 	if name == "" {
 		return nil, errors.New("a code run needs a name")
 	}
@@ -50,7 +51,8 @@ func Start(root, name string, inputs map[string]string) (*model.Run, error) {
 	if err := os.MkdirAll(filepath.Join(dir, "artifacts"), 0o755); err != nil {
 		return nil, err
 	}
-	run := &model.Run{RunID: id, RunDir: dir, Workflow: model.Workflow{Version: Version, Name: name, Nodes: []model.Node{}},
+	run := &model.Run{RunID: id, RunDir: dir, Workflow: model.Workflow{Version: Version, Name: name, Title: labels.Title,
+		Description: labels.Description, Tags: labels.Tags, Group: labels.Group, Nodes: []model.Node{}},
 		State: model.RunState{RunID: id, WorkflowName: name, Status: "running", Inputs: inputs, Nodes: map[string]*model.NodeState{},
 			Visits: map[string]int{}, CreatedAt: at, StartedAt: at}}
 	if err := saveWorkflow(run); err != nil {

@@ -2,6 +2,7 @@ package api
 
 import (
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/chenhg5/agentflow/internal/hub/domain"
@@ -29,6 +30,10 @@ func runFromReport(report hubapi.RunReport) (domain.Run, error) {
 		Orchestration: orchestration,
 		Workflow:      report.Workflow,
 		Digest:        report.WorkflowDigest,
+		Title:         clip(report.WorkflowTitle, 120),
+		Description:   clip(report.WorkflowDescription, 2000),
+		Tags:          tagsOf(report.Tags),
+		Group:         clip(report.Group, 80),
 		Status:        domain.Status(report.Status),
 		Seq:           report.Seq,
 		CreatedAt:     parseTime(report.CreatedAt),
@@ -82,6 +87,29 @@ func artifacts(in []hubapi.Artifact) []domain.Artifact {
 	var out []domain.Artifact
 	for _, item := range in {
 		out = append(out, domain.Artifact{Name: item.Name, Bytes: item.Bytes})
+	}
+	return out
+}
+
+// clip bounds a label from a report; runners clip too, but the Hub does not
+// rely on every client doing so.
+func clip(text string, limit int) string {
+	text = strings.TrimSpace(text)
+	if runes := []rune(text); len(runes) > limit {
+		return string(runes[:limit])
+	}
+	return text
+}
+
+// tagsOf keeps at most 20 distinct, non-empty tags of at most 40 characters.
+func tagsOf(tags []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, tag := range tags {
+		if tag = clip(tag, 40); tag != "" && !seen[tag] && len(out) < 20 {
+			seen[tag] = true
+			out = append(out, tag)
+		}
 	}
 	return out
 }

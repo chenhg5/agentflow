@@ -58,15 +58,21 @@ type Day struct {
 
 // WorkflowStat summarises one workflow.
 type WorkflowStat struct {
-	Name       string          `json:"name"`
-	Counts     Counts          `json:"counts"`
-	P50Ms      int64           `json:"p50_ms"`
-	P95Ms      int64           `json:"p95_ms"`
-	Last       *domain.Run     `json:"-"`
-	LastStatus domain.Status   `json:"last_status"`
-	LastAt     time.Time       `json:"last_at"`
-	Machines   []string        `json:"machines"`
-	Recent     []domain.Status `json:"recent"` // oldest → newest, for a sparkline of outcomes
+	Name string `json:"name"`
+	// Title, Description, Tags and Group are the labels of the newest run
+	// that has any.
+	Title       string          `json:"title"`
+	Description string          `json:"description"`
+	Tags        []string        `json:"tags"`
+	Group       string          `json:"group"`
+	Counts      Counts          `json:"counts"`
+	P50Ms       int64           `json:"p50_ms"`
+	P95Ms       int64           `json:"p95_ms"`
+	Last        *domain.Run     `json:"-"`
+	LastStatus  domain.Status   `json:"last_status"`
+	LastAt      time.Time       `json:"last_at"`
+	Machines    []string        `json:"machines"`
+	Recent      []domain.Status `json:"recent"` // oldest → newest, for a sparkline of outcomes
 }
 
 // Overview is the landing page.
@@ -135,9 +141,10 @@ func (q Query) Overview(ctx context.Context, days int) (Overview, error) {
 	return overview, nil
 }
 
-// Workflows summarises every workflow with runs in the last days days.
-func (q Query) Workflows(ctx context.Context, days int) ([]WorkflowStat, error) {
-	runs, _, err := q.Store.List(ctx, RunFilter{Since: startOfDay(q.now()).AddDate(0, 0, -(days - 1))})
+// Workflows summarises every workflow with runs in the last days days, keeping
+// those with every tag in tags and, when group is set, in that group.
+func (q Query) Workflows(ctx context.Context, days int, tags []string, group string) ([]WorkflowStat, error) {
+	runs, _, err := q.Store.List(ctx, RunFilter{Since: startOfDay(q.now()).AddDate(0, 0, -(days - 1)), Tags: tags, Group: group})
 	if err != nil {
 		return nil, err
 	}
@@ -191,10 +198,16 @@ func workflowStats(runs []domain.Run) []WorkflowStat {
 		run := runs[index]
 		stat := stats[run.Workflow]
 		if stat == nil {
-			stat = &WorkflowStat{Name: run.Workflow, Last: &runs[index], LastStatus: run.Status, LastAt: run.When()}
+			stat = &WorkflowStat{Name: run.Workflow, Title: run.Label(), Description: run.Description, Tags: run.Tags, Group: run.Group,
+				Last: &runs[index], LastStatus: run.Status, LastAt: run.When()}
 			stats[run.Workflow] = stat
 			machines[run.Workflow] = map[string]bool{}
 			order = append(order, run.Workflow)
+		}
+		// Labels come from the newest run that has any: a machine on an older
+		// agentflow reports none, and must not hide the ones others send.
+		if !stat.labelled() && run.Labelled() {
+			stat.Title, stat.Description, stat.Tags, stat.Group = run.Label(), run.Description, run.Tags, run.Group
 		}
 		stat.Counts.add(run.Status)
 		machines[run.Workflow][run.Key.Machine] = true
@@ -241,4 +254,72 @@ func (q Query) now() time.Time {
 		return q.Now()
 	}
 	return time.Now()
+}
+
+func (w WorkflowStat) labelled() bool {
+	return (w.Title != "" && w.Title != w.Name) || w.Description != "" || len(w.Tags) > 0 || w.Group != ""
+}
+
+// Label is the workflow's title, or its name without one.
+func (w WorkflowStat) Label() string {
+	if w.Title != "" {
+		return w.Title
+	}
+	return w.Name
+}
+
+// WorkflowGroup is one section of the workflows page.
+type WorkflowGroup struct {
+	Name      string // empty for workflows without a group
+	Workflows []WorkflowStat
+}
+
+// GroupWorkflows sections stats by group, named groups first in name order
+// and ungrouped workflows last, keeping the order within each group.
+func GroupWorkflows(stats []WorkflowStat) []WorkflowGroup {
+	index := map[string]int{}
+	var groups []WorkflowGroup
+	for _, stat := range stats {
+		position, ok := index[stat.Group]
+		if !ok {
+			position = len(groups)
+			index[stat.Group] = position
+			groups = append(groups, WorkflowGroup{Name: stat.Group})
+		}
+		groups[position].Workflows = append(groups[position].Workflows, stat)
+	}
+	sort.SliceStable(groups, func(i, j int) bool {
+		if (groups[i].Name == "") != (groups[j].Name == "") {
+			return groups[j].Name == ""
+		}
+		return groups[i].Name < groups[j].Name
+	})
+	return groups
+}
+
+// TagCount is a tag and how many of the listed workflows carry it.
+type TagCount struct {
+	Tag   string `json:"tag"`
+	Count int    `json:"count"`
+}
+
+// Tags counts the tags of stats, most used first.
+func Tags(stats []WorkflowStat) []TagCount {
+	counts := map[string]int{}
+	for _, stat := range stats {
+		for _, tag := range stat.Tags {
+			counts[tag]++
+		}
+	}
+	out := make([]TagCount, 0, len(counts))
+	for tag, count := range counts {
+		out = append(out, TagCount{Tag: tag, Count: count})
+	}
+	sort.Slice(out, func(i, j int) bool {
+		if out[i].Count != out[j].Count {
+			return out[i].Count > out[j].Count
+		}
+		return out[i].Tag < out[j].Tag
+	})
+	return out
 }

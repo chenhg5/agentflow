@@ -53,6 +53,8 @@ agentflow executor init archive --kind command
 
 ## 图结构与数据流
 
+`name` 是程序用的标识（命令、trigger、Hub 都按它找）。给人看的写在 `title`（显示名）、`description`（一两句大白话：做什么、给谁）、`tags`（筛选用的标签）、`group`（列表里归在哪一组，比如团队或产品）。这四个可选、引擎不读，但每条 workflow 都应该写上，不然 Hub 和列表里只看得到一串英文名，谁也看不懂。`agentflow workflow list` 按分组列出工作区里的 workflow，`--tag` / `--group` 筛选；`run list`、`hub runs`、`hub workflows` 也能按它们筛。
+
 只使用 version `3`。`entry` 是起点，`edges` 是唯一控制流，节点数组顺序没有执行含义。入口节点得到 run input；之后每条被选中的边默认将源节点的完整 JSON 输出作为目标节点的输入。需要保留源节点输入或重组字段时，在边上写通用 `map`；节点没有 `input` 字段，也不要把业务指令伪装成上游数据。
 
 循环默认必须有 `maxIterations` 限制。只有任务明确要求无限返工/持续运行时，才在 workflow 顶层设置 `allowUnboundedCycles: true`；这只是运行策略，不代表任何业务决策。
@@ -62,7 +64,8 @@ agentflow executor init archive --kind command
 
 ```json
 {
-  "version": "3", "name": "example", "entry": "draft",
+  "version": "3", "name": "example", "title": "方案起草与审阅", "description": "按主题起草方案，审阅低于 5 分就返工，最多两轮",
+  "tags": ["writing"], "group": "docs", "entry": "draft",
   "inputs": {"topic": {"type": "string", "required": true}},
   "nodes": [
     {"id": "draft", "execution": {"candidates": [{"executor": "author", "config": {"instruction": "根据收到的主题起草方案"}}]}, "outputSchema": {"type": "object"}},

@@ -2,10 +2,11 @@
 {{$run := .Run}}
 <div class="page-head">
   <div>
-    <h1 class="run-title">{{template "workflowName" $run.Workflow}} {{badge $run.Status}}</h1>
-    <p class="muted mono">{{$run.Key.RunID}}</p>
+    <h1 class="run-title">{{template "workflowName" (wf $run.Workflow $run.Label)}} {{badge $run.Status}}</h1>
+    <p class="muted mono">{{if ne $run.Label $run.Workflow}}{{$run.Workflow}} · {{end}}{{$run.Key.RunID}}</p>
+    {{with $run.Description}}<p class="wf-description">{{.}}</p>{{end}}
   </div>
-  <div class="tags"><span class="tag">{{orchestration $run.Orchestration}}</span>{{with $run.Version}}<span class="tag mono">agentflow {{.}}</span>{{end}}</div>
+  <div class="tags">{{with $run.Group}}<a class="tag tag-link" href="/workflows?group={{.}}">{{.}}</a>{{end}}{{template "tagChips" $run.Tags}}<span class="tag">{{orchestration $run.Orchestration}}</span>{{with $run.Version}}<span class="tag mono">agentflow {{.}}</span>{{end}}</div>
 </div>
 
 <div class="stats">
