@@ -1,19 +1,3 @@
 # Unreleased
 
-Changes since [v0.5.0](v0.5.0.md).
-
-- Workflow labels: a workflow may set `title` (readable name), `description`, `tags` and `group`. They change nothing in execution. `name` stays the identifier. The Hub shows titles and descriptions, lists workflows by group with tag filters, and filters runs by tag and group (pages, `/api/v1/runs?tag=&group=`, `/api/v1/workflows?tag=&group=`, `hub runs|workflows --tag --group`). `agentflow web` shows them and groups its run list. New `agentflow workflow list [--tag] [--group]` lists the workspace's workflows; `run list` and `run get` include the labels and `run list` filters by them; `code run|start` take `--title`, `--description`, `--tag` and `--group`. Hub SQLite migration 4 adds the columns.
-- Hub CLI for agents: `agentflow hub overview | runs | run | workflows | machines | steps` print everything the Hub's pages show as JSON (`--format ndjson` for one line per item, a short table on a terminal), and `agentflow hub submit <machine>/<run-id> <node> --output '{...}' [--wait]` answers a waiting step through the Hub after checking it against the step's `output_schema`. `hub run` accepts a bare run id. Reads use `AGENTFLOW_HUB_VIEW_TOKEN` (or `view_token` in `~/.agentflow/hub.json`), else the ingest token; `--hub` overrides the address.
-- Hub API: `GET /api/v1/runs/{machine}/{run}` now includes the graph, the machine, the steps waiting for input with their `output_schema`, and the commands sent to the run; `GET /api/v1/runs?run=` finds a run by id; machines list their capabilities; new `GET /api/v1/steps?workflow=&days=` ranks each workflow's steps by failures, with retries, p50/p95, wait time and the most common errors.
-- Logo: AgentFlow uses the ring logo (Hub, `agentflow web`, README).
-- Skill: `skills/agentflow/references/principles.md` adds general design principles for workflows: align with people first, least privilege and shadow writes, programs before agents, cheapest sufficient model with a budget, plain-language messages to people, probing dependencies and running only the part being tested, and using `hub steps` to decide what to fix.
-
-- Code orchestration: `agentflow code run <name> -- <script>` records a script as a run whose steps it drives; inside it, `agentflow code step <id> [-- command]` records a step (run like an executor: result file, logs, exit code; or work the script did, with `--output`/`--summary`), and `code end` / the script's exit code ends it. Code runs live in `runs/` like workflow runs (workflow version `code`), show in `run list/get`, report to the Hub as `orchestration: code`, and draw their graph in the order the script reached steps, parallel steps included.
-
-
-- Hub: finished runs older than `--retain` (default 90 days, `AGENTFLOW_HUB_RETAIN`, `0` keeps them forever) are removed at start and hourly, with the graphs no remaining run uses. Runs still going or waiting for input are always kept.
-
-
-- Hub: submit input to a step waiting for it from the run page. The form is built from the node's `outputSchema`. Runners that opt in (`"accept_commands": true` in `~/.agentflow/hub.json` or `AGENTFLOW_HUB_ACCEPT_COMMANDS=1`, never from a workspace file) pull the submission while reporting, check it against their own state (same wait, schema) and hand it to the run's executor like `run submit`, then report applied or rejected. Forms carry a CSRF token and cross-site posts are refused. See `docs/hub.md`.
-- Hub: each step's latest attempt reports the end of its stdout/stderr, a preview of its result JSON, and its files by name and size, masked and within a 32 KB budget per report (failed and running steps first). The run page shows them under each step; failed steps open by default.
-
+Changes since [v0.6.0](v0.6.0.md).
