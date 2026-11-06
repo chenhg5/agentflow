@@ -48,7 +48,7 @@ func FromRun(run *model.Run, source hubapi.Source, asOf time.Time) hubapi.RunRep
 	report := hubapi.RunReport{
 		Protocol:       hubapi.ProtocolVersion,
 		Source:         source,
-		Orchestration:  hubapi.OrchestrationJSON,
+		Orchestration:  orchestrationOf(run),
 		RunID:          run.RunID,
 		Workflow:       run.State.WorkflowName,
 		WorkflowDigest: run.State.WorkflowDigest,
@@ -304,4 +304,13 @@ func readEnd(path string, limit int, head bool) string {
 		text += "…"
 	}
 	return text
+}
+
+// orchestrationOf tells the Hub whether the graph engine or a script drove
+// the run (see internal/coderun).
+func orchestrationOf(run *model.Run) string {
+	if run.Workflow.Version == "code" {
+		return hubapi.OrchestrationCode
+	}
+	return hubapi.OrchestrationJSON
 }

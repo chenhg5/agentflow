@@ -89,10 +89,12 @@ async function mount(element) {
   });
   // A wide graph fitted into the card gets too small to read: then start at a
   // readable zoom on the node that needs attention (waiting, running, failed).
-  const focus = data.nodes.find((node) => node.tone === "human") || data.nodes.find((node) => node.tone === "agent")
-    || data.nodes.find((node) => node.tone === "bad") || data.nodes[0];
+  const attention = data.nodes.find((node) => node.tone === "human") || data.nodes.find((node) => node.tone === "agent")
+    || data.nodes.find((node) => node.tone === "bad");
   const onInit = (flow) => requestAnimationFrame(() => {
-    if (focus && flow.getZoom() < 0.65) flow.setCenter(focus.x + 100, focus.y + 30, { zoom: 0.75 });
+    const zoom = flow.getZoom();
+    if (attention && zoom < 0.65) flow.setCenter(attention.x + 100, attention.y + 30, { zoom: 0.75 });
+    else if (!attention && zoom < 0.4) flow.setCenter(data.nodes[0].x + 100, data.nodes[0].y + 30, { zoom: 0.6 });
   });
   element.textContent = "";
   ReactDOM.createRoot(element).render(

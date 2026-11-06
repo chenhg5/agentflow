@@ -17,6 +17,7 @@ import (
 	"time"
 
 	schemaassets "github.com/chenhg5/agentflow"
+	"github.com/chenhg5/agentflow/internal/coderun"
 	"github.com/chenhg5/agentflow/internal/driver"
 	"github.com/chenhg5/agentflow/internal/engine"
 	"github.com/chenhg5/agentflow/internal/graph"
@@ -99,6 +100,8 @@ func Run(args []string) error {
 		return versionCommand(args[1:])
 	case "hub":
 		return hubCommand(args[1:], root)
+	case "code":
+		return codeCommand(args[1:], root)
 	default:
 		return usageError(fmt.Sprintf("unknown command: %s", args[0]), "Run `agentflow --help` to see the command tree.", "command")
 	}
@@ -809,6 +812,9 @@ func enqueueAndExecute(run *model.Run, control model.Control, parsed parsedArgs,
 }
 
 func executeRun(run *model.Run, parsed parsedArgs, cwd string, queueOnBusy bool) error {
+	if coderun.IsCode(run) {
+		return usageError(fmt.Sprintf("run %s is a code run: its script drives it", run.RunID), "Record steps with `agentflow code step` and end it with `agentflow code end`.", "code_run")
+	}
 	root := filepath.Dir(filepath.Dir(run.RunDir))
 	if parsed.Async {
 		if err := store.EnableQueue(context.Background(), root); err != nil {
@@ -1114,6 +1120,8 @@ func parseArgs(args []string) (parsedArgs, error) {
 				return parsed, usageError("--format must be json, table, or ndjson", "Use `--format json` for agents.", "invalid_format")
 			}
 			parsed.Format = value
+		case "--summary":
+			parsed.Summary = value
 		case "--reason":
 			parsed.Reason = value
 		case "--concurrency":
@@ -1240,6 +1248,7 @@ type parsedArgs struct {
 	From              []string
 	IdempotencyKey    string
 	RunID             string
+	Summary           string
 	Host              string
 	DB                string
 	Retain            string
@@ -1425,6 +1434,10 @@ func commandSchema() map[string]any {
 		{"name": "trigger status", "description": "Inspect durable schedule baselines, missed ranges, pending plans and delivery decisions.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger list", "description": "List configured cron and webhook triggers.", "flags": []map[string]any{formatFlag}},
 		{"name": "trigger validate", "description": "Validate triggers.json.", "flags": []map[string]any{formatFlag}},
+		{"name": "code run", "description": "Run a script as a code-orchestrated run: it records its own steps with `code step`; the run ends by the script's exit code.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}, {"name": "-- command...", "required": true, "type": "argv"}}, "flags": []map[string]any{flag("--input", "key=value", "Run input; repeat for multiple inputs", false)}, "examples": []string{"agentflow code run nightly -- python3 nightly.py"}},
+		{"name": "code step", "description": "Record one step of the current code run: run a command after `--`, or record work the script did with --output/--summary. Prints the step's result JSON.", "arguments": []map[string]any{{"name": "step-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--run", "string", "Code run id (default $AGENTFLOW_RUN_ID)", false), flag("--output", "JSON object", "Result of a step without a command", false), flag("--summary", "string", "One line on what the step did (shown on the Hub)", false), flag("--status", "enum", "succeeded, failed or skipped", false), flag("--reason", "string", "Why it failed or was skipped", false)}, "examples": []string{"agentflow code step fetch -- ./fetch.sh", "agentflow code step decide --output '{\"go\":true}' --summary \"will ship\""}},
+		{"name": "code end", "description": "End the current code run; by default failed if a step failed, else succeeded.", "flags": []map[string]any{flag("--run", "string", "Code run id (default $AGENTFLOW_RUN_ID)", false), flag("--status", "enum", "succeeded, failed or cancelled", false), flag("--reason", "string", "Why", false)}},
+		{"name": "code start", "description": "Start a code run without wrapping a script; prints its id.", "arguments": []map[string]any{{"name": "name", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--input", "key=value", "Run input", false), formatFlag}},
 		{"name": "trigger fire", "description": "Emit one trigger event through the durable dispatcher.", "arguments": []map[string]any{{"name": "trigger-id", "required": true, "type": "string"}}, "flags": []map[string]any{flag("--scheduled-at", "RFC3339", "Scheduled occurrence time", false), flag("--delivery-id", "string", "Stable event id used for idempotency", false), formatFlag}},
 		{"name": "trigger serve", "description": "Run the persistent cron scheduler, webhook server, and run worker.", "flags": []map[string]any{flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
 		{"name": "web", "description": "Open a local React Flow visualization for a workflow or run.", "arguments": []map[string]any{{"name": "workflow.json", "required": false, "type": "path"}}, "flags": []map[string]any{flag("--run", "string", "Open an existing run instead of a workflow file", false), flag("--host", "string", "HTTP bind host", false), flag("--port", "integer", "HTTP port; 0 chooses an available port", false)}},
@@ -1477,6 +1490,8 @@ func printHelp(args []string) {
 		printVersionHelp()
 	case "hub":
 		printHubHelp()
+	case "code":
+		printCodeHelp()
 	default:
 		printRootHelp()
 	}
@@ -1516,6 +1531,7 @@ Commands:
   trigger fire       Emit one trigger event
   trigger serve      Run cron, webhook, and queued workers
   web                Open workflow/run visualization in a browser
+  code run           Record a script as a run whose steps it drives (code orchestration)
   hub serve          Run the Hub: runs from every machine in one web console
   hub push           Report runs to the Hub (--all backfills every run)
   hub status         Show Hub reporting configuration and the outbox
