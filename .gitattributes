@@ -1,0 +1,6 @@
+# Go source and shell scripts keep LF on every platform: gofmt rejects CRLF,
+# and Windows runners check out with core.autocrlf=true.
+*.go text eol=lf
+*.sh text eol=lf
+go.mod text eol=lf
+go.sum text eol=lf
