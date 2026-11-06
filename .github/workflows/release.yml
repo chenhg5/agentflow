@@ -1,0 +1,44 @@
+name: Release
+
+# Pushing a v* tag builds every platform archive with `make release-all` and
+# publishes them as a GitHub prerelease, with changelogs/<tag>.md as the notes.
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.4'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check the tag matches the Makefile and has notes
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          version="$(sed -n 's/^VERSION *:= *//p' Makefile)"
+          test "$tag" = "$version" || { echo "tag $tag does not match Makefile VERSION $version" >&2; exit 1; }
+          test -f "changelogs/$tag.md" || { echo "missing changelogs/$tag.md" >&2; exit 1; }
+      - name: Build archives
+        run: make release-all
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            echo "release $tag already exists; uploading missing assets only"
+            gh release upload "$tag" dist/*.tar.gz dist/*.zip dist/checksums.txt
+          else
+            gh release create "$tag" dist/*.tar.gz dist/*.zip dist/checksums.txt \
+              --title "$tag" --notes-file "changelogs/$tag.md" --prerelease --verify-tag
+          fi

@@ -16,20 +16,9 @@ Versions follow semver with a `v` prefix. Before 1.0, minor and patch releases m
    git push origin HEAD v0.0.1
    ```
 
-5. Build the tagged source:
+5. Pushing the tag runs `.github/workflows/release.yml`: it checks that the tag matches `VERSION` and that `changelogs/<version>.md` exists, runs `make release-all` (which runs `make check` first), and publishes the archives and `checksums.txt` as a GitHub prerelease with the changelog as notes. To build locally instead, run `make release-all` and publish `dist/` with `gh release create <version> dist/*.tar.gz dist/*.zip dist/checksums.txt --title <version> --notes-file changelogs/<version>.md --prerelease`.
 
-   ```bash
-   make release-all
-   ```
-
-   This creates archives for macOS, Linux, and Windows on amd64 and arm64, plus `dist/checksums.txt`.
-
-6. Publish the preview release:
-
-   ```bash
-   gh release create v0.0.1 dist/*.tar.gz dist/*.zip dist/checksums.txt \
-     --title v0.0.1 --notes-file changelogs/v0.0.1.md --prerelease
-   ```
+6. Watch the Release workflow, then check the release page.
 
 7. Verify the tagged install and binary metadata:
 
