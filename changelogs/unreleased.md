@@ -1,8 +1,3 @@
 # Unreleased
 
-Changes since [v0.6.1](v0.6.1.md).
-
-- Hub: the Workflow page is one list again, with group tabs and a tag menu above it; rows show the title, name and group, and leave the description and tags to the workflow's own page.
-- Hub: each workflow has a page (`/workflows/<name>`, linked from every workflow name): title, description, group and tags, its numbers over 7/30/90 days, the canvas coloured by its latest run, per-step statistics (failure rate, retries, p50/p95, wait, most common error) and its recent runs. `GET /api/v1/workflows/<name>` and `agentflow hub workflow <name>` return the same.
-- Hub: canvases are as tall as the graph needs, as on Loops (its height at the scale that fits the width, 200-420 px), with a fullscreen button (Esc leaves).
-
+Changes since [v0.6.2](v0.6.2.md).
