@@ -62,6 +62,8 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		run.Error, run.TriggerKind, run.TriggerID, run.WaitingMs = "build: boom", "cron", "nightly", 1500
 		run.FinishedAt, run.ReceivedAt = base.Add(time.Minute), base.Add(2*time.Minute)
 		run.Steps[0].Error, run.Steps[0].Reason = "boom", "because"
+		run.Steps[0].StderrTail, run.Steps[0].Result = "…fatal\n", `{"ok":false}`
+		run.Steps[0].Artifacts = []domain.Artifact{{Name: "stderrLog", Bytes: 2048}}
 		if _, err := store.Save(ctx, run); err != nil {
 			t.Fatal(err)
 		}
@@ -75,7 +77,8 @@ func Run(t *testing.T, open func(t *testing.T) app.Store) {
 		if !got.StartedAt.Equal(base) || !got.FinishedAt.Equal(run.FinishedAt) || !got.ReceivedAt.Equal(run.ReceivedAt) {
 			t.Fatalf("times lost: %v %v %v", got.StartedAt, got.FinishedAt, got.ReceivedAt)
 		}
-		if got.Inputs["issue"] != "ABC-1" || len(got.Steps) != 1 || got.Steps[0].Reason != "because" || got.Steps[0].Summary != "built" || !got.Steps[0].FinishedAt.Equal(base.Add(time.Minute)) {
+		if got.Inputs["issue"] != "ABC-1" || len(got.Steps) != 1 || got.Steps[0].Reason != "because" || got.Steps[0].StderrTail != "…fatal\n" || got.Steps[0].Result != `{"ok":false}` ||
+			len(got.Steps[0].Artifacts) != 1 || got.Steps[0].Artifacts[0].Bytes != 2048 || got.Steps[0].Summary != "built" || !got.Steps[0].FinishedAt.Equal(base.Add(time.Minute)) {
 			t.Fatalf("inputs or steps lost: %+v", got)
 		}
 	})

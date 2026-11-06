@@ -37,21 +37,30 @@ type runJSON struct {
 }
 
 type stepJSON struct {
-	ID          string        `json:"id"`
-	Type        string        `json:"type,omitempty"`
-	Provider    string        `json:"provider,omitempty"`
-	Status      domain.Status `json:"status"`
-	SkipReason  string        `json:"skip_reason,omitempty"`
-	Attempts    int           `json:"attempts"`
-	StartedAt   *time.Time    `json:"started_at,omitempty"`
-	FinishedAt  *time.Time    `json:"finished_at,omitempty"`
-	DurationMs  int64         `json:"duration_ms"`
-	WaitingMs   int64         `json:"waiting_ms"`
-	Error       string        `json:"error,omitempty"`
-	Summary     string        `json:"summary,omitempty"`
-	Reason      string        `json:"reason,omitempty"`
-	OutputBytes int64         `json:"output_bytes,omitempty"`
-	LogBytes    int64         `json:"log_bytes,omitempty"`
+	ID          string         `json:"id"`
+	Type        string         `json:"type,omitempty"`
+	Provider    string         `json:"provider,omitempty"`
+	Status      domain.Status  `json:"status"`
+	SkipReason  string         `json:"skip_reason,omitempty"`
+	Attempts    int            `json:"attempts"`
+	StartedAt   *time.Time     `json:"started_at,omitempty"`
+	FinishedAt  *time.Time     `json:"finished_at,omitempty"`
+	DurationMs  int64          `json:"duration_ms"`
+	WaitingMs   int64          `json:"waiting_ms"`
+	Error       string         `json:"error,omitempty"`
+	Summary     string         `json:"summary,omitempty"`
+	Reason      string         `json:"reason,omitempty"`
+	OutputBytes int64          `json:"output_bytes,omitempty"`
+	LogBytes    int64          `json:"log_bytes,omitempty"`
+	StdoutTail  string         `json:"stdout_tail,omitempty"`
+	StderrTail  string         `json:"stderr_tail,omitempty"`
+	Result      string         `json:"result,omitempty"`
+	Artifacts   []artifactJSON `json:"artifacts,omitempty"`
+}
+
+type artifactJSON struct {
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
 }
 
 type machineJSON struct {
@@ -117,7 +126,8 @@ func toRunJSON(run domain.Run) runJSON {
 		out.Steps = append(out.Steps, stepJSON{ID: step.ID, Type: step.Type, Provider: step.Provider, Status: step.Status,
 			SkipReason: step.SkipReason, Attempts: step.Attempts, StartedAt: timePtr(step.StartedAt), FinishedAt: timePtr(step.FinishedAt),
 			DurationMs: step.DurationMs, WaitingMs: step.WaitingMs, Error: step.Error, Summary: step.Summary, Reason: step.Reason,
-			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes})
+			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes, StdoutTail: step.StdoutTail, StderrTail: step.StderrTail, Result: step.Result,
+			Artifacts: artifactsJSON(step.Artifacts)})
 	}
 	return out
 }
@@ -158,6 +168,14 @@ func toMachinesJSON(machines []domain.Machine) []machineJSON {
 	for index, machine := range machines {
 		out[index] = machineJSON{ID: machine.ID, Hostname: machine.Hostname, Version: machine.Version,
 			FirstSeen: timePtr(machine.FirstSeen), LastSeen: timePtr(machine.LastSeen)}
+	}
+	return out
+}
+
+func artifactsJSON(in []domain.Artifact) []artifactJSON {
+	var out []artifactJSON
+	for _, item := range in {
+		out = append(out, artifactJSON(item))
 	}
 	return out
 }

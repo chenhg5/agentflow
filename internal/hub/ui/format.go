@@ -200,5 +200,24 @@ func funcs() template.FuncMap {
 			data, _ := json.Marshal(value)
 			return string(data)
 		},
+		"prettyJSON": func(text string) string {
+			var value any
+			trimmed := strings.TrimSuffix(text, "…")
+			if json.Unmarshal([]byte(trimmed), &value) != nil {
+				return text
+			}
+			data, _ := json.MarshalIndent(value, "", "  ")
+			return string(data)
+		},
+		"bytes": func(n int64) string {
+			switch {
+			case n < 1024:
+				return fmt.Sprintf("%d B", n)
+			case n < 1024*1024:
+				return fmt.Sprintf("%.1f KB", float64(n)/1024)
+			default:
+				return fmt.Sprintf("%.1f MB", float64(n)/1024/1024)
+			}
+		},
 	}
 }

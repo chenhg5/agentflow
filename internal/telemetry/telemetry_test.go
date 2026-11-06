@@ -3,6 +3,7 @@ package telemetry
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -350,5 +351,78 @@ func TestAcceptCommandsOnlyFromTheUser(t *testing.T) {
 	os.WriteFile(filepath.Join(root, ConfigFile), []byte(`{"url":"http://repo-chosen"}`), 0o600)
 	if config, _ := LoadConfig(root); config.AcceptCommands {
 		t.Fatal("never towards a Hub address a repository chose")
+	}
+}
+
+func TestTailsResultsAndArtifacts(t *testing.T) {
+	runDir := t.TempDir()
+	write := func(name, content string) string {
+		os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755)
+		os.WriteFile(filepath.Join(runDir, "artifacts", name), []byte(content), 0o600)
+		return "artifacts/" + name
+	}
+	longLog := strings.Repeat("progress line\n", 400) + "export GITHUB_TOKEN=ghp_abcdefghijklmnopqrstuvwxyz0123\nfatal: boom\n"
+	cutSecret := "sk-abcdefghijklmnopqrstuvwxyz0123456789" + strings.Repeat("x", 2100) + "\nlast line\n"
+	run := &model.Run{RunID: "r", RunDir: runDir,
+		Workflow: model.Workflow{Name: "wf", Nodes: []model.Node{{ID: "ok"}, {ID: "bad"}, {ID: "cut"}, {ID: "todo"}}},
+		State: model.RunState{Status: "failed", UpdatedAt: time.Now().UTC().Format(time.RFC3339Nano), Nodes: map[string]*model.NodeState{
+			"ok": {Status: "succeeded", FinishedAt: "2026-11-06T01:00:00Z", AttemptSequence: []model.AttemptEvidence{{Artifacts: map[string]string{
+				"result": write("ok.result.json", `{"summary":"done","items":[1,2,3]}`), "stdoutLog": write("ok.out", "hello\n")}}}},
+			"bad": {Status: "failed", Error: "exit 1", AttemptSequence: []model.AttemptEvidence{{Artifacts: map[string]string{
+				"stderrLog": write("bad.err", longLog)}}}},
+			"cut":  {Status: "succeeded", FinishedAt: "2026-11-06T00:00:00Z", Artifacts: map[string]string{"stdoutLog": write("cut.out", cutSecret)}},
+			"todo": {Status: "pending"},
+		}}}
+	report := FromRun(run, hubapi.Source{Machine: "m"}, time.Now())
+	steps := map[string]hubapi.StepReport{}
+	for _, step := range report.Steps {
+		steps[step.ID] = step
+	}
+	bad := steps["bad"]
+	if !strings.HasSuffix(bad.StderrTail, "fatal: boom\n") || len(bad.StderrTail) > tailBytes+4 || strings.Contains(bad.StderrTail, "ghp_abc") {
+		t.Fatalf("failed step tail: %q", bad.StderrTail)
+	}
+	if !strings.HasPrefix(bad.StderrTail, "…") {
+		t.Fatal("a cut tail is marked")
+	}
+	if steps["ok"].Result != `{"summary":"done","items":[1,2,3]}` || steps["ok"].StdoutTail != "hello\n" {
+		t.Fatalf("result preview / stdout: %+v", steps["ok"])
+	}
+	if len(steps["ok"].Artifacts) != 2 || steps["ok"].Artifacts[0].Name != "result" || steps["ok"].Artifacts[0].Bytes == 0 {
+		t.Fatalf("artifacts: %+v", steps["ok"].Artifacts)
+	}
+	if strings.Contains(steps["cut"].StdoutTail, "abcdefghij") || !strings.Contains(steps["cut"].StdoutTail, "last line") {
+		t.Fatalf("the partial first line of a cut tail (possibly half a secret) is dropped: %q", steps["cut"].StdoutTail)
+	}
+	if steps["todo"].StdoutTail != "" || steps["todo"].Artifacts != nil {
+		t.Fatal("a step that never ran has nothing")
+	}
+}
+
+func TestTailQuotaFavoursFailures(t *testing.T) {
+	runDir := t.TempDir()
+	os.MkdirAll(filepath.Join(runDir, "artifacts"), 0o755)
+	nodes := map[string]*model.NodeState{}
+	var definitions []model.Node
+	for index := 0; index < 30; index++ {
+		id := fmt.Sprintf("s%02d", index)
+		path := "artifacts/" + id + ".err"
+		os.WriteFile(filepath.Join(runDir, path), []byte(strings.Repeat("line\n", 1000)), 0o600)
+		status := "succeeded"
+		if index == 29 {
+			status = "failed"
+		}
+		nodes[id] = &model.NodeState{Status: status, FinishedAt: fmt.Sprintf("2026-11-06T00:00:%02dZ", index), Artifacts: map[string]string{"stderrLog": path}}
+		definitions = append(definitions, model.Node{ID: id})
+	}
+	run := &model.Run{RunID: "r", RunDir: runDir, Workflow: model.Workflow{Name: "wf", Nodes: definitions},
+		State: model.RunState{Status: "failed", Nodes: nodes}}
+	report := FromRun(run, hubapi.Source{}, time.Now())
+	total := 0
+	for _, step := range report.Steps {
+		total += len(step.StderrTail)
+	}
+	if total > reportTailQuota || report.Steps[29].StderrTail == "" || report.Steps[0].StderrTail != "" {
+		t.Fatalf("quota %d, failed step tail %d bytes, oldest step tail %d bytes", total, len(report.Steps[29].StderrTail), len(report.Steps[0].StderrTail))
 	}
 }

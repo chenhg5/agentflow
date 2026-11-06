@@ -43,7 +43,7 @@ agentflow hub status --format json                      # 看配置、待发数�
 - **先写本地发件箱，再发。** 每次保存把这次运行的快照写进 `<工作区>/hub-outbox/<run-id>.<seq>.json`（先写临时文件再改名，同一运行的旧快照随即删掉），不碰网络。发完只删 seq 不大于已发那份的文件，所以引擎在发送途中写下的新快照（比如最后的 succeeded）不会被误删；多个 agentflow 进程同时动同一个运行也一样。后台每 10 秒发一次，命令结束时再给 2 秒发一次。发不出去就留着，下次命令或 `hub push` 再发；Hub 宕机期间的运行一条不丢。
 - **快照幂等。** 每份快照带 `seq`（`updatedAt` 的纳秒），Hub 只留 seq 最大的那份；重发、乱序、补报都安全。
 - **只读命令不联网。** `run list / get / stats`、`web` 等不装钩子，不会因为 Hub 慢而变慢。
-- **离开机器前脱敏。** 错误、`summary`、`reason`、输入里像令牌的串（`sk-…`、`ghp_…`、`glpat-…`、`sk_live_…`、`npm_…`、`AIza…`、AWS key、JWT、私钥、`Bearer …` / `Basic …`、`token=…`、URL 里的 `user:password@` 等）先打码；名字像密钥的输入整值打码；错误截 2000 字，summary/reason 截 500 字，输入最多 30 个、每个 300 字。stdout/stderr、结果文件全文、产物不上报，只报字节数。
+- **离开机器前脱敏。** 错误、`summary`、`reason`、输入里像令牌的串（`sk-…`、`ghp_…`、`glpat-…`、`sk_live_…`、`npm_…`、`AIza…`、AWS key、JWT、私钥、`Bearer …` / `Basic …`、`token=…`、URL 里的 `user:password@` 等）先打码；名字像密钥的输入整值打码；错误截 2000 字，summary/reason 截 500 字，输入最多 30 个、每个 300 字。stdout/stderr 只报末尾一段、结果只报前一段（见「结果和日志」），产物文件只报名字和大小。
 
 ## 3. 上报协议（v1）
 
@@ -72,6 +72,8 @@ agentflow hub status --format json                      # 看配置、待发数�
 返回 `{"accepted": n, "stale": n, "rejected": ["run-id: 原因"]}`。`stale` 是比已存的旧的快照，`rejected` 是不合法的（缺 machine / runId / workflow、状态不认识、协议版本不对）；一份坏的不影响同批其它的。
 
 **流程图 `graph`（可选）：** `entry`、`nodes`（`id`、候选执行器 `executors`、`parallel`、`join`）、`edges`（`source`、`target`、`condition`、`maxIterations`、`parallel`；`target` 为 `$end` 表示结束）。Hub 按 `workflow@workflowDigest` 只存一份，运行详情页用它画 React Flow 画布（React Flow 从 esm.sh 加载，离线时画布提示加载不到，步骤列表照常）。补报已有的运行时，就算快照本身是旧的，图也会补上。
+
+**结果和日志：** 每一步带上最近一次尝试的 `stdoutTail` / `stderrTail`（各最后 2KB）、`result`（结果 JSON 的前 2KB）和 `artifacts`（文件名和大小，内容不上报）。都先脱敏；日志从中间截断时丢掉不完整的第一行，避免半截密钥漏过脱敏规则。一份报告里这些加起来最多 32KB，失败的步骤优先，然后是正在跑和等输入的，再然后是最近完成的；没带上的步骤，Hub 保留它之前收到的同一次执行的内容。运行详情页每一步下面可以展开「结果和日志」，失败的默认展开。
 
 **保留字段 `summary` / `reason`：** 节点结果 JSON 里的 `summary`（做了什么）和 `reason`（为什么这样判断）会原样（脱敏、截断后）显示在运行详情的步骤下面。想让 Hub 上一眼看懂一步做了什么，就在结果里写这两个字段。
 

@@ -335,21 +335,30 @@ func (s *Store) Machines(ctx context.Context) ([]domain.Machine, error) {
 // stepRow is the stored shape of a step, kept apart from the domain type so
 // renaming a domain field never breaks rows already on disk.
 type stepRow struct {
-	ID          string `json:"id"`
-	Type        string `json:"type,omitempty"`
-	Provider    string `json:"provider,omitempty"`
-	Status      string `json:"status"`
-	SkipReason  string `json:"skip_reason,omitempty"`
-	Attempts    int    `json:"attempts,omitempty"`
-	StartedAt   int64  `json:"started_at,omitempty"`
-	FinishedAt  int64  `json:"finished_at,omitempty"`
-	DurationMs  int64  `json:"duration_ms,omitempty"`
-	WaitingMs   int64  `json:"waiting_ms,omitempty"`
-	Error       string `json:"error,omitempty"`
-	Summary     string `json:"summary,omitempty"`
-	Reason      string `json:"reason,omitempty"`
-	OutputBytes int64  `json:"output_bytes,omitempty"`
-	LogBytes    int64  `json:"log_bytes,omitempty"`
+	ID          string        `json:"id"`
+	Type        string        `json:"type,omitempty"`
+	Provider    string        `json:"provider,omitempty"`
+	Status      string        `json:"status"`
+	SkipReason  string        `json:"skip_reason,omitempty"`
+	Attempts    int           `json:"attempts,omitempty"`
+	StartedAt   int64         `json:"started_at,omitempty"`
+	FinishedAt  int64         `json:"finished_at,omitempty"`
+	DurationMs  int64         `json:"duration_ms,omitempty"`
+	WaitingMs   int64         `json:"waiting_ms,omitempty"`
+	Error       string        `json:"error,omitempty"`
+	Summary     string        `json:"summary,omitempty"`
+	Reason      string        `json:"reason,omitempty"`
+	OutputBytes int64         `json:"output_bytes,omitempty"`
+	LogBytes    int64         `json:"log_bytes,omitempty"`
+	StdoutTail  string        `json:"stdout_tail,omitempty"`
+	StderrTail  string        `json:"stderr_tail,omitempty"`
+	Result      string        `json:"result,omitempty"`
+	Artifacts   []artifactRow `json:"artifacts,omitempty"`
+}
+
+type artifactRow struct {
+	Name  string `json:"name"`
+	Bytes int64  `json:"bytes"`
 }
 
 func stepRows(steps []domain.Step) []stepRow {
@@ -358,7 +367,10 @@ func stepRows(steps []domain.Step) []stepRow {
 		rows[index] = stepRow{ID: step.ID, Type: step.Type, Provider: step.Provider, Status: string(step.Status),
 			SkipReason: step.SkipReason, Attempts: step.Attempts, StartedAt: ms(step.StartedAt), FinishedAt: ms(step.FinishedAt),
 			DurationMs: step.DurationMs, WaitingMs: step.WaitingMs, Error: step.Error, Summary: step.Summary, Reason: step.Reason,
-			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes}
+			OutputBytes: step.OutputBytes, LogBytes: step.LogBytes, StdoutTail: step.StdoutTail, StderrTail: step.StderrTail, Result: step.Result}
+		for _, item := range step.Artifacts {
+			rows[index].Artifacts = append(rows[index].Artifacts, artifactRow(item))
+		}
 	}
 	return rows
 }
@@ -369,7 +381,10 @@ func domainSteps(rows []stepRow) []domain.Step {
 		steps[index] = domain.Step{ID: row.ID, Type: row.Type, Provider: row.Provider, Status: domain.Status(row.Status),
 			SkipReason: row.SkipReason, Attempts: row.Attempts, StartedAt: fromMs(row.StartedAt), FinishedAt: fromMs(row.FinishedAt),
 			DurationMs: row.DurationMs, WaitingMs: row.WaitingMs, Error: row.Error, Summary: row.Summary, Reason: row.Reason,
-			OutputBytes: row.OutputBytes, LogBytes: row.LogBytes}
+			OutputBytes: row.OutputBytes, LogBytes: row.LogBytes, StdoutTail: row.StdoutTail, StderrTail: row.StderrTail, Result: row.Result}
+		for _, item := range row.Artifacts {
+			steps[index].Artifacts = append(steps[index].Artifacts, domain.Artifact(item))
+		}
 	}
 	return steps
 }
